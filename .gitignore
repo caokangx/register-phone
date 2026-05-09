@@ -1,0 +1,35 @@
+/docs/md
+
+/.github
+/_metadata/
+.vscode
+
+/data/account-run-history.txt
+/data/account-run-history.json
+.npm-test.log
+.omx/
+/node_modules
+/.runtime
+/docs/新步骤顺序
+# Local exported runtime settings (contains secrets)
+/config.json
+/gpt-register/config.json
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Editor / IDE
+.idea/
+
+# Claude Code local state
+.claude/
+
+# Logs
+*.log
