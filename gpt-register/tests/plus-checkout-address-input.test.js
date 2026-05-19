@@ -323,3 +323,97 @@ test('RUN_HOSTED_CHECKOUT_FLOW fills the hardcoded 2671 Clayton Oaks Dr billing 
   const bgCall = harness.sendMessageCalls.find((m) => m?.type === 'BG_FETCH_MEIGUODIZHI_ADDRESS');
   assert.equal(bgCall, undefined, 'hosted flow must not query meiguodizhi address anymore');
 });
+
+test('RUN_HOSTED_CHECKOUT_FLOW can pause before submit so background can switch proxy first', async () => {
+  const clicks = [];
+  function makeInput(id, type = 'text') {
+    const el = {
+      id,
+      type,
+      tagName: 'INPUT',
+      checked: false,
+      value: '',
+      options: type === 'select-one' ? [] : undefined,
+      dispatchEvent() {},
+      click() { clicks.push(id); el.checked = !el.checked; },
+    };
+    return el;
+  }
+  function makeSelect(id, options) {
+    const opts = options.map((value) => ({ value, text: value }));
+    return {
+      id,
+      tagName: 'SELECT',
+      options: opts,
+      value: '',
+      dispatchEvent() {},
+    };
+  }
+  function makeButton(testid, text = '提交') {
+    return {
+      tagName: 'BUTTON',
+      disabled: false,
+      textContent: text,
+      getAttribute() { return testid; },
+      getBoundingClientRect() { return { height: 40, width: 200 }; },
+      click() { clicks.push(`submit:${testid}`); },
+    };
+  }
+
+  const submitBtn = makeButton('hosted-payment-submit-button');
+  const paypalBtn = {
+    tagName: 'BUTTON',
+    click() { clicks.push('paypal-accordion'); },
+  };
+  const elements = {
+    email: makeInput('email'),
+    billingCountry: makeSelect('billingCountry', ['US', 'CA', 'GB']),
+    billingAddressLine1: makeInput('billingAddressLine1'),
+    billingLocality: makeInput('billingLocality'),
+    billingPostalCode: makeInput('billingPostalCode'),
+    billingAdministrativeArea: makeSelect('billingAdministrativeArea', ['CA', 'NY', 'TX']),
+    termsOfServiceConsentCheckbox: makeInput('termsOfServiceConsentCheckbox', 'checkbox'),
+  };
+
+  const harness = createPlusCheckoutMessageHarness({
+    location: { href: 'https://checkout.stripe.com/c/pay/cs_xxx', host: 'checkout.stripe.com', pathname: '/c/pay/cs_xxx' },
+    documentExtras: {
+      elements,
+      override: {
+        querySelector(selector) {
+          if (selector.includes('paypal-accordion-item-button') || selector.includes('paypal-accordion-item button')) {
+            return paypalBtn;
+          }
+          if (selector.includes('hosted-payment-submit-button')) {
+            return submitBtn;
+          }
+          return null;
+        },
+        querySelectorAll() { return []; },
+      },
+    },
+  });
+
+  const prepareResult = await harness.send({
+    type: 'RUN_HOSTED_CHECKOUT_FLOW',
+    source: 'test',
+    payload: { submit: false },
+  });
+
+  assert.equal(prepareResult.ok, true);
+  assert.equal(prepareResult.readyForSubmit, true);
+  assert.equal(prepareResult.submitted, false);
+  assert.equal(elements.billingAddressLine1.value, '2671 Clayton Oaks Drive');
+  assert.equal(elements.billingAdministrativeArea.value, 'TX');
+  assert.equal(clicks.some((c) => c.startsWith('submit:')), false);
+
+  const submitResult = await harness.send({
+    type: 'RUN_HOSTED_CHECKOUT_SUBMIT',
+    source: 'test',
+    payload: {},
+  });
+
+  assert.equal(submitResult.ok, true);
+  assert.equal(submitResult.submitted, true);
+  assert.equal(clicks.some((c) => c.startsWith('submit:')), true);
+});

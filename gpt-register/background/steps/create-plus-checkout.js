@@ -8,7 +8,6 @@
   function createPlusCheckoutCreateExecutor(deps = {}) {
     const {
       addLog: rawAddLog = async () => {},
-      applyRegionalProxy = null,
       chrome,
       completeNodeFromBackground,
       createAutomationTab = null,
@@ -65,11 +64,6 @@
       }
       if (!result?.checkoutUrl) {
         throw new Error('步骤 6：Plus Checkout 未返回可用的 hosted 长链接。');
-      }
-
-      if (typeof applyRegionalProxy === 'function') {
-        await applyRegionalProxy('us');
-        await addLog('步骤 6：已创建 hosted 长链接，进入支付页前切换到美国代理。', 'info');
       }
 
       await addLog('步骤 6：hosted 长链接已创建，正在跳转到订阅页面...', 'ok');

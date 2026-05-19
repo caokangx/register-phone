@@ -12616,7 +12616,6 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
 });
 const plusCheckoutCreateExecutor = self.MultiPageBackgroundPlusCheckoutCreate?.createPlusCheckoutCreateExecutor({
   addLog,
-  applyRegionalProxy,
   chrome,
   completeNodeFromBackground,
   createAutomationTab,
@@ -12632,6 +12631,7 @@ const plusCheckoutCreateExecutor = self.MultiPageBackgroundPlusCheckoutCreate?.c
 });
 const plusCheckoutBillingExecutor = self.MultiPageBackgroundPlusCheckoutBilling?.createPlusCheckoutBillingExecutor({
   addLog,
+  applyRegionalProxy,
   broadcastDataUpdate,
   chrome,
   completeNodeFromBackground,

@@ -9,6 +9,7 @@
   function createPlusCheckoutBillingExecutor(deps = {}) {
     const {
       addLog: rawAddLog = async () => {},
+      applyRegionalProxy = null,
       chrome,
       completeNodeFromBackground,
       ensureContentScriptReadyOnTabUntilStopped,
@@ -136,7 +137,7 @@
       const result = await sendTabMessageUntilStopped(tabId, PLUS_CHECKOUT_SOURCE, {
         type: 'RUN_HOSTED_CHECKOUT_FLOW',
         source: 'background',
-        payload: {},
+        payload: { submit: false },
       });
       if (result?.error) {
         throw new Error(result.error);
@@ -147,7 +148,21 @@
         plusBillingAddress: result?.address || null,
       });
 
-      await addLog('步骤 7：账单地址已提交，正在等待跳转到 PayPal...', 'info');
+      await addLog('步骤 7：账单信息已填写，准备在点击订阅前切换到美国代理...', 'info');
+      if (typeof applyRegionalProxy === 'function') {
+        await applyRegionalProxy('us');
+        await addLog('步骤 7：已确认美国代理出口，正在点击订阅按钮。', 'info');
+      }
+      const submitResult = await sendTabMessageUntilStopped(tabId, PLUS_CHECKOUT_SOURCE, {
+        type: 'RUN_HOSTED_CHECKOUT_SUBMIT',
+        source: 'background',
+        payload: {},
+      });
+      if (submitResult?.error) {
+        throw new Error(submitResult.error);
+      }
+
+      await addLog('步骤 7：订阅按钮已点击，正在等待跳转到 PayPal...', 'info');
       const redirected = await waitForPayPalRedirect(tabId);
       if (!redirected) {
         throw new Error('步骤 7：提交订阅后未在 60 秒内跳转到 PayPal。');

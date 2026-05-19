@@ -7,7 +7,8 @@
 // 2) On pay.openai.com / checkout.stripe.com (the hosted checkout page from
 //    step 6): click the PayPal accordion, fill the billing address from a
 //    background-fetched US address, check the terms checkbox, click submit
-//    (step 7). Responds to RUN_HOSTED_CHECKOUT_FLOW.
+//    (step 7). Responds to RUN_HOSTED_CHECKOUT_FLOW and
+//    RUN_HOSTED_CHECKOUT_SUBMIT.
 
 (function attachPlusCheckoutContentScript() {
 console.log('[MultiPage:plus-checkout] Content script loaded on', location.href);
@@ -42,6 +43,7 @@ if (document.documentElement.getAttribute(PLUS_CHECKOUT_LISTENER_SENTINEL) !== '
       message.type === 'CREATE_PLUS_CHECKOUT'
       || message.type === 'PLUS_CHECKOUT_GET_STATE'
       || message.type === 'RUN_HOSTED_CHECKOUT_FLOW'
+      || message.type === 'RUN_HOSTED_CHECKOUT_SUBMIT'
     ) {
       resetStopState();
       handlePlusCheckoutCommand(message).then((result) => {
@@ -68,6 +70,8 @@ async function handlePlusCheckoutCommand(message) {
       return inspectPlusCheckoutState(message.payload || {});
     case 'RUN_HOSTED_CHECKOUT_FLOW':
       return runHostedCheckoutFlow(message.payload || {});
+    case 'RUN_HOSTED_CHECKOUT_SUBMIT':
+      return submitHostedCheckoutFlow(message.payload || {});
     default:
       throw new Error(`plus-checkout.js 不处理消息：${message.type}`);
   }
@@ -392,7 +396,17 @@ const HOSTED_CHECKOUT_BILLING_ADDRESS = Object.freeze({
   zip: '75227',
 });
 
-async function runHostedCheckoutFlow() {
+async function submitHostedCheckoutFlow() {
+  // Give Stripe's form validator a real beat to flip the submit button from
+  // SubmitButton--incomplete to SubmitButton--complete before we try to click.
+  // clickHostedSubmit also waits for that class, but starting later means less
+  // time burned on "still validating" log spam.
+  await sleep(2500);
+  await clickHostedSubmit();
+  return { submitted: true };
+}
+
+async function runHostedCheckoutFlow(payload = {}) {
   await waitForDocumentComplete();
   log('Plus Checkout：开始执行 hosted 页面自动填写流程...');
 
@@ -435,15 +449,15 @@ async function runHostedCheckoutFlow() {
     }
   }
 
-  // Give Stripe's form validator a real beat to flip the submit button from
-  // SubmitButton--incomplete to SubmitButton--complete before we try to click.
-  // clickHostedSubmit also waits for that class, but starting later means less
-  // time burned on "still validating" log spam.
-  await sleep(2500);
-  await clickHostedSubmit();
+  const shouldSubmit = payload?.submit !== false && !payload?.prepareOnly;
+  if (shouldSubmit) {
+    await submitHostedCheckoutFlow();
+  }
   return {
     address,
     email,
+    readyForSubmit: true,
+    submitted: shouldSubmit,
   };
 }
 

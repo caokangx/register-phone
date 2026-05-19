@@ -6,7 +6,7 @@ const source = fs.readFileSync('background/steps/create-plus-checkout.js', 'utf8
 const globalScope = {};
 const api = new Function('self', `${source}; return self.MultiPageBackgroundPlusCheckoutCreate;`)(globalScope);
 
-test('Plus checkout create switches to US proxy before opening hosted payment URL', async () => {
+test('Plus checkout create opens hosted payment URL without switching to US proxy', async () => {
   const events = [];
   const tabId = 88;
   const checkoutUrl = 'https://pay.openai.com/checkout/test';
@@ -56,12 +56,11 @@ test('Plus checkout create switches to US proxy before opening hosted payment UR
 
   await executor.executePlusCheckoutCreate();
 
-  const proxyIndex = events.findIndex((event) => event.type === 'proxy' && event.region === 'us');
   const checkoutUpdateIndex = events.findIndex((event) => (
     event.type === 'update-tab'
     && event.payload?.url === checkoutUrl
   ));
-  assert.ok(proxyIndex >= 0, 'US proxy switch should be called');
+  const proxyIndex = events.findIndex((event) => event.type === 'proxy');
+  assert.equal(proxyIndex, -1, 'step 6 should not switch to US proxy');
   assert.ok(checkoutUpdateIndex >= 0, 'hosted checkout URL should be opened');
-  assert.ok(proxyIndex < checkoutUpdateIndex, 'US proxy must be applied before opening hosted payment URL');
 });
