@@ -110,6 +110,7 @@
   function createStep1Executor(deps = {}) {
     const {
       addLog,
+      applyRegionalProxy,
       chrome: chromeApi = globalThis.chrome,
       completeNodeFromBackground,
       openSignupEntryTab,
@@ -145,6 +146,9 @@
     }
 
     async function executeStep1() {
+      if (typeof applyRegionalProxy === 'function') {
+        await applyRegionalProxy('jp');
+      }
       await clearOpenAiCookiesBeforeStep1();
       await addLog('步骤 1：正在打开 ChatGPT 官网...');
       await openSignupEntryTab(1);

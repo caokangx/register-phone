@@ -12,6 +12,9 @@ test('Plus return confirm waits a fixed 20 seconds after return URL is detected'
     addLog: async (message, level = 'info') => {
       events.push({ type: 'log', message, level });
     },
+    applyRegionalProxy: async (region) => {
+      events.push({ type: 'proxy', region });
+    },
     completeNodeFromBackground: async (step, payload) => {
       events.push({ type: 'complete', step, payload });
     },
@@ -49,5 +52,13 @@ test('Plus return confirm waits a fixed 20 seconds after return URL is detected'
       step: 'plus-checkout-return',
       payload: { plusReturnUrl: 'https://chatgpt.com/backend-api/payments/success' },
     }
+  );
+  assert.deepEqual(
+    events.find((event) => event.type === 'proxy'),
+    { type: 'proxy', region: 'jp' }
+  );
+  assert.equal(
+    events.some((event) => event.type === 'log' && /切回日本代理/.test(event.message)),
+    true
   );
 });

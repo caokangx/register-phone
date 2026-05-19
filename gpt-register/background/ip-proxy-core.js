@@ -812,6 +812,63 @@ function parseIpProxyLine(line, provider = DEFAULT_IP_PROXY_SERVICE) {
   };
 }
 
+// HTTP-only proxy URL parser for the regional (JP / US) proxy feature.
+// Accepts:
+//   - http://host:port
+//   - http://user:pass@host:port  (URL-style auth, percent-decoded)
+//   - http://host:port:user:pass  (colon-style auth, matches parseIpProxyLine)
+// Throws on https/socks*/other schemes — the regional proxy is HTTP-only by
+// design (the user-facing config says so, and SOCKS5+auth doesn't work under
+// Chrome MV3's webRequest.onAuthRequired anyway).
+function parseHttpProxyAddress(rawUrl) {
+  const text = String(rawUrl || '').trim();
+  if (!text) return null;
+
+  const schemaMatch = text.match(/^([a-z][a-z0-9+\-.]*):\/\/(.+)$/i);
+  if (!schemaMatch) return null;
+  const scheme = schemaMatch[1].toLowerCase();
+  if (scheme !== 'http') {
+    throw new Error(`代理地址协议必须是 http://（当前为 ${scheme}://）。`);
+  }
+
+  let body = schemaMatch[2];
+  let username = '';
+  let password = '';
+
+  const atIdx = body.lastIndexOf('@');
+  if (atIdx > 0) {
+    const authPart = body.slice(0, atIdx);
+    body = body.slice(atIdx + 1);
+    const colonIdx = authPart.indexOf(':');
+    try {
+      if (colonIdx >= 0) {
+        username = decodeURIComponent(authPart.slice(0, colonIdx));
+        password = decodeURIComponent(authPart.slice(colonIdx + 1));
+      } else {
+        username = decodeURIComponent(authPart);
+      }
+    } catch {
+      username = colonIdx >= 0 ? authPart.slice(0, colonIdx) : authPart;
+      password = colonIdx >= 0 ? authPart.slice(colonIdx + 1) : '';
+    }
+  }
+
+  const firstSegment = body.split(/[/?#]/)[0];
+  const parts = firstSegment.split(':');
+  if (parts.length < 2) return null;
+
+  const host = String(parts[0] || '').trim();
+  const port = normalizeIpProxyPort(parts[1]);
+  if (!host || !port) return null;
+
+  if (!username && parts.length >= 3) {
+    username = String(parts[2] || '').trim();
+    password = parts.length >= 4 ? String(parts.slice(3).join(':') || '') : '';
+  }
+
+  return { host, port, username, password, protocol: 'http' };
+}
+
 function enumerateContiguousIpv4WithColonCandidates(text = '', startIndex = 0) {
   const source = String(text || '');
   const candidates = [];
@@ -1355,6 +1412,20 @@ function buildIpProxyRoutingStatePatch(status = {}) {
   };
 }
 
+function isIpProxyDirectSuspectedStatus(status = {}) {
+  const reason = String(status?.reason || '').trim().toLowerCase();
+  if (reason !== 'connectivity_failed') {
+    return false;
+  }
+  const error = String(status?.error || status?.exitError || '').trim();
+  if (/疑似未经过插件代理链路|与系统基线网络一致|无法确认是否经过插件代理链路/i.test(error)) {
+    return true;
+  }
+  const exitIp = String(status?.exitIp || '').trim();
+  const baselineIp = String(status?.exitBaselineIp || '').trim();
+  return Boolean(exitIp && baselineIp && exitIp === baselineIp);
+}
+
 async function setIpProxyLeakGuardEnabled(enabled) {
   if (!chrome.declarativeNetRequest?.updateDynamicRules) {
     return;
@@ -1391,9 +1462,12 @@ function shouldEnableIpProxyLeakGuardForStatus(status = {}) {
     return false;
   }
   const reason = String(status?.reason || '').trim().toLowerCase();
-  // connectivity_failed 表示 PAC/代理接管已经下发，只是探测或目标站点失败。
-  // 此时继续启用 DNR 会把 chatgpt.com 变成 ERR_BLOCKED_BY_CLIENT，掩盖真实代理链路结果。
-  return reason !== 'connectivity_failed';
+  if (reason === 'connectivity_failed') {
+    // 真实目标不可达时保留浏览器原始网络错误，便于判断节点是否支持 ChatGPT。
+    // 但一旦探测显示可能没有经过插件代理链路，仍然 fail-closed 阻断目标站点。
+    return isIpProxyDirectSuspectedStatus(status);
+  }
+  return true;
 }
 
 async function syncIpProxyLeakGuardForStatus(status = {}) {
@@ -2793,27 +2867,15 @@ function installIpProxyAuthListener() {
   }
 
   chrome.webRequest.onAuthRequired.addListener(
-    (details, callback) => {
+    async (details, callback) => {
       try {
-        const auth = currentIpProxyAuthEntry;
+        const auth = await ensureIpProxyAuthEntryLoaded();
         if (!auth?.username) {
           recordIpProxyAuthChallenge(details, false);
           callback();
           return;
         }
-        const isProxyChallenge = details?.isProxy === true;
-        const challengerHost = String(details?.challenger?.host || '').trim().toLowerCase();
-        const challengerPort = Number.parseInt(String(details?.challenger?.port || ''), 10) || 0;
-        const authHost = String(auth?.host || '').trim().toLowerCase();
-        const authPort = Number.parseInt(String(auth?.port || ''), 10) || 0;
-        const challengerMatched = Boolean(
-          challengerHost
-          && authHost
-          && challengerHost === authHost
-          && (!authPort || !challengerPort || authPort === challengerPort)
-        );
-        const proxyAuthStatus = Number.parseInt(String(details?.statusCode || ''), 10) === 407;
-        const shouldProvide = isProxyChallenge || challengerMatched || proxyAuthStatus;
+        const shouldProvide = shouldProvideIpProxyAuthCredentials(details, auth);
         recordIpProxyAuthChallenge(details, shouldProvide);
         if (!shouldProvide) {
           callback();
@@ -3020,8 +3082,82 @@ function buildIpProxyEntrySignature(entry = {}) {
   ].join('|');
 }
 
+function normalizeIpProxyAuthEntry(entry = {}) {
+  const username = String(entry?.username || '').trim();
+  if (!username) {
+    return null;
+  }
+  const host = stripProxyHostTrailingDot(entry?.host || '');
+  const port = normalizeIpProxyPort(entry?.port);
+  if (!host || !port) {
+    return null;
+  }
+  return {
+    host,
+    port,
+    username,
+    password: String(entry?.password || ''),
+  };
+}
+
+function setCurrentIpProxyAuthEntry(entry = {}) {
+  currentIpProxyAuthEntry = normalizeIpProxyAuthEntry(entry);
+  return currentIpProxyAuthEntry;
+}
+
+function getCurrentIpProxyAuthEntry() {
+  return currentIpProxyAuthEntry;
+}
+
+function resolveIpProxyAuthEntryFromState(state = {}) {
+  if (!state?.ipProxyEnabled) {
+    return null;
+  }
+  const entry = getIpProxyCurrentEntryFromState(state);
+  return normalizeIpProxyAuthEntry(entry);
+}
+
+async function ensureIpProxyAuthEntryLoaded() {
+  if (currentIpProxyAuthEntry?.username) {
+    return currentIpProxyAuthEntry;
+  }
+  if (typeof getState !== 'function') {
+    return null;
+  }
+  const state = await getState().catch(() => null);
+  const auth = resolveIpProxyAuthEntryFromState(state || {});
+  if (auth) {
+    setCurrentIpProxyAuthEntry(auth);
+  }
+  return currentIpProxyAuthEntry;
+}
+
+function shouldProvideIpProxyAuthCredentials(details = {}, auth = {}) {
+  if (!auth?.username) {
+    return false;
+  }
+  if (details?.isProxy !== true) {
+    return false;
+  }
+  const statusCode = Number.parseInt(String(details?.statusCode || ''), 10) || 0;
+  if (statusCode && statusCode !== 407) {
+    return false;
+  }
+  const challengerHost = normalizeProxyHostForCompare(details?.challenger?.host || '');
+  const challengerPort = Number.parseInt(String(details?.challenger?.port || ''), 10) || 0;
+  const authHost = normalizeProxyHostForCompare(auth?.host || '');
+  const authPort = normalizeIpProxyPort(auth?.port);
+  if (!challengerHost) {
+    return true;
+  }
+  if (!authHost || challengerHost !== authHost) {
+    return false;
+  }
+  return !authPort || !challengerPort || authPort === challengerPort;
+}
+
 async function clearIpProxySettings(options = {}) {
-  currentIpProxyAuthEntry = null;
+  setCurrentIpProxyAuthEntry(null);
   if (options?.resetAppliedSignature !== false) {
     lastAppliedIpProxyEntrySignature = '';
   }
@@ -3263,26 +3399,12 @@ async function applyIpProxySettingsFromState(state = {}, options = {}) {
       await setIpProxyLeakGuardEnabled(true);
       await forceProxyConnectionDrainBeforeAuthSwitch();
     }
-    currentIpProxyAuthEntry = effectiveEntry?.username
-      ? {
-          host: effectiveEntry.host,
-          port: effectiveEntry.port,
-          username: effectiveEntry.username,
-          password: String(effectiveEntry.password || ''),
-        }
-      : null;
+    setCurrentIpProxyAuthEntry(effectiveEntry);
     await clearIpProxySettings({
       resetAppliedSignature: false,
       resetHostVariant: false,
     }).catch(() => {});
-    currentIpProxyAuthEntry = effectiveEntry?.username
-      ? {
-          host: effectiveEntry.host,
-          port: effectiveEntry.port,
-          username: effectiveEntry.username,
-          password: String(effectiveEntry.password || ''),
-        }
-      : null;
+    setCurrentIpProxyAuthEntry(effectiveEntry);
     if (shouldResetNetworkState) {
       await clearIpProxyNetworkState();
     }
@@ -3799,14 +3921,7 @@ async function probeIpProxyExit(options = {}) {
   installIpProxyAuthListener();
   installIpProxyErrorListener();
   resetIpProxyRuntimeErrorDiagnostics();
-  currentIpProxyAuthEntry = entry?.username
-    ? {
-        host: entry.host,
-        port: entry.port,
-        username: entry.username,
-        password: String(entry.password || ''),
-      }
-    : null;
+  setCurrentIpProxyAuthEntry(entry);
 
   const probingStatus = {
     enabled: true,
@@ -3916,14 +4031,7 @@ async function probeIpProxyExit(options = {}) {
       if (!reboundStatus?.applied || !reboundEntry?.host || !reboundEntry?.port) {
         break;
       }
-      currentIpProxyAuthEntry = reboundEntry?.username
-        ? {
-            host: reboundEntry.host,
-            port: reboundEntry.port,
-            username: reboundEntry.username,
-            password: String(reboundEntry.password || ''),
-          }
-        : null;
+      setCurrentIpProxyAuthEntry(reboundEntry);
       const retryProbingStatus = {
         ...probingStatus,
         reason: String(reboundStatus?.reason || probingStatus.reason || 'applied'),
@@ -3988,3 +4096,6 @@ async function ensureIpProxySettingsAppliedFromCurrentState(options = {}) {
   const state = options.state || await getState();
   return applyIpProxySettingsFromState(state, options);
 }
+
+installIpProxyAuthListener();
+installIpProxyErrorListener();

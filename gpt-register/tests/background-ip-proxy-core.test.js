@@ -24,13 +24,10 @@ const IP_PROXY_FORCE_DIRECT_HOST_PATTERNS = [
   '*.pm-redirects.stripe.com',
   'hwork.pro',
   '*.hwork.pro',
-  'auth.openai.com',
-  'auth0.openai.com',
-  'accounts.openai.com',
   'luckyous.com',
   '*.luckyous.com',
 ];
-const IP_PROXY_FORCE_DIRECT_FALLBACK = 'PROXY 127.0.0.1:7897';
+const IP_PROXY_FORCE_DIRECT_FALLBACK = 'DIRECT';
 const IP_PROXY_ACCOUNT_LIST_ENABLED = ${accountListEnabled ? 'true' : 'false'};
 const IP_PROXY_TARGET_HOST_PATTERNS = [
   'openai.com',
@@ -54,12 +51,13 @@ return {
   parseProxyExitProbePayload,
   parseIpProxyLine,
   queryAutomationScopedTabs,
-  resolveExitProbeEndpoints,
-  resolveIpProxyAutoSwitchThreshold,
-  resolveTargetReachabilityEndpoints,
-  shouldEnableIpProxyLeakGuardForStatus,
-};
-`)();
+	  resolveExitProbeEndpoints,
+	  resolveIpProxyAutoSwitchThreshold,
+	  resolveTargetReachabilityEndpoints,
+	  shouldProvideIpProxyAuthCredentials,
+	  shouldEnableIpProxyLeakGuardForStatus,
+	};
+	`)();
 }
 
 test('IP proxy parser ignores disabled lines and normalizes proxy entries', () => {
@@ -217,13 +215,13 @@ test('IP proxy PAC keeps local traffic direct and routes target traffic through 
   assert.match(pac, /openai\.com/);
   assert.match(pac, /pm-redirects\.stripe\.com/);
   assert.match(pac, /hwork\.pro/);
-  assert.match(pac, /auth\.openai\.com/);
-  assert.match(pac, /auth0\.openai\.com/);
-  assert.match(pac, /accounts\.openai\.com/);
+  assert.doesNotMatch(pac, /'auth\.openai\.com'/);
+  assert.doesNotMatch(pac, /'auth0\.openai\.com'/);
+  assert.doesNotMatch(pac, /'accounts\.openai\.com'/);
   assert.match(pac, /luckyous\.com/);
   assert.match(pac, /forceDirectPatterns/);
-  assert.match(pac, /PROXY 127\.0\.0\.1:7897/);
-  assert.doesNotMatch(pac, /PROXY 127\.0\.0\.1:7897; DIRECT/);
+  assert.doesNotMatch(pac, /PROXY 127\.0\.0\.1:7897/);
+  assert.match(pac, /return "DIRECT";/);
 });
 
 test('sidepanel loads IP proxy scripts before sidepanel bootstrap', () => {
@@ -308,18 +306,62 @@ test('target reachability failure turns detected exit IP into connectivity_faile
   assert.match(status.error, /ERR_EMPTY_RESPONSE/);
 });
 
-test('connectivity_failed keeps DNR leak guard off so ChatGPT shows proxy error instead of blocked by extension', () => {
+test('connectivity_failed only enables DNR leak guard when direct routing is suspected', () => {
   const api = loadIpProxyCore();
 
   assert.equal(api.shouldEnableIpProxyLeakGuardForStatus({
     enabled: true,
     applied: false,
     reason: 'connectivity_failed',
+    error: '已检测到出口 IP 58.10.48.73 [TH]，但真实目标 chatgpt.com 不可达。',
   }), false);
+
+  assert.equal(api.shouldEnableIpProxyLeakGuardForStatus({
+    enabled: true,
+    applied: false,
+    reason: 'connectivity_failed',
+    exitIp: '1.2.3.4',
+    exitBaselineIp: '1.2.3.4',
+    error: '检测到出口 IP 1.2.3.4 与系统基线网络一致，疑似未经过插件代理链路。',
+  }), true);
 
   assert.equal(api.shouldEnableIpProxyLeakGuardForStatus({
     enabled: true,
     applied: false,
     reason: 'missing_proxy_entry',
   }), true);
+});
+
+test('proxy auth credentials are scoped to matching proxy challenges', () => {
+  const api = loadIpProxyCore();
+  const auth = {
+    host: 'global.rotgb.711proxy.com',
+    port: 10000,
+    username: 'user',
+    password: 'pass',
+  };
+
+  assert.equal(api.shouldProvideIpProxyAuthCredentials({
+    isProxy: true,
+    statusCode: 407,
+    challenger: { host: 'global.rotgb.711proxy.com', port: 10000 },
+  }, auth), true);
+
+  assert.equal(api.shouldProvideIpProxyAuthCredentials({
+    isProxy: true,
+    statusCode: 407,
+    challenger: { host: 'other.proxy.example', port: 10000 },
+  }, auth), false);
+
+  assert.equal(api.shouldProvideIpProxyAuthCredentials({
+    isProxy: false,
+    statusCode: 407,
+    challenger: { host: 'global.rotgb.711proxy.com', port: 10000 },
+  }, auth), false);
+
+  assert.equal(api.shouldProvideIpProxyAuthCredentials({
+    isProxy: true,
+    statusCode: 401,
+    challenger: { host: 'global.rotgb.711proxy.com', port: 10000 },
+  }, auth), false);
 });

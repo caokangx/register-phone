@@ -11,6 +11,7 @@ function createHarness({
   bgAddress = null,
   bgSmsResponses = [],
   consentButton = null,
+  querySelectorAll = null,
 } = {}) {
   let listener = null;
   const fetchCalls = [];
@@ -44,7 +45,12 @@ function createHarness({
       }
       return null;
     },
-    querySelectorAll() { return []; },
+    querySelectorAll(selector) {
+      if (typeof querySelectorAll === 'function') {
+        return querySelectorAll(selector);
+      }
+      return [];
+    },
     getElementById(id) { return elements[id] || null; },
   };
 
@@ -269,6 +275,94 @@ test('PAYPAL_RUN_SMS_VERIFY polls the API, fills six inputs with the extracted 6
 
   // Consent button clicked.
   assert.deepEqual(consentClicks, ['consent']);
+});
+
+test('PAYPAL_WAIT_SMS_CODE and PAYPAL_FILL_SMS_CODE split code polling from consent clicking', async () => {
+  const codeInputs = {};
+  for (let i = 0; i < 6; i += 1) {
+    codeInputs[`ci-ciBasic-${i}`] = makeInput(`ci-ciBasic-${i}`);
+  }
+
+  const consentClicks = [];
+  const consentButton = {
+    tagName: 'BUTTON',
+    id: 'consentButton',
+    disabled: false,
+    textContent: 'Agree and Continue',
+    getBoundingClientRect: () => ({ width: 320, height: 48 }),
+    click() { consentClicks.push('consent'); },
+  };
+
+  const harness = createHarness({
+    pathname: '/authflow/consent/code',
+    elements: codeInputs,
+    consentButton,
+    bgSmsResponses: [
+      { ok: true, status: 200, text: 'yes|PayPal: 929278 is your security code.|(PayPal)|到期时间：2026-06-29 00:00:00' },
+    ],
+  });
+
+  const waitResult = await harness.send({
+    type: 'PAYPAL_WAIT_SMS_CODE',
+    source: 'test',
+    payload: { apiUrl: 'https://sms.example.com/api?token=abc' },
+  });
+  assert.equal(waitResult.ok, true);
+  assert.equal(waitResult.code, '929278');
+  assert.deepEqual(consentClicks, []);
+  assert.equal(codeInputs['ci-ciBasic-0'].value, '');
+
+  const fillResult = await harness.send({
+    type: 'PAYPAL_FILL_SMS_CODE',
+    source: 'test',
+    payload: { code: waitResult.code },
+  });
+  assert.equal(fillResult.ok, true);
+  assert.equal(fillResult.code, '929278');
+  assert.equal(codeInputs['ci-ciBasic-0'].value, '9');
+  assert.equal(codeInputs['ci-ciBasic-1'].value, '2');
+  assert.equal(codeInputs['ci-ciBasic-2'].value, '9');
+  assert.equal(codeInputs['ci-ciBasic-3'].value, '2');
+  assert.equal(codeInputs['ci-ciBasic-4'].value, '7');
+  assert.equal(codeInputs['ci-ciBasic-5'].value, '8');
+  assert.deepEqual(consentClicks, []);
+
+  const clickResult = await harness.send({
+    type: 'PAYPAL_CLICK_CONSENT',
+    source: 'test',
+    payload: {},
+  });
+  assert.equal(clickResult.ok, true);
+  assert.equal(clickResult.clicked, true);
+  assert.deepEqual(consentClicks, ['consent']);
+});
+
+test('PAYPAL_CLICK_CONSENT can find Agree and Continue by visible text after PayPal changes button ids', async () => {
+  const clicks = [];
+  const textButton = {
+    tagName: 'BUTTON',
+    disabled: false,
+    textContent: 'Agree and Continue',
+    value: '',
+    getAttribute: () => '',
+    getBoundingClientRect: () => ({ width: 300, height: 44 }),
+    click() { clicks.push('text-button'); },
+  };
+  const harness = createHarness({
+    pathname: '/authflow/consent/approve',
+    consentButton: null,
+    querySelectorAll: (selector) => (selector.includes('button') ? [textButton] : []),
+  });
+
+  const result = await harness.send({
+    type: 'PAYPAL_CLICK_CONSENT',
+    source: 'test',
+    payload: {},
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.clicked, true);
+  assert.deepEqual(clicks, ['text-button']);
 });
 
 test('PAYPAL_RUN_SMS_VERIFY errors out when apiUrl is missing', async () => {

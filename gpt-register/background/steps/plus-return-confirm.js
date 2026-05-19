@@ -9,6 +9,7 @@
   function createPlusReturnConfirmExecutor(deps = {}) {
     const {
       addLog,
+      applyRegionalProxy = null,
       completeNodeFromBackground,
       getTabId,
       isTabAlive,
@@ -53,6 +54,10 @@
         plusCheckoutTabId: tabId,
         plusReturnUrl: tab?.url || '',
       });
+      if (typeof applyRegionalProxy === 'function') {
+        await applyRegionalProxy('jp');
+        await addLog('步骤 9：支付回跳确认完成，已切回日本代理，后续 OpenAI OAuth 登录链路继续走日本节点。', 'info');
+      }
       await completeNodeFromBackground('plus-checkout-return', {
         plusReturnUrl: tab?.url || '',
       });

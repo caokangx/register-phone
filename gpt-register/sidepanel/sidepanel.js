@@ -186,6 +186,10 @@ const rowPayPalSmsPhone = document.getElementById('row-paypal-sms-phone');
 const inputPayPalSmsPhone = document.getElementById('input-paypal-sms-phone');
 const rowPayPalSmsApi = document.getElementById('row-paypal-sms-api');
 const inputPayPalSmsApi = document.getElementById('input-paypal-sms-api');
+const rowJpProxyAddress = document.getElementById('row-jp-proxy-address');
+const inputJpProxyAddress = document.getElementById('input-jp-proxy-address');
+const rowUsProxyAddress = document.getElementById('row-us-proxy-address');
+const inputUsProxyAddress = document.getElementById('input-us-proxy-address');
 const rowBindCardNumber = document.getElementById('row-bind-card-number');
 const inputBindCardNumber = document.getElementById('input-bind-card-number');
 const rowGpcHelperApi = document.getElementById('row-gpc-helper-api');
@@ -4134,6 +4138,12 @@ function collectSettingsPayload() {
     paypalSmsApiUrl: typeof inputPayPalSmsApi !== 'undefined' && inputPayPalSmsApi
       ? String(inputPayPalSmsApi.value || '').trim()
       : String(latestState?.paypalSmsApiUrl || '').trim(),
+    jpProxyAddress: typeof inputJpProxyAddress !== 'undefined' && inputJpProxyAddress
+      ? String(inputJpProxyAddress.value || '').trim()
+      : String(latestState?.jpProxyAddress || '').trim(),
+    usProxyAddress: typeof inputUsProxyAddress !== 'undefined' && inputUsProxyAddress
+      ? String(inputUsProxyAddress.value || '').trim()
+      : String(latestState?.usProxyAddress || '').trim(),
     bindCardNumber: typeof inputBindCardNumber !== 'undefined' && inputBindCardNumber
       ? String(inputBindCardNumber.value || '').trim()
       : String(latestState?.bindCardNumber || '').trim(),
@@ -8533,6 +8543,8 @@ function updatePlusModeUI() {
   [
     typeof rowPayPalSmsPhone !== 'undefined' ? rowPayPalSmsPhone : null,
     typeof rowPayPalSmsApi !== 'undefined' ? rowPayPalSmsApi : null,
+    typeof rowJpProxyAddress !== 'undefined' ? rowJpProxyAddress : null,
+    typeof rowUsProxyAddress !== 'undefined' ? rowUsProxyAddress : null,
     typeof rowBindCardNumber !== 'undefined' ? rowBindCardNumber : null,
   ].forEach((row) => {
     if (!row) {
@@ -9456,6 +9468,12 @@ function applySettingsState(state) {
   }
   if (typeof inputPayPalSmsApi !== 'undefined' && inputPayPalSmsApi) {
     inputPayPalSmsApi.value = String(state?.paypalSmsApiUrl || '');
+  }
+  if (typeof inputJpProxyAddress !== 'undefined' && inputJpProxyAddress) {
+    inputJpProxyAddress.value = String(state?.jpProxyAddress || '');
+  }
+  if (typeof inputUsProxyAddress !== 'undefined' && inputUsProxyAddress) {
+    inputUsProxyAddress.value = String(state?.usProxyAddress || '');
   }
   if (typeof inputBindCardNumber !== 'undefined' && inputBindCardNumber) {
     inputBindCardNumber.value = String(state?.bindCardNumber || '');
@@ -13890,7 +13908,7 @@ btnAddSub2ApiGroup?.addEventListener('click', () => {
   });
 });
 
-[inputPayPalSmsPhone, inputPayPalSmsApi, inputBindCardNumber].forEach((input) => {
+[inputPayPalSmsPhone, inputPayPalSmsApi, inputJpProxyAddress, inputUsProxyAddress, inputBindCardNumber].forEach((input) => {
   input?.addEventListener('input', () => {
     markSettingsDirty(true);
     scheduleSettingsAutoSave();

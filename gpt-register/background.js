@@ -449,17 +449,14 @@ const IP_PROXY_FORCE_DIRECT_HOST_PATTERNS = [
   '*.pm-redirects.stripe.com',
   'hwork.pro',
   '*.hwork.pro',
-  'auth.openai.com',
-  'auth0.openai.com',
-  'accounts.openai.com',
   'luckyous.com',
   '*.luckyous.com',
 ];
-const IP_PROXY_FORCE_DIRECT_FALLBACK = 'PROXY 127.0.0.1:7897';
+const IP_PROXY_FORCE_DIRECT_FALLBACK = 'DIRECT';
 const IP_PROXY_ACCOUNT_LIST_ENABLED = false;
 const IP_PROXY_INIT_ENABLE_EXIT_PROBE = false;
 const IP_PROXY_INIT_SUPPRESS_AUTH_REBIND = true;
-const IP_PROXY_INIT_AUTO_APPLY = false;
+const IP_PROXY_INIT_AUTO_APPLY = true;
 const IP_PROXY_TARGET_HOST_PATTERNS = [
   'openai.com',
   '*.openai.com',
@@ -893,6 +890,8 @@ const PERSISTED_SETTING_DEFAULTS = {
   paypalSmsPhone: '',
   paypalSmsApiUrl: '',
   bindCardNumber: '',
+  jpProxyAddress: '',
+  usProxyAddress: '',
   gopayCountryCode: '+86',
   gopayPhone: '',
   gopayOtp: '',
@@ -2661,6 +2660,9 @@ function normalizePersistentSettingValue(key, value) {
     case 'paypalSmsApiUrl':
       return String(value || '').trim();
     case 'bindCardNumber':
+      return String(value || '').trim();
+    case 'jpProxyAddress':
+    case 'usProxyAddress':
       return String(value || '').trim();
     case 'sub2apiAccountPriority':
       return normalizeSub2ApiAccountPriority(value);
@@ -12262,8 +12264,53 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
   throwIfStopped,
   createFiveSimProvider: self.PhoneSmsFiveSimProvider?.createProvider,
 });
+// Regional (JP / US) proxy switch — default OpenAI registration/auth traffic
+// stays on JP; only the Plus checkout / PayPal payment segment switches to US.
+// Reads jpProxyAddress / usProxyAddress from storage, builds a synthetic
+// ipProxy* state (mode='account' + empty accountList means
+// getIpProxyCurrentEntryFromState falls back to the top-level host/port) and
+// hands it to applyIpProxySettingsFromState without touching the user's
+// existing ipProxy* config.
+async function applyRegionalProxy(region) {
+  const labelMap = { jp: '日本', us: '美国' };
+  const fieldMap = { jp: 'jpProxyAddress', us: 'usProxyAddress' };
+  const label = labelMap[region];
+  const field = fieldMap[region];
+  if (!label || !field) {
+    throw new Error(`未知的区域代理标识：${region}`);
+  }
+  const state = await getState().catch(() => ({}));
+  const raw = String(state?.[field] || '').trim();
+  if (!raw) {
+    throw new Error(`未配置${label}代理地址（请在侧边栏「${label}代理」一栏填写 http://host:port），流程已停止。`);
+  }
+  let parsed;
+  try {
+    parsed = parseHttpProxyAddress(raw);
+  } catch (error) {
+    throw new Error(`${label}代理地址解析失败：${error?.message || String(error || '')}`);
+  }
+  if (!parsed) {
+    throw new Error(`${label}代理地址格式不合法（期望：http://host:port 或 http://user:pass@host:port）。`);
+  }
+  const synthetic = {
+    ipProxyEnabled: true,
+    ipProxyMode: 'account',
+    ipProxyService: 'regional-manual',
+    ipProxyAccountList: '',
+    ipProxyHost: parsed.host,
+    ipProxyPort: parsed.port,
+    ipProxyUsername: parsed.username || '',
+    ipProxyPassword: parsed.password || '',
+    ipProxyProtocol: 'http',
+  };
+  await applyIpProxySettingsFromState(synthetic, { forceAuthRebind: true });
+  await addLog(`已切换到${label}代理：${parsed.host}:${parsed.port}`, 'info');
+}
+
 const step1Executor = self.MultiPageBackgroundStep1?.createStep1Executor({
   addLog,
+  applyRegionalProxy,
   completeNodeFromBackground,
   openSignupEntryTab,
 });
@@ -12407,6 +12454,7 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
 });
 const plusCheckoutCreateExecutor = self.MultiPageBackgroundPlusCheckoutCreate?.createPlusCheckoutCreateExecutor({
   addLog,
+  applyRegionalProxy,
   chrome,
   completeNodeFromBackground,
   createAutomationTab,
@@ -12487,6 +12535,7 @@ const goPayApproveExecutor = self.MultiPageBackgroundGoPayApprove?.createGoPayAp
 });
 const plusReturnConfirmExecutor = self.MultiPageBackgroundPlusReturnConfirm?.createPlusReturnConfirmExecutor({
   addLog,
+  applyRegionalProxy,
   completeNodeFromBackground,
   getTabId,
   isTabAlive,

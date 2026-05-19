@@ -10,8 +10,8 @@
 //     "James Smith", US address fetched from the background), and submit.
 //   * SMS verification page (six #ci-ciBasic-0..5 inputs) — poll the
 //     configured paypalSmsApiUrl via background bridge, extract the
-//     6-digit code from "PayPal: NNNNNN" output, fill the inputs, then
-//     wait for the #consentButton ("Agree and Continue") and click it.
+//     6-digit code from "PayPal: NNNNNN" output, fill the inputs.
+//   * PayPal consent page — wait for "Agree and Continue" and click it.
 
 console.log('[MultiPage:paypal-flow] Content script loaded on', location.href);
 
@@ -25,6 +25,9 @@ if (document.documentElement.getAttribute(PAYPAL_FLOW_LISTENER_SENTINEL) !== '1'
       message.type === 'PAYPAL_GET_STATE'
       || message.type === 'PAYPAL_RUN_GUEST_LOGIN'
       || message.type === 'PAYPAL_RUN_GUEST_CHECKOUT'
+      || message.type === 'PAYPAL_WAIT_SMS_CODE'
+      || message.type === 'PAYPAL_FILL_SMS_CODE'
+      || message.type === 'PAYPAL_CLICK_CONSENT'
       || message.type === 'PAYPAL_RUN_SMS_VERIFY'
     ) {
       resetStopState();
@@ -58,6 +61,12 @@ async function handlePayPalCommand(message) {
       return runGuestLoginPage(message.payload || {});
     case 'PAYPAL_RUN_GUEST_CHECKOUT':
       return runGuestCheckoutPage(message.payload || {});
+    case 'PAYPAL_WAIT_SMS_CODE':
+      return runWaitSmsCode(message.payload || {});
+    case 'PAYPAL_FILL_SMS_CODE':
+      return runFillSmsCode(message.payload || {});
+    case 'PAYPAL_CLICK_CONSENT':
+      return runClickConsentPage(message.payload || {});
     case 'PAYPAL_RUN_SMS_VERIFY':
       return runSmsVerifyPage(message.payload || {});
     default:
@@ -91,6 +100,8 @@ function inspectPayPalState() {
     looksLikeGuestCheckout,
     hasEmailInput: Boolean(document.getElementById('email')),
     hasCardInput: Boolean(document.getElementById('cardNumber')),
+    hasSmsCodeInputs: PAYPAL_SMS_CODE_INPUT_IDS.every((id) => Boolean(document.getElementById(id))),
+    hasConsentButton: Boolean(findConsentButton()),
   };
 }
 
@@ -498,11 +509,12 @@ function typeDigitIntoInput(el, char) {
   return true;
 }
 
-async function fillSmsCodeInputs(code) {
+async function fillSmsCodeInputs(code, options = {}) {
   const digits = String(code || '').replace(/\D/g, '').slice(0, 6);
   if (digits.length !== 6) {
     throw new Error(`PayPal SMS: 验证码长度不是 6 位（实际「${code}」）。`);
   }
+  const interDigitDelayMs = Math.max(0, Number(options.interDigitDelayMs) || 120);
   for (let i = 0; i < PAYPAL_SMS_CODE_INPUT_IDS.length; i += 1) {
     const id = PAYPAL_SMS_CODE_INPUT_IDS[i];
     const el = document.getElementById(id);
@@ -514,17 +526,50 @@ async function fillSmsCodeInputs(code) {
     // pipeline can run before we type the next character. Without this the
     // bursty value-writes can race ahead of the React state machine and the
     // code is never registered as "fully entered".
-    await sleep(120);
+    if (i < PAYPAL_SMS_CODE_INPUT_IDS.length - 1 && interDigitDelayMs > 0) {
+      await sleep(interDigitDelayMs);
+    }
   }
   // Blur the last input so the framework's "complete" handler fires.
   const last = document.getElementById(PAYPAL_SMS_CODE_INPUT_IDS[5]);
   last?.blur?.();
   log(`PayPal SMS: 已填入 6 位验证码 ${digits}`);
+  return digits;
+}
+
+function getElementButtonText(el) {
+  if (!el) return '';
+  const directText = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+  const valueText = String(el.value || '').replace(/\s+/g, ' ').trim();
+  const ariaText = typeof el.getAttribute === 'function'
+    ? String(el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim()
+    : '';
+  return directText || valueText || ariaText;
+}
+
+function findConsentButtonByText() {
+  const candidates = Array.from(document.querySelectorAll(
+    'button, input[type="submit"], input[type="button"], a[role="button"], [role="button"]'
+  ));
+  const strongPatterns = [
+    /^agree\s*(?:&|and)\s*continue$/i,
+    /\bagree\s*(?:&|and)\s*continue\b/i,
+    /同意.*继续/,
+    /接受.*继续/,
+  ];
+  for (const el of candidates) {
+    const text = getElementButtonText(el);
+    if (strongPatterns.some((pattern) => pattern.test(text))) {
+      return el;
+    }
+  }
+  return null;
 }
 
 function findConsentButton() {
   return document.querySelector('#consentButton')
     || document.querySelector('button[data-testid="consentButton"]')
+    || findConsentButtonByText()
     || null;
 }
 
@@ -563,7 +608,7 @@ async function clickConsentButton() {
   log('PayPal SMS: 已点击 “Agree and Continue”。');
 }
 
-async function runSmsVerifyPage(payload = {}) {
+async function runWaitSmsCode(payload = {}) {
   await waitForDocumentComplete();
   await sleep(1500);
 
@@ -578,6 +623,28 @@ async function runSmsVerifyPage(payload = {}) {
     intervalMs: Number(payload?.intervalMs) || 4000,
   });
 
+  return { code };
+}
+
+async function runFillSmsCode(payload = {}) {
+  await waitForDocumentComplete();
+
+  const code = String(payload?.code || '').trim();
+  const filledCode = await fillSmsCodeInputs(code);
+
+  return { code: filledCode };
+}
+
+async function runClickConsentPage() {
+  await waitForDocumentComplete();
+  await sleep(500);
+  await clickConsentButton();
+
+  return { clicked: true };
+}
+
+async function runSmsVerifyPage(payload = {}) {
+  const { code } = await runWaitSmsCode(payload);
   await fillSmsCodeInputs(code);
   // PayPal validates the 6-digit code server-side after the last digit is
   // typed; give that round-trip time to finish (and the consent button time
