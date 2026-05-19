@@ -12264,6 +12264,158 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
   throwIfStopped,
   createFiveSimProvider: self.PhoneSmsFiveSimProvider?.createProvider,
 });
+const REGIONAL_PROXY_LABELS = { jp: '日本', us: '美国' };
+const REGIONAL_PROXY_FIELDS = { jp: 'jpProxyAddress', us: 'usProxyAddress' };
+const REGIONAL_PROXY_EXPECTED_REGIONS = { jp: 'JP', us: 'US' };
+const REGIONAL_PROXY_US_EXIT_VERIFY_TIMEOUT_MS = 180000;
+const REGIONAL_PROXY_US_EXIT_VERIFY_INTERVAL_MS = 3000;
+const REGIONAL_PROXY_US_EXIT_PROBE_TIMEOUT_MS = 12000;
+
+function normalizeRegionalProxyExitToken(value = '') {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function isRegionalProxyExitRegionMatch(region, detectedRegion = '') {
+  const expected = normalizeRegionalProxyExitToken(REGIONAL_PROXY_EXPECTED_REGIONS[region] || '');
+  const detected = normalizeRegionalProxyExitToken(detectedRegion);
+  if (!expected || !detected) {
+    return false;
+  }
+  if (expected === detected) {
+    return true;
+  }
+  if (expected === 'US') {
+    return detected === 'USA'
+      || detected === 'UNITEDSTATES'
+      || detected === 'UNITEDSTATESOFAMERICA';
+  }
+  if (expected === 'JP') {
+    return detected === 'JPN' || detected === 'JAPAN';
+  }
+  return detected.includes(expected) || expected.includes(detected);
+}
+
+function resolveRegionalProxyPositiveNumber(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < min) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.floor(numeric)));
+}
+
+function formatRegionalProxyExitStatus(status = {}) {
+  const exitIp = String(status?.exitIp || '').trim();
+  const exitRegion = String(status?.exitRegion || '').trim();
+  const error = String(status?.error || status?.exitError || status?.reason || '').trim();
+  const base = `${exitIp || '未获取 IP'}${exitRegion ? ` [${exitRegion}]` : ''}`;
+  if (exitIp || !error) {
+    return base;
+  }
+  const shortError = error.length > 180 ? `${error.slice(0, 180)}...` : error;
+  return `${base}（${shortError}）`;
+}
+
+async function sleepRegionalProxyExitCheck(ms) {
+  const delayMs = Math.max(0, Number(ms) || 0);
+  if (delayMs <= 0) {
+    return;
+  }
+  if (typeof sleepWithStop === 'function') {
+    await sleepWithStop(delayMs);
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function waitForRegionalProxyExit(region, state, options = {}) {
+  const label = REGIONAL_PROXY_LABELS[region] || region;
+  const expectedRegion = REGIONAL_PROXY_EXPECTED_REGIONS[region] || '';
+  if (!expectedRegion) {
+    throw new Error(`未知的区域代理标识：${region}`);
+  }
+  if (typeof probeIpProxyExit !== 'function') {
+    throw new Error(`无法检测${label}代理出口：缺少代理出口检测函数。`);
+  }
+
+  const timeoutMs = resolveRegionalProxyPositiveNumber(
+    options.exitVerifyTimeoutMs ?? options.timeoutMs,
+    REGIONAL_PROXY_US_EXIT_VERIFY_TIMEOUT_MS,
+    1000,
+    10 * 60 * 1000
+  );
+  const intervalMs = resolveRegionalProxyPositiveNumber(
+    options.exitVerifyIntervalMs ?? options.intervalMs,
+    REGIONAL_PROXY_US_EXIT_VERIFY_INTERVAL_MS,
+    0,
+    30000
+  );
+  const probeTimeoutMs = resolveRegionalProxyPositiveNumber(
+    options.exitProbeTimeoutMs ?? options.probeTimeoutMs,
+    REGIONAL_PROXY_US_EXIT_PROBE_TIMEOUT_MS,
+    3000,
+    60000
+  );
+  const maxAttempts = Math.max(0, Math.floor(Number(options.exitVerifyMaxAttempts) || 0));
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + timeoutMs;
+  let attempt = 0;
+  let lastStatus = null;
+
+  if (typeof addLog === 'function') {
+    await addLog(`正在检测${label}代理出口 IP，需确认国家/地区为 ${expectedRegion}。`, 'info').catch(() => {});
+  }
+
+  while (Date.now() <= deadlineAt) {
+    if (typeof throwIfStopped === 'function') {
+      throwIfStopped();
+    }
+    attempt += 1;
+    try {
+      const probeResult = await probeIpProxyExit({
+        state,
+        timeoutMs: probeTimeoutMs,
+        authRebindRetry: false,
+      });
+      lastStatus = probeResult?.proxyRouting || {};
+    } catch (error) {
+      lastStatus = {
+        exitIp: '',
+        exitRegion: '',
+        error: error?.message || String(error || '代理出口检测失败'),
+      };
+    }
+
+    const exitIp = String(lastStatus?.exitIp || '').trim();
+    const exitRegion = String(lastStatus?.exitRegion || '').trim();
+    if (exitIp && isRegionalProxyExitRegionMatch(region, exitRegion)) {
+      if (typeof addLog === 'function') {
+        await addLog(`已确认${label}代理出口：${formatRegionalProxyExitStatus(lastStatus)}。`, 'ok').catch(() => {});
+      }
+      return lastStatus;
+    }
+
+    const shouldStopByAttempts = maxAttempts > 0 && attempt >= maxAttempts;
+    if (shouldStopByAttempts || Date.now() >= deadlineAt) {
+      break;
+    }
+
+    if (typeof addLog === 'function') {
+      await addLog(
+        `等待${label}代理出口生效：第 ${attempt} 次检测为 ${formatRegionalProxyExitStatus(lastStatus)}，期望 ${expectedRegion}，继续等待...`,
+        'warn'
+      ).catch(() => {});
+    }
+    await sleepRegionalProxyExitCheck(Math.min(intervalMs, Math.max(0, deadlineAt - Date.now())));
+  }
+
+  throw new Error(
+    `${label}代理出口检测超时：期望 ${expectedRegion}，最后检测为 ${formatRegionalProxyExitStatus(lastStatus || {})}。请切换到真正的${label}节点后重试。`
+  );
+}
+
 // Regional (JP / US) proxy switch — default OpenAI registration/auth traffic
 // stays on JP; only the Plus checkout / PayPal payment segment switches to US.
 // Reads jpProxyAddress / usProxyAddress from storage, builds a synthetic
@@ -12271,11 +12423,10 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
 // getIpProxyCurrentEntryFromState falls back to the top-level host/port) and
 // hands it to applyIpProxySettingsFromState without touching the user's
 // existing ipProxy* config.
-async function applyRegionalProxy(region) {
-  const labelMap = { jp: '日本', us: '美国' };
-  const fieldMap = { jp: 'jpProxyAddress', us: 'usProxyAddress' };
-  const label = labelMap[region];
-  const field = fieldMap[region];
+async function applyRegionalProxy(region, options = {}) {
+  const label = REGIONAL_PROXY_LABELS[region];
+  const field = REGIONAL_PROXY_FIELDS[region];
+  const expectedRegion = REGIONAL_PROXY_EXPECTED_REGIONS[region] || '';
   if (!label || !field) {
     throw new Error(`未知的区域代理标识：${region}`);
   }
@@ -12303,9 +12454,20 @@ async function applyRegionalProxy(region) {
     ipProxyUsername: parsed.username || '',
     ipProxyPassword: parsed.password || '',
     ipProxyProtocol: 'http',
+    ipProxyRegion: expectedRegion,
   };
-  await applyIpProxySettingsFromState(synthetic, { forceAuthRebind: true });
+  const applyStatus = await applyIpProxySettingsFromState(synthetic, {
+    forceAuthRebind: true,
+    skipExitProbe: region === 'us',
+  });
+  if (applyStatus?.applied === false) {
+    const error = String(applyStatus?.error || '').trim();
+    throw new Error(`${label}代理切换失败${error ? `：${error}` : '。'}`);
+  }
   await addLog(`已切换到${label}代理：${parsed.host}:${parsed.port}`, 'info');
+  if (region === 'us') {
+    await waitForRegionalProxyExit(region, synthetic, options);
+  }
 }
 
 const step1Executor = self.MultiPageBackgroundStep1?.createStep1Executor({

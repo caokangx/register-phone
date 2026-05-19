@@ -30,7 +30,7 @@ const IP_PROXY_SETTINGS_SCOPE = 'regular';
 const IP_PROXY_BYPASS_LIST = ['<local>', 'localhost', '127.0.0.1'];
 const IP_PROXY_ROUTE_ALL_TRAFFIC = true;
 const IP_PROXY_FORCE_DIRECT_HOST_PATTERNS = [];
-const IP_PROXY_FORCE_DIRECT_FALLBACK = 'PROXY 127.0.0.1:7897';
+const IP_PROXY_FORCE_DIRECT_FALLBACK = 'DIRECT';
 const IP_PROXY_ACCOUNT_LIST_ENABLED = true;
 const IP_PROXY_TARGET_HOST_PATTERNS = ['openai.com'];
 ${providerSource}
@@ -42,23 +42,11 @@ return { parseHttpProxyAddress };
 
 function extractApplyRegionalProxySource() {
   const src = fs.readFileSync('background.js', 'utf8');
-  const idx = src.indexOf('async function applyRegionalProxy');
-  assert.ok(idx >= 0, 'applyRegionalProxy not found in background.js');
-  // Brace-balance to find the end of the function.
-  const headStart = src.indexOf('{', idx);
-  assert.ok(headStart > idx);
-  let depth = 0;
-  let end = -1;
-  for (let i = headStart; i < src.length; i += 1) {
-    const ch = src[i];
-    if (ch === '{') depth += 1;
-    else if (ch === '}') {
-      depth -= 1;
-      if (depth === 0) { end = i + 1; break; }
-    }
-  }
-  assert.ok(end > 0, 'unbalanced braces in applyRegionalProxy');
-  return src.slice(idx, end);
+  const sourceStart = src.indexOf('const REGIONAL_PROXY_LABELS');
+  assert.ok(sourceStart >= 0, 'regional proxy helpers not found in background.js');
+  const end = src.indexOf('\nconst step1Executor', sourceStart);
+  assert.ok(end > sourceStart, 'regional proxy block end not found in background.js');
+  return src.slice(sourceStart, end);
 }
 
 function loadApplyRegionalProxy(stubs) {
@@ -68,6 +56,10 @@ function loadApplyRegionalProxy(stubs) {
     addLog: stubs.addLog,
     applyIpProxySettingsFromState: stubs.applyIpProxySettingsFromState,
     parseHttpProxyAddress: stubs.parseHttpProxyAddress,
+    probeIpProxyExit: stubs.probeIpProxyExit,
+    sleepWithStop: stubs.sleepWithStop,
+    throwIfStopped: stubs.throwIfStopped,
+    setTimeout: stubs.setTimeout || setTimeout,
   };
   vm.createContext(context);
   vm.runInContext(`${fnSource}\nthis.__apply = applyRegionalProxy;`, context);
@@ -158,14 +150,37 @@ test('parseHttpProxyAddress: missing port returns null', () => {
 // ----- applyRegionalProxy -----
 
 const NO_OVERRIDE = Symbol('NO_OVERRIDE');
-function makeStubs({ state = {}, parsedOverride = NO_OVERRIDE, parseThrows = null } = {}) {
-  const captured = { applyCalls: [], logCalls: [] };
+function makeStubs({
+  state = {},
+  parsedOverride = NO_OVERRIDE,
+  parseThrows = null,
+  probeResults = null,
+  probeThrows = null,
+} = {}) {
+  const captured = { applyCalls: [], logCalls: [], probeCalls: [], sleepCalls: [], stopChecks: 0 };
+  const normalizedProbeResults = Array.isArray(probeResults) && probeResults.length
+    ? probeResults
+    : [{ proxyRouting: { exitIp: '8.8.8.8', exitRegion: 'US' } }];
   const stubs = {
     getState: async () => state,
     addLog: async (msg, level) => { captured.logCalls.push({ msg, level }); },
     applyIpProxySettingsFromState: async (synthetic, options) => {
       captured.applyCalls.push({ synthetic, options });
       return { applied: true };
+    },
+    probeIpProxyExit: async (options) => {
+      captured.probeCalls.push(options);
+      if (probeThrows) {
+        throw new Error(probeThrows);
+      }
+      const index = Math.min(captured.probeCalls.length - 1, normalizedProbeResults.length - 1);
+      return normalizedProbeResults[index];
+    },
+    sleepWithStop: async (ms) => {
+      captured.sleepCalls.push(ms);
+    },
+    throwIfStopped: () => {
+      captured.stopChecks += 1;
     },
     parseHttpProxyAddress: (raw) => {
       if (parseThrows) throw new Error(parseThrows);
@@ -203,7 +218,10 @@ test('applyRegionalProxy("jp"): happy path constructs synthetic account-mode sta
   assert.equal(synthetic.ipProxyUsername, 'alice');
   assert.equal(synthetic.ipProxyPassword, 'secret');
   assert.equal(synthetic.ipProxyProtocol, 'http');
+  assert.equal(synthetic.ipProxyRegion, 'JP');
   assert.equal(options.forceAuthRebind, true);
+  assert.equal(options.skipExitProbe, false);
+  assert.equal(captured.probeCalls.length, 0);
   assert.equal(captured.logCalls.length, 1);
   assert.match(captured.logCalls[0].msg, /日本代理/);
   assert.match(captured.logCalls[0].msg, /1\.2\.3\.4:8080/);
@@ -221,7 +239,61 @@ test('applyRegionalProxy("us"): reads usProxyAddress field, logs 美国代理', 
   assert.equal(captured.applyCalls[0].synthetic.ipProxyHost, '10.0.0.1');
   assert.equal(captured.applyCalls[0].synthetic.ipProxyPort, 3128);
   assert.equal(captured.applyCalls[0].synthetic.ipProxyUsername, '');
+  assert.equal(captured.applyCalls[0].synthetic.ipProxyRegion, 'US');
+  assert.equal(captured.applyCalls[0].options.skipExitProbe, true);
+  assert.equal(captured.probeCalls.length, 1);
+  assert.equal(captured.probeCalls[0].state.ipProxyHost, '10.0.0.1');
   assert.match(captured.logCalls[0].msg, /美国代理/);
+  assert.equal(captured.logCalls.some((entry) => /已确认美国代理出口/.test(entry.msg)), true);
+});
+
+test('applyRegionalProxy("us"): retries until the detected exit region is US', async () => {
+  const { stubs, captured } = makeStubs({
+    state: { usProxyAddress: 'http://10.0.0.1:3128' },
+    probeResults: [
+      { proxyRouting: { exitIp: '203.0.113.10', exitRegion: 'BR' } },
+      { proxyRouting: { exitIp: '203.0.113.11', exitRegion: '' } },
+      { proxyRouting: { exitIp: '198.51.100.9', exitRegion: 'US' } },
+    ],
+  });
+  const applyRegionalProxy = loadApplyRegionalProxy(stubs);
+
+  await applyRegionalProxy('us', {
+    exitVerifyTimeoutMs: 10000,
+    exitVerifyIntervalMs: 1,
+    exitProbeTimeoutMs: 3000,
+  });
+
+  assert.equal(captured.probeCalls.length, 3);
+  assert.deepEqual(captured.sleepCalls, [1, 1]);
+  assert.equal(
+    captured.logCalls.filter((entry) => /等待美国代理出口生效/.test(entry.msg)).length,
+    2
+  );
+  assert.match(captured.logCalls[captured.logCalls.length - 1].msg, /已确认美国代理出口/);
+});
+
+test('applyRegionalProxy("us"): blocks when the exit region never becomes US', async () => {
+  const { stubs, captured } = makeStubs({
+    state: { usProxyAddress: 'http://10.0.0.1:3128' },
+    probeResults: [
+      { proxyRouting: { exitIp: '203.0.113.10', exitRegion: 'JP' } },
+      { proxyRouting: { exitIp: '203.0.113.11', exitRegion: 'CA' } },
+    ],
+  });
+  const applyRegionalProxy = loadApplyRegionalProxy(stubs);
+
+  await assert.rejects(
+    () => applyRegionalProxy('us', {
+      exitVerifyTimeoutMs: 10000,
+      exitVerifyIntervalMs: 1,
+      exitVerifyMaxAttempts: 2,
+      exitProbeTimeoutMs: 3000,
+    }),
+    /美国代理出口检测超时：期望 US/
+  );
+  assert.equal(captured.probeCalls.length, 2);
+  assert.equal(captured.applyCalls.length, 1);
 });
 
 test('applyRegionalProxy: empty jpProxyAddress throws Chinese error and never calls applyIpProxySettingsFromState', async () => {
