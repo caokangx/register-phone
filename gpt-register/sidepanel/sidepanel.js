@@ -100,6 +100,8 @@ const btnSub2ApiGroupMenu = document.getElementById('btn-sub2api-group-menu');
 const sub2ApiGroupCurrent = document.getElementById('sub2api-group-current');
 const sub2ApiGroupMenu = document.getElementById('sub2api-group-menu');
 const btnAddSub2ApiGroup = document.getElementById('btn-add-sub2api-group');
+const rowSub2ApiAccountPriority = document.getElementById('row-sub2api-account-priority');
+const inputSub2ApiAccountPriority = document.getElementById('input-sub2api-account-priority');
 const rowSub2ApiDefaultProxy = document.getElementById('row-sub2api-default-proxy');
 const inputSub2ApiDefaultProxy = document.getElementById('input-sub2api-default-proxy');
 const rowIpProxyEnabled = document.getElementById('row-ip-proxy-enabled');
@@ -110,9 +112,6 @@ const ipProxyEnabledStatusDot = document.getElementById('ip-proxy-enabled-status
 const ipProxyEnabledStatusText = document.getElementById('ip-proxy-enabled-status-text');
 const ipProxyEnabledButtons = Array.from(document.querySelectorAll('[data-ip-proxy-enabled]'));
 const rowIpProxyFold = document.getElementById('row-ip-proxy-fold');
-const rowIpProxyPromo = document.getElementById('row-ip-proxy-promo');
-const ipProxyPromo = document.getElementById('ip-proxy-promo');
-const ipProxyPromoText = document.getElementById('ip-proxy-promo-text');
 const rowIpProxyService = document.getElementById('row-ip-proxy-service');
 const selectIpProxyService = document.getElementById('select-ip-proxy-service');
 const btnIpProxyServiceLogin = document.getElementById('btn-ip-proxy-service-login');
@@ -183,17 +182,32 @@ const btnPayPalAccountMenu = document.getElementById('btn-paypal-account-menu');
 const payPalAccountCurrent = document.getElementById('paypal-account-current');
 const payPalAccountMenu = document.getElementById('paypal-account-menu');
 const btnAddPayPalAccount = document.getElementById('btn-add-paypal-account');
+const rowPayPalSmsPhone = document.getElementById('row-paypal-sms-phone');
+const inputPayPalSmsPhone = document.getElementById('input-paypal-sms-phone');
+const rowPayPalSmsApi = document.getElementById('row-paypal-sms-api');
+const inputPayPalSmsApi = document.getElementById('input-paypal-sms-api');
+const rowBindCardNumber = document.getElementById('row-bind-card-number');
+const inputBindCardNumber = document.getElementById('input-bind-card-number');
 const rowGpcHelperApi = document.getElementById('row-gpc-helper-api');
 const inputGpcHelperApi = document.getElementById('input-gpc-helper-api');
+const btnGpcHelperConvertApiKey = document.getElementById('btn-gpc-helper-convert-api-key');
 const rowGpcHelperCardKey = document.getElementById('row-gpc-helper-card-key');
 const inputGpcHelperCardKey = document.getElementById('input-gpc-helper-card-key');
 const btnToggleGpcHelperCardKey = document.getElementById('btn-toggle-gpc-helper-card-key');
 const btnGpcHelperBalance = document.getElementById('btn-gpc-helper-balance');
 const displayGpcHelperBalance = document.getElementById('display-gpc-helper-balance');
+const rowGpcHelperPhoneMode = document.getElementById('row-gpc-helper-phone-mode');
+const selectGpcHelperPhoneMode = document.getElementById('select-gpc-helper-phone-mode');
 const rowGpcHelperCountryCode = document.getElementById('row-gpc-helper-country-code');
 const selectGpcHelperCountryCode = document.getElementById('select-gpc-helper-country-code');
 const rowGpcHelperPhone = document.getElementById('row-gpc-helper-phone');
 const inputGpcHelperPhone = document.getElementById('input-gpc-helper-phone');
+const rowGpcHelperOtpChannel = document.getElementById('row-gpc-helper-otp-channel');
+const selectGpcHelperOtpChannel = document.getElementById('select-gpc-helper-otp-channel');
+const rowGpcHelperLocalSmsEnabled = document.getElementById('row-gpc-helper-local-sms-enabled');
+const inputGpcHelperLocalSmsEnabled = document.getElementById('input-gpc-helper-local-sms-enabled');
+const rowGpcHelperLocalSmsUrl = document.getElementById('row-gpc-helper-local-sms-url');
+const inputGpcHelperLocalSmsUrl = document.getElementById('input-gpc-helper-local-sms-url');
 const rowGpcHelperPin = document.getElementById('row-gpc-helper-pin');
 const inputGpcHelperPin = document.getElementById('input-gpc-helper-pin');
 const btnToggleGpcHelperPin = document.getElementById('btn-toggle-gpc-helper-pin');
@@ -238,6 +252,8 @@ const rowTempEmailAdminAuth = document.getElementById('row-temp-email-admin-auth
 const inputTempEmailAdminAuth = document.getElementById('input-temp-email-admin-auth');
 const rowTempEmailCustomAuth = document.getElementById('row-temp-email-custom-auth');
 const inputTempEmailCustomAuth = document.getElementById('input-temp-email-custom-auth');
+const rowTempEmailLookupMode = document.getElementById('row-temp-email-lookup-mode');
+const tempEmailLookupModeButtons = Array.from(document.querySelectorAll('[data-temp-email-lookup-mode]'));
 const rowTempEmailReceiveMailbox = document.getElementById('row-temp-email-receive-mailbox');
 const inputTempEmailReceiveMailbox = document.getElementById('input-temp-email-receive-mailbox');
 const rowTempEmailRandomSubdomainToggle = document.getElementById('row-temp-email-random-subdomain-toggle');
@@ -253,6 +269,17 @@ const btnTempEmailDomainMode = document.getElementById('btn-temp-email-domain-mo
 const cloudflareTempEmailSection = document.getElementById('cloudflare-temp-email-section');
 const btnCloudflareTempEmailUsageGuide = document.getElementById('btn-cloudflare-temp-email-usage-guide');
 const btnCloudflareTempEmailGithub = document.getElementById('btn-cloudflare-temp-email-github');
+const cloudMailSection = document.getElementById('cloud-mail-section');
+const rowCloudMailBaseUrl = document.getElementById('row-cloud-mail-base-url');
+const rowCloudMailAdminEmail = document.getElementById('row-cloud-mail-admin-email');
+const rowCloudMailAdminPassword = document.getElementById('row-cloud-mail-admin-password');
+const rowCloudMailReceiveMailbox = document.getElementById('row-cloud-mail-receive-mailbox');
+const rowCloudMailDomain = document.getElementById('row-cloud-mail-domain');
+const inputCloudMailBaseUrl = document.getElementById('input-cloud-mail-base-url');
+const inputCloudMailAdminEmail = document.getElementById('input-cloud-mail-admin-email');
+const inputCloudMailAdminPassword = document.getElementById('input-cloud-mail-admin-password');
+const inputCloudMailReceiveMailbox = document.getElementById('input-cloud-mail-receive-mailbox');
+const inputCloudMailDomain = document.getElementById('input-cloud-mail-domain');
 const hotmailSection = document.getElementById('hotmail-section');
 const mail2925Section = document.getElementById('mail2925-section');
 const luckmailSection = document.getElementById('luckmail-section');
@@ -356,9 +383,11 @@ const btnCfDomainMode = document.getElementById('btn-cf-domain-mode');
 const inputRunCount = document.getElementById('input-run-count');
 const inputAutoSkipFailures = document.getElementById('input-auto-skip-failures');
 const inputAutoSkipFailuresThreadIntervalMinutes = document.getElementById('input-auto-skip-failures-thread-interval-minutes');
+const inputStep6CookieCleanupEnabled = document.getElementById('input-step6-cookie-cleanup-enabled');
 const inputAutoDelayEnabled = document.getElementById('input-auto-delay-enabled');
 const inputAutoDelayMinutes = document.getElementById('input-auto-delay-minutes');
 const inputAutoStepDelaySeconds = document.getElementById('input-auto-step-delay-seconds');
+const inputOperationDelayEnabled = document.getElementById('input-operation-delay-enabled');
 const inputOAuthFlowTimeoutEnabled = document.getElementById('input-oauth-flow-timeout-enabled');
 const inputVerificationResendCount = document.getElementById('input-verification-resend-count');
 const rowPhoneVerificationEnabled = document.getElementById('row-phone-verification-enabled');
@@ -366,6 +395,8 @@ const btnTogglePhoneVerificationSection = document.getElementById('btn-toggle-ph
 const rowPhoneVerificationFold = document.getElementById('row-phone-verification-fold');
 const inputPhoneVerificationEnabled = document.getElementById('input-phone-verification-enabled');
 const rowSignupMethod = document.getElementById('row-signup-method');
+const rowPhoneSignupReloginAfterBindEmail = document.getElementById('row-phone-signup-relogin-after-bind-email');
+const inputPhoneSignupReloginAfterBindEmail = document.getElementById('input-phone-signup-relogin-after-bind-email');
 const rowSignupPhone = document.getElementById('row-signup-phone');
 const signupMethodButtons = Array.from(document.querySelectorAll('[data-signup-method]'));
 const selectPhoneSmsProvider = document.getElementById('select-phone-sms-provider');
@@ -400,6 +431,9 @@ const rowPhoneCodeWaitSeconds = document.getElementById('row-phone-code-wait-sec
 const rowPhoneCodeTimeoutWindows = document.getElementById('row-phone-code-timeout-windows');
 const rowPhoneCodePollIntervalSeconds = document.getElementById('row-phone-code-poll-interval-seconds');
 const rowPhoneCodePollMaxRounds = document.getElementById('row-phone-code-poll-max-rounds');
+const rowFreePhoneReuseEnabled = document.getElementById('row-free-phone-reuse-enabled');
+const rowFreePhoneReuseAutoEnabled = document.getElementById('row-free-phone-reuse-auto-enabled');
+const rowFreeReusablePhone = document.getElementById('row-free-reusable-phone');
 const inputHeroSmsApiKey = document.getElementById('input-hero-sms-api-key');
 const btnToggleHeroSmsApiKey = document.getElementById('btn-toggle-hero-sms-api-key');
 const inputFiveSimApiKey = document.getElementById('input-five-sim-api-key');
@@ -409,6 +443,7 @@ const inputFiveSimProduct = document.getElementById('input-five-sim-product');
 const inputNexSmsApiKey = document.getElementById('input-nex-sms-api-key');
 const btnToggleNexSmsApiKey = document.getElementById('btn-toggle-nex-sms-api-key');
 const inputNexSmsServiceCode = document.getElementById('input-nex-sms-service-code');
+const inputHeroSmsMinPrice = document.getElementById('input-hero-sms-min-price');
 const inputHeroSmsMaxPrice = document.getElementById('input-hero-sms-max-price');
 const inputHeroSmsPreferredPrice = document.getElementById('input-hero-sms-preferred-price');
 const inputPhoneReplacementLimit = document.getElementById('input-phone-replacement-limit');
@@ -417,6 +452,9 @@ const inputPhoneCodeTimeoutWindows = document.getElementById('input-phone-code-t
 const inputPhoneCodePollIntervalSeconds = document.getElementById('input-phone-code-poll-interval-seconds');
 const inputPhoneCodePollMaxRounds = document.getElementById('input-phone-code-poll-max-rounds');
 const inputHeroSmsReuseEnabled = document.getElementById('input-hero-sms-reuse-enabled');
+const inputFreePhoneReuseEnabled = document.getElementById('input-free-phone-reuse-enabled');
+const inputFreePhoneReuseAutoEnabled = document.getElementById('input-free-phone-reuse-auto-enabled');
+const inputFreeReusablePhone = document.getElementById('input-free-reusable-phone');
 const selectHeroSmsCountry = document.getElementById('select-hero-sms-country');
 const selectHeroSmsCountryFallback = document.getElementById('select-hero-sms-country-fallback');
 const selectHeroSmsAcquirePriority = document.getElementById('select-hero-sms-acquire-priority');
@@ -448,10 +486,14 @@ const displayHeroSmsCurrentCountdown = document.getElementById('display-hero-sms
 const displayHeroSmsPriceTiers = document.getElementById('display-hero-sms-price-tiers');
 const displayPhoneSmsBalance = document.getElementById('display-phone-sms-balance');
 const displayHeroSmsCurrentCode = document.getElementById('display-hero-sms-current-code');
+const displayFreeReusablePhoneCountry = document.getElementById('display-free-reusable-phone-country');
+const displayFreeReusablePhone = document.getElementById('display-free-reusable-phone');
 const displayHeroSmsCountryFallbackOrder = document.getElementById('display-hero-sms-country-fallback-order');
 const displayFiveSimCountryFallbackOrder = document.getElementById('display-five-sim-country-fallback-order');
 const displayNexSmsCountryFallbackOrder = document.getElementById('display-nex-sms-country-fallback-order');
 const displayPhoneSmsProviderOrder = document.getElementById('display-phone-sms-provider-order');
+const btnSaveFreeReusablePhone = document.getElementById('btn-save-free-reusable-phone');
+const btnClearFreeReusablePhone = document.getElementById('btn-clear-free-reusable-phone');
 const rowAccountRunHistoryHelperBaseUrl = document.getElementById('row-account-run-history-helper-base-url');
 const inputAccountRunHistoryHelperBaseUrl = document.getElementById('input-account-run-history-helper-base-url');
 const autoStartModal = document.getElementById('auto-start-modal');
@@ -478,14 +520,24 @@ const stepsList = document.querySelector('.steps-list');
 const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
 const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
 const PLUS_PAYMENT_METHOD_GPC_HELPER = 'gpc-helper';
-const DEFAULT_GPC_HELPER_API_URL = 'https://gopay.hwork.pro';
+const DEFAULT_GPC_HELPER_API_URL = 'https://gpc.qlhazycoder.top';
+const GPC_HELPER_PORTAL_URL = 'https://gpc.qlhazycoder.top/';
+const GPC_HELPER_PHONE_MODE_AUTO = 'auto';
+const GPC_HELPER_PHONE_MODE_MANUAL = 'manual';
 const DEFAULT_PLUS_PAYMENT_METHOD = PLUS_PAYMENT_METHOD_PAYPAL;
 const SIGNUP_METHOD_EMAIL = 'email';
 const SIGNUP_METHOD_PHONE = 'phone';
 const DEFAULT_SIGNUP_METHOD = SIGNUP_METHOD_EMAIL;
+const DEFAULT_ACTIVE_FLOW_ID = 'openai';
+const DEFAULT_PHONE_SIGNUP_RELOGIN_AFTER_BIND_EMAIL_ENABLED = false;
+const PHONE_SIGNUP_REUSE_LOCK_TITLE = '手机号注册流程不使用号码复用，切回邮箱注册后会恢复原设置';
+let latestState = null;
 let currentPlusModeEnabled = false;
 let currentPlusPaymentMethod = DEFAULT_PLUS_PAYMENT_METHOD;
 let currentSignupMethod = DEFAULT_SIGNUP_METHOD;
+let currentPhoneSignupReloginAfterBindEmailEnabled = DEFAULT_PHONE_SIGNUP_RELOGIN_AFTER_BIND_EMAIL_ENABLED;
+let phoneSignupReuseUiWasLocked = false;
+let lastConfirmedOperationDelayEnabled = true;
 let heroSmsCountrySelectionOrder = [];
 let phoneSmsProviderOrderSelection = [];
 let heroSmsCountryMenuSearchKeyword = '';
@@ -504,10 +556,19 @@ const nexSmsCountrySearchTextById = new Map();
 let stepDefinitions = getStepDefinitionsForMode(false, {
   plusPaymentMethod: currentPlusPaymentMethod,
   signupMethod: currentSignupMethod,
+  phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
+});
+let workflowNodes = getWorkflowNodesForMode(false, {
+  plusPaymentMethod: currentPlusPaymentMethod,
+  signupMethod: currentSignupMethod,
+  phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
 });
 let STEP_IDS = stepDefinitions.map((step) => Number(step.id)).filter(Number.isFinite);
 let STEP_DEFAULT_STATUSES = Object.fromEntries(STEP_IDS.map((stepId) => [stepId, 'pending']));
 let SKIPPABLE_STEPS = new Set(STEP_IDS);
+let NODE_IDS = workflowNodes.map((node) => String(node.nodeId || '').trim()).filter(Boolean);
+let NODE_DEFAULT_STATUSES = Object.fromEntries(NODE_IDS.map((nodeId) => [nodeId, 'pending']));
+let SKIPPABLE_NODES = new Set(NODE_IDS);
 const AUTO_DELAY_MIN_MINUTES = 1;
 const AUTO_DELAY_MAX_MINUTES = 1440;
 const AUTO_DELAY_DEFAULT_MINUTES = 30;
@@ -705,11 +766,15 @@ const DEFAULT_CPA_CALLBACK_MODE = 'step8';
 const MAIL_2925_MODE_PROVIDE = 'provide';
 const MAIL_2925_MODE_RECEIVE = 'receive';
 const DEFAULT_MAIL_2925_MODE = MAIL_2925_MODE_PROVIDE;
+const CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_RECEIVE_MAILBOX = 'receive-mailbox';
+const CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL = 'registration-email';
+const DEFAULT_CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE = CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_RECEIVE_MAILBOX;
 const NEW_USER_GUIDE_PROMPT_DISMISSED_STORAGE_KEY = 'multipage-new-user-guide-prompt-dismissed';
 const AUTO_SKIP_FAILURES_PROMPT_DISMISSED_STORAGE_KEY = 'multipage-auto-skip-failures-prompt-dismissed';
 const AUTO_RUN_FALLBACK_RISK_PROMPT_DISMISSED_STORAGE_KEY = 'multipage-auto-run-fallback-risk-prompt-dismissed';
-const AUTO_RUN_PLUS_RISK_PROMPT_DISMISSED_STORAGE_KEY = 'multipage-auto-run-plus-risk-prompt-dismissed';
-const PLUS_CONTRIBUTION_PROMPT_LEDGER_STORAGE_KEY = 'multipage-plus-contribution-prompt-ledger';
+const CPA_PHONE_SIGNUP_PROMPT_DISMISSED_STORAGE_KEY = 'multipage-cpa-phone-signup-prompt-dismissed';
+const CLOUDFLARE_TEMP_EMAIL_REGISTRATION_LOOKUP_PROMPT_DISMISSED_STORAGE_KEY = 'multipage-cloudflare-temp-email-registration-lookup-prompt-dismissed';
+const CPA_PHONE_SIGNUP_WARNING_MESSAGE = 'CPA 未适配手机号注册模式，认证成功后无法使用。请使用 SUB2API，或者认证成功后重新登录一遍进行解决。';
 const PHONE_VERIFICATION_SECTION_EXPANDED_STORAGE_KEY = 'multipage-phone-verification-section-expanded';
 let phoneVerificationSectionExpanded = false;
 
@@ -753,6 +818,7 @@ function initPhoneVerificationSectionExpandedState() {
 }
 
 function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
+  const defaultFlowId = typeof DEFAULT_ACTIVE_FLOW_ID !== 'undefined' ? DEFAULT_ACTIVE_FLOW_ID : 'openai';
   const defaultMethod = typeof DEFAULT_PLUS_PAYMENT_METHOD !== 'undefined' ? DEFAULT_PLUS_PAYMENT_METHOD : 'paypal';
   const rawPaymentMethod = typeof options === 'string'
     ? options
@@ -760,10 +826,18 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
   const rawSignupMethod = typeof options === 'string'
     ? currentSignupMethod
     : (options.signupMethod || currentSignupMethod || DEFAULT_SIGNUP_METHOD);
+  const phoneSignupReloginAfterBindEmailEnabled = typeof options === 'string'
+    ? currentPhoneSignupReloginAfterBindEmailEnabled
+    : Boolean(options.phoneSignupReloginAfterBindEmailEnabled ?? currentPhoneSignupReloginAfterBindEmailEnabled);
+  const activeFlowId = typeof options === 'string'
+    ? ((typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId)
+    : (options.activeFlowId || (typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId);
   return (window.MultiPageStepDefinitions?.getSteps?.({
+    activeFlowId: String(activeFlowId || '').trim().toLowerCase() || defaultFlowId,
     plusModeEnabled,
     plusPaymentMethod: normalizePlusPaymentMethod(rawPaymentMethod),
     signupMethod: normalizeSignupMethod(rawSignupMethod),
+    phoneSignupReloginAfterBindEmailEnabled,
   }) || [])
     .sort((left, right) => {
       const leftOrder = Number.isFinite(left.order) ? left.order : left.id;
@@ -771,6 +845,78 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
       if (leftOrder !== rightOrder) return leftOrder - rightOrder;
       return left.id - right.id;
     });
+}
+
+function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
+  const defaultFlowId = typeof DEFAULT_ACTIVE_FLOW_ID !== 'undefined' ? DEFAULT_ACTIVE_FLOW_ID : 'openai';
+  const defaultMethod = typeof DEFAULT_PLUS_PAYMENT_METHOD !== 'undefined' ? DEFAULT_PLUS_PAYMENT_METHOD : 'paypal';
+  const rawPaymentMethod = typeof options === 'string'
+    ? options
+    : (options.plusPaymentMethod || currentPlusPaymentMethod || defaultMethod);
+  const rawSignupMethod = typeof options === 'string'
+    ? currentSignupMethod
+    : (options.signupMethod || currentSignupMethod || DEFAULT_SIGNUP_METHOD);
+  const phoneSignupReloginAfterBindEmailEnabled = typeof options === 'string'
+    ? currentPhoneSignupReloginAfterBindEmailEnabled
+    : Boolean(options.phoneSignupReloginAfterBindEmailEnabled ?? currentPhoneSignupReloginAfterBindEmailEnabled);
+  const activeFlowId = typeof options === 'string'
+    ? ((typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId)
+    : (options.activeFlowId || (typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId);
+  const nodes = window.MultiPageStepDefinitions?.getNodes?.({
+    activeFlowId: String(activeFlowId || '').trim().toLowerCase() || defaultFlowId,
+    plusModeEnabled,
+    plusPaymentMethod: normalizePlusPaymentMethod(rawPaymentMethod),
+    signupMethod: normalizeSignupMethod(rawSignupMethod),
+    phoneSignupReloginAfterBindEmailEnabled,
+  });
+  if (Array.isArray(nodes) && nodes.length) {
+    return nodes.slice().sort((left, right) => {
+      const leftOrder = Number.isFinite(Number(left.displayOrder)) ? Number(left.displayOrder) : Number(left.legacyStepId);
+      const rightOrder = Number.isFinite(Number(right.displayOrder)) ? Number(right.displayOrder) : Number(right.legacyStepId);
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return String(left.nodeId || '').localeCompare(String(right.nodeId || ''));
+    });
+  }
+
+  return getStepDefinitionsForMode(plusModeEnabled, options).map((step) => ({
+    legacyStepId: Number(step.id),
+    nodeId: String(step.key || '').trim(),
+    title: step.title,
+    displayOrder: Number.isFinite(Number(step.order)) ? Number(step.order) : Number(step.id),
+    executeKey: String(step.key || '').trim(),
+  })).filter((node) => node.nodeId);
+}
+
+function getStepIdByKeyForCurrentMode(stepKey = '') {
+  const normalizedKey = String(stepKey || '').trim();
+  if (!normalizedKey) {
+    return 0;
+  }
+  const match = (stepDefinitions || []).find((step) => String(step?.key || '') === normalizedKey);
+  return Number(match?.id) || 0;
+}
+
+function getNodeIdByStepForCurrentMode(step) {
+  const numericStep = Number(step);
+  const node = (workflowNodes || []).find((candidate) => Number(candidate?.legacyStepId) === numericStep);
+  if (node?.nodeId) {
+    return String(node.nodeId).trim();
+  }
+  const definition = (stepDefinitions || []).find((candidate) => Number(candidate?.id) === numericStep);
+  return String(definition?.key || '').trim();
+}
+
+function getStepIdByNodeIdForCurrentMode(nodeId = '') {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) {
+    return 0;
+  }
+  const node = (workflowNodes || []).find((candidate) => String(candidate?.nodeId || '').trim() === normalizedNodeId);
+  const legacyStepId = Number(node?.legacyStepId);
+  if (Number.isInteger(legacyStepId) && legacyStepId > 0) {
+    return legacyStepId;
+  }
+  return getStepIdByKeyForCurrentMode(normalizedNodeId);
 }
 
 function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
@@ -782,22 +928,49 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
   const rawSignupMethod = typeof options === 'string'
     ? currentSignupMethod
     : (options.signupMethod || currentSignupMethod || DEFAULT_SIGNUP_METHOD);
+  const phoneSignupReloginAfterBindEmailEnabled = typeof options === 'string'
+    ? currentPhoneSignupReloginAfterBindEmailEnabled
+    : Boolean(options.phoneSignupReloginAfterBindEmailEnabled ?? currentPhoneSignupReloginAfterBindEmailEnabled);
   currentPlusPaymentMethod = normalizePlusPaymentMethod(rawPaymentMethod);
   currentSignupMethod = normalizeSignupMethod(rawSignupMethod);
+  currentPhoneSignupReloginAfterBindEmailEnabled = phoneSignupReloginAfterBindEmailEnabled;
   stepDefinitions = getStepDefinitionsForMode(currentPlusModeEnabled, {
+    activeFlowId: options?.activeFlowId,
     plusPaymentMethod: currentPlusPaymentMethod,
     signupMethod: currentSignupMethod,
+    phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
   });
+  const nextWorkflowNodes = typeof getWorkflowNodesForMode === 'function'
+    ? getWorkflowNodesForMode(currentPlusModeEnabled, {
+      activeFlowId: options?.activeFlowId,
+      plusPaymentMethod: currentPlusPaymentMethod,
+      signupMethod: currentSignupMethod,
+      phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
+    })
+    : stepDefinitions.map((step) => ({
+      legacyStepId: Number(step.id),
+      nodeId: String(step.key || step.id || '').trim(),
+      title: step.title,
+      displayOrder: Number.isFinite(Number(step.order)) ? Number(step.order) : Number(step.id),
+    }));
+  if (typeof workflowNodes !== 'undefined') {
+    workflowNodes = nextWorkflowNodes;
+  }
   STEP_IDS = stepDefinitions.map((step) => Number(step.id)).filter(Number.isFinite);
   STEP_DEFAULT_STATUSES = Object.fromEntries(STEP_IDS.map((stepId) => [stepId, 'pending']));
   SKIPPABLE_STEPS = new Set(STEP_IDS);
+  if (typeof NODE_IDS !== 'undefined') {
+    NODE_IDS = nextWorkflowNodes.map((node) => String(node.nodeId || '').trim()).filter(Boolean);
+  }
+  if (typeof NODE_DEFAULT_STATUSES !== 'undefined') {
+    NODE_DEFAULT_STATUSES = Object.fromEntries((typeof NODE_IDS !== 'undefined' ? NODE_IDS : []).map((nodeId) => [nodeId, 'pending']));
+  }
+  if (typeof SKIPPABLE_NODES !== 'undefined') {
+    SKIPPABLE_NODES = new Set(typeof NODE_IDS !== 'undefined' ? NODE_IDS : []);
+  }
 }
 const CONTRIBUTION_CONTENT_PROMPT_DISMISSED_VERSION_STORAGE_KEY = 'multipage-contribution-content-prompt-dismissed-version';
 const AUTO_RUN_FALLBACK_RISK_WARNING_MIN_RUNS = 3;
-const AUTO_RUN_PLUS_RISK_WARNING_MAX_SAFE_RUNS = 3;
-const PLUS_CONTRIBUTION_PROMPT_THRESHOLD = 5;
-const PLUS_CONTRIBUTION_ACCOUNT_CREDIT = 5;
-const PLUS_CONTRIBUTION_DONATION_CREDIT = 20;
 const HOTMAIL_SERVICE_MODE_REMOTE = 'remote';
 const HOTMAIL_SERVICE_MODE_LOCAL = 'local';
 const ICLOUD_PROVIDER = 'icloud';
@@ -1076,7 +1249,6 @@ function validateCurrentRegistrationEmail(email = inputEmail.value.trim(), optio
   return false;
 }
 
-let latestState = null;
 let currentAutoRun = {
   autoRunning: false,
   phase: 'idle',
@@ -1110,6 +1282,66 @@ let configActionInFlight = false;
 let currentReleaseSnapshot = null;
 let currentContributionContentSnapshot = null;
 let contributionContentSnapshotRequestInFlight = null;
+
+function normalizeAutomationWindowId(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+}
+
+async function getCurrentSidepanelWindowId() {
+  if (chrome?.windows?.getCurrent) {
+    try {
+      const currentWindow = await chrome.windows.getCurrent();
+      const windowId = normalizeAutomationWindowId(currentWindow?.id);
+      if (windowId !== null) {
+        return windowId;
+      }
+    } catch (error) {
+      console.warn('Failed to get current sidepanel window:', error?.message || error);
+    }
+  }
+
+  return normalizeAutomationWindowId(latestState?.automationWindowId);
+}
+
+function shouldAttachAutomationWindow(message = {}) {
+  const source = String(message?.source || '').trim();
+  if (source && source !== 'sidepanel') {
+    return false;
+  }
+  return [
+    'EXECUTE_NODE',
+    'AUTO_RUN',
+    'SCHEDULE_AUTO_RUN',
+    'RESUME_AUTO_RUN',
+    'START_SCHEDULED_AUTO_RUN_NOW',
+    'SKIP_AUTO_RUN_COUNTDOWN',
+    'PROBE_IP_PROXY_EXIT',
+  ].includes(String(message?.type || '').trim());
+}
+
+async function sendSidepanelMessage(message = {}) {
+  const payload = {
+    ...(message || {}),
+    source: message?.source || 'sidepanel',
+  };
+  if (shouldAttachAutomationWindow(payload)) {
+    const windowId = await getCurrentSidepanelWindowId();
+    if (windowId !== null) {
+      payload.payload = {
+        ...(payload.payload || {}),
+        automationWindowId: windowId,
+      };
+      syncLatestState({ automationWindowId: windowId });
+    }
+  }
+  return chrome.runtime.sendMessage(payload);
+}
+
+window.sendSidepanelMessage = sendSidepanelMessage;
 
 const DEFAULT_SUB2API_GROUP_OPTIONS = ['codex', 'openai-plus'];
 const editableListPickerModule = window.SidepanelEditableListPicker || {};
@@ -1148,40 +1380,250 @@ function normalizeSub2ApiGroupOptions(...sources) {
   return normalizeEditableListValues(...sources);
 }
 
-function getSelectedSub2ApiGroupNames() {
-  const raw = String(inputSub2ApiGroup?.value || '');
-  const names = normalizeSub2ApiGroupOptions(raw);
-  if (names.length) return names;
-  const fallback = DEFAULT_SUB2API_GROUP_OPTIONS[0];
-  return fallback ? [fallback] : [];
+function normalizeSub2ApiAccountPriorityValue(value) {
+  const rawValue = String(value ?? '').trim();
+  const numeric = Number(rawValue);
+  if (!rawValue || !Number.isSafeInteger(numeric) || numeric < 1) {
+    return 1;
+  }
+  return numeric;
 }
 
 function getSelectedSub2ApiGroupName() {
-  return getSelectedSub2ApiGroupNames().join(', ');
+  return getSelectedSub2ApiGroupNames()[0] || DEFAULT_SUB2API_GROUP_OPTIONS[0];
+}
+
+function getSelectedSub2ApiGroupNames(state = latestState) {
+  const raw = String(inputSub2ApiGroup?.value || '').trim();
+  const fromInput = raw ? normalizeSub2ApiGroupOptions(raw) : [];
+  if (fromInput.length) {
+    return fromInput;
+  }
+  const fromState = normalizeSub2ApiGroupOptions(
+    state?.sub2apiSelectedGroupNames,
+    state?.sub2apiGroupName
+  );
+  return fromState.length ? fromState : [DEFAULT_SUB2API_GROUP_OPTIONS[0]];
 }
 
 function getSub2ApiGroupOptionsState(state = latestState) {
   const options = normalizeSub2ApiGroupOptions(
     state?.sub2apiGroupNames,
+    state?.sub2apiSelectedGroupNames,
     state?.sub2apiGroupName
   );
   return options.length ? options : [...DEFAULT_SUB2API_GROUP_OPTIONS];
 }
 
-const sub2ApiGroupPicker = createEditableListPicker({
-  root: sub2ApiGroupPickerRoot,
-  input: inputSub2ApiGroup,
-  trigger: btnSub2ApiGroupMenu,
-  current: sub2ApiGroupCurrent,
-  menu: sub2ApiGroupMenu,
-  fallbackItems: DEFAULT_SUB2API_GROUP_OPTIONS,
-  minItems: 1,
-  itemLabel: '分组',
-  multiSelect: true,
-  multiSelectEmptyLabel: '请选择分组',
-  onDelete: handleDeleteSub2ApiGroup,
-  onDeleteError: (error) => showToast(error?.message || '删除 SUB2API 分组失败。', 'error'),
-});
+const sub2ApiGroupPicker = (function createSub2ApiGroupMultiPicker() {
+  const picker = {
+    root: sub2ApiGroupPickerRoot,
+    input: inputSub2ApiGroup,
+    trigger: btnSub2ApiGroupMenu,
+    current: sub2ApiGroupCurrent,
+    menu: sub2ApiGroupMenu,
+    items: [],
+    selectedSet: new Set(),
+    open: false,
+    onChange: null,
+    onAddRequested: null,
+  };
+
+  function setOpen(open) {
+    picker.open = Boolean(open) && !picker.trigger?.disabled;
+    if (picker.menu) {
+      picker.menu.hidden = !picker.open;
+    }
+    if (picker.trigger) {
+      picker.trigger.setAttribute('aria-expanded', picker.open ? 'true' : 'false');
+      picker.trigger.classList?.toggle('is-open', picker.open);
+    }
+  }
+
+  function close() {
+    setOpen(false);
+  }
+
+  function setVisible(visible) {
+    if (picker.root) {
+      picker.root.style.display = visible ? '' : 'none';
+    }
+    if (!visible) {
+      close();
+    }
+  }
+
+  function syncTriggerLabel() {
+    if (!picker.current) {
+      return;
+    }
+    const selected = Array.from(picker.selectedSet);
+    if (selected.length === 0) {
+      picker.current.textContent = picker.items[0] || DEFAULT_SUB2API_GROUP_OPTIONS[0];
+      return;
+    }
+    if (selected.length === 1) {
+      picker.current.textContent = selected[0];
+      return;
+    }
+    picker.current.textContent = `已选 ${selected.length} 个：${selected.join('、')}`;
+  }
+
+  function syncHiddenInput(emit = false) {
+    if (!picker.input) {
+      return;
+    }
+    const selected = Array.from(picker.selectedSet);
+    picker.input.value = selected.join(',');
+    if (emit && typeof picker.input.dispatchEvent === 'function') {
+      picker.input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  function toggleSelection(value, options = {}) {
+    const target = String(value || '').trim();
+    if (!target) {
+      return;
+    }
+    const key = target.toLowerCase();
+    let mutated = false;
+    if (picker.selectedSet.has(key)) {
+      if (picker.selectedSet.size > 1) {
+        picker.selectedSet.delete(key);
+        mutated = true;
+      }
+    } else {
+      picker.selectedSet.add(key);
+      mutated = true;
+    }
+    if (mutated) {
+      syncTriggerLabel();
+      syncHiddenInput(true);
+      renderMenu();
+      if (options.emitChange !== false && typeof picker.onChange === 'function') {
+        picker.onChange(getSelected());
+      }
+    } else {
+      // Selection unchanged (e.g., clicked the only selected item).
+      // Re-render so the checkbox visual matches our state instead of the
+      // browser's optimistic flip.
+      renderMenu();
+    }
+  }
+
+  function getSelected() {
+    return picker.items.filter((item) => picker.selectedSet.has(String(item).toLowerCase()));
+  }
+
+  function renderMenu() {
+    if (!picker.menu || typeof document === 'undefined' || typeof document.createElement !== 'function') {
+      return;
+    }
+    picker.menu.innerHTML = '';
+    if (picker.items.length === 0) {
+      if (picker.trigger) {
+        picker.trigger.disabled = true;
+      }
+      close();
+      return;
+    }
+    if (picker.trigger) {
+      picker.trigger.disabled = false;
+    }
+    picker.items.forEach((item) => {
+      const value = String(item).trim();
+      const key = value.toLowerCase();
+      const checked = picker.selectedSet.has(key);
+      const row = document.createElement('div');
+      row.className = 'editable-list-option-row';
+
+      const label = document.createElement('label');
+      label.className = 'editable-list-option editable-list-option-multi';
+      label.setAttribute('role', 'option');
+      label.setAttribute('aria-selected', checked ? 'true' : 'false');
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'editable-list-option-checkbox';
+      checkbox.value = value;
+      checkbox.checked = checked;
+      checkbox.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
+      checkbox.addEventListener('change', (event) => {
+        event.stopPropagation();
+        toggleSelection(value);
+      });
+
+      const text = document.createElement('span');
+      text.className = 'editable-list-option-label';
+      text.textContent = value;
+
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      label.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
+
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'editable-list-delete';
+      deleteButton.textContent = '删除';
+      deleteButton.title = `删除分组 ${value}`;
+      deleteButton.setAttribute('aria-label', `删除分组 ${value}`);
+      deleteButton.disabled = picker.items.length <= 1;
+      deleteButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        Promise.resolve(handleDeleteSub2ApiGroup(value)).catch((error) => {
+          showToast(error?.message || '删除 SUB2API 分组失败。', 'error');
+        });
+      });
+
+      row.appendChild(label);
+      row.appendChild(deleteButton);
+      picker.menu.appendChild(row);
+    });
+  }
+
+  function render(items = [], selectedValues = []) {
+    const normalizedItems = normalizeSub2ApiGroupOptions(items);
+    picker.items = normalizedItems.length ? normalizedItems : [...DEFAULT_SUB2API_GROUP_OPTIONS];
+    const itemKeys = new Set(picker.items.map((item) => String(item).toLowerCase()));
+    const normalizedSelection = normalizeSub2ApiGroupOptions(selectedValues)
+      .filter((value) => itemKeys.has(String(value).toLowerCase()));
+    picker.selectedSet = new Set(
+      (normalizedSelection.length ? normalizedSelection : [picker.items[0]]).map((value) => String(value).toLowerCase()),
+    );
+    syncTriggerLabel();
+    syncHiddenInput(false);
+    renderMenu();
+  }
+
+  picker.trigger?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (typeof closeEditableListPickers === 'function') {
+      closeEditableListPickers();
+    }
+    setOpen(!picker.open);
+  });
+  picker.trigger?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      close();
+    }
+  });
+  picker.menu?.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  picker.setOpen = setOpen;
+  picker.close = close;
+  picker.setVisible = setVisible;
+  picker.render = render;
+  picker.getSelected = getSelected;
+
+  return picker;
+}());
 
 const cfDomainPicker = createEditableListPicker({
   root: cfDomainPickerRoot,
@@ -1203,7 +1645,7 @@ const tempEmailDomainPicker = createEditableListPicker({
   trigger: btnTempEmailDomainMenu,
   current: tempEmailDomainCurrent,
   menu: tempEmailDomainMenu,
-  emptyLabel: '请先添加域名',
+  emptyLabel: '请先更新域名',
   itemLabel: '域名',
   normalizeItems: normalizeCloudflareTempEmailDomains,
   normalizeValue: normalizeCloudflareTempEmailDomainValue,
@@ -1211,30 +1653,37 @@ const tempEmailDomainPicker = createEditableListPicker({
   onDeleteError: (error) => showToast(error?.message || '删除 Cloudflare Temp Email 域名失败。', 'error'),
 });
 
-function renderSub2ApiGroupOptions(state = latestState, selectedValue = '') {
+function renderSub2ApiGroupOptions(state = latestState, selectedValueOrValues = null) {
   if (!inputSub2ApiGroup) {
     return;
   }
 
-  const selectedNames = normalizeSub2ApiGroupOptions(
-    selectedValue,
-    state?.sub2apiGroupName
-  );
+  let selectedSource;
+  if (selectedValueOrValues == null || selectedValueOrValues === '') {
+    selectedSource = normalizeSub2ApiGroupOptions(
+      state?.sub2apiSelectedGroupNames,
+      state?.sub2apiGroupName
+    );
+  } else if (Array.isArray(selectedValueOrValues)) {
+    selectedSource = normalizeSub2ApiGroupOptions(selectedValueOrValues);
+  } else {
+    selectedSource = normalizeSub2ApiGroupOptions(selectedValueOrValues);
+  }
+
   const options = getSub2ApiGroupOptionsState({
     ...(state || {}),
-    sub2apiGroupName: selectedNames.join(', ') || state?.sub2apiGroupName,
+    sub2apiSelectedGroupNames: selectedSource,
   });
-  selectedNames.forEach((name) => {
+  selectedSource.forEach((name) => {
     if (!options.some((existing) => existing.toLowerCase() === name.toLowerCase())) {
       options.unshift(name);
     }
   });
+  const effectiveSelection = selectedSource.length
+    ? selectedSource
+    : [options[0] || DEFAULT_SUB2API_GROUP_OPTIONS[0]];
 
-  const fallbackSelection = options[0] || DEFAULT_SUB2API_GROUP_OPTIONS[0] || '';
-  const finalSelection = selectedNames.length
-    ? selectedNames
-    : (fallbackSelection ? [fallbackSelection] : []);
-  sub2ApiGroupPicker.render(options, finalSelection);
+  sub2ApiGroupPicker.render(options, effectiveSelection);
 }
 let customEmailPoolEntriesState = [];
 
@@ -1333,9 +1782,9 @@ const MAIL_PROVIDER_LOGIN_CONFIGS = {
     buttonLabel: '登录',
   },
   'cloudflare-temp-email': {
-    label: 'Cloudflare Temp Email GitHub',
-    url: 'https://github.com/dreamhunter2333/cloudflare_temp_email',
-    buttonLabel: 'GitHub',
+    label: 'Cloudflare Temp Email 部署',
+    url: 'https://github.com/QLHazyCoder/cloudflare_temp_email',
+    buttonLabel: '部署',
   },
   '2925': {
     label: '2925 邮箱',
@@ -1370,7 +1819,7 @@ const LOG_LEVEL_LABELS = {
   error: '错误',
 };
 
-const CLOUDFLARE_TEMP_EMAIL_REPOSITORY_URL = 'https://github.com/dreamhunter2333/cloudflare_temp_email';
+const CLOUDFLARE_TEMP_EMAIL_REPOSITORY_URL = 'https://github.com/QLHazyCoder/cloudflare_temp_email';
 
 function usesGeneratedAliasMailProvider(
   provider,
@@ -1597,6 +2046,7 @@ async function openConfirmModal({ title, message, confirmLabel = '确认', confi
 async function openConfirmModalWithOption({
   title,
   message,
+  messageHtml = '',
   confirmLabel = '确认',
   confirmVariant = 'btn-primary',
   alert = null,
@@ -1607,6 +2057,7 @@ async function openConfirmModalWithOption({
   const result = await openActionModal({
     title,
     message,
+    messageHtml,
     alert,
     actions: [
       { id: null, label: '取消', variant: 'btn-ghost' },
@@ -1812,190 +2263,136 @@ function setAutoRunFallbackRiskPromptDismissed(dismissed) {
   setPromptDismissed(AUTO_RUN_FALLBACK_RISK_PROMPT_DISMISSED_STORAGE_KEY, dismissed);
 }
 
-function isAutoRunPlusRiskPromptDismissed() {
-  return isPromptDismissed(AUTO_RUN_PLUS_RISK_PROMPT_DISMISSED_STORAGE_KEY);
+function isCpaPhoneSignupPromptDismissed() {
+  return isPromptDismissed(CPA_PHONE_SIGNUP_PROMPT_DISMISSED_STORAGE_KEY);
 }
 
-function setAutoRunPlusRiskPromptDismissed(dismissed) {
-  setPromptDismissed(AUTO_RUN_PLUS_RISK_PROMPT_DISMISSED_STORAGE_KEY, dismissed);
+function setCpaPhoneSignupPromptDismissed(dismissed) {
+  setPromptDismissed(CPA_PHONE_SIGNUP_PROMPT_DISMISSED_STORAGE_KEY, dismissed);
+}
+
+function isCloudflareTempEmailRegistrationLookupPromptDismissed() {
+  return isPromptDismissed(CLOUDFLARE_TEMP_EMAIL_REGISTRATION_LOOKUP_PROMPT_DISMISSED_STORAGE_KEY);
+}
+
+function setCloudflareTempEmailRegistrationLookupPromptDismissed(dismissed) {
+  setPromptDismissed(CLOUDFLARE_TEMP_EMAIL_REGISTRATION_LOOKUP_PROMPT_DISMISSED_STORAGE_KEY, dismissed);
 }
 
 function shouldWarnAutoRunFallbackRisk(totalRuns, autoRunSkipFailures) {
   return totalRuns >= AUTO_RUN_FALLBACK_RISK_WARNING_MIN_RUNS;
 }
 
-function shouldWarnPlusAutoRunRisk(totalRuns, plusModeEnabled) {
-  return Boolean(plusModeEnabled)
-    && Math.floor(Number(totalRuns) || 0) > AUTO_RUN_PLUS_RISK_WARNING_MAX_SAFE_RUNS;
-}
-
-function normalizePlusContributionPromptNumber(value) {
-  const number = Math.floor(Number(value) || 0);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function normalizePlusContributionPromptLedger(value = {}) {
-  const source = value && typeof value === 'object' ? value : {};
-  return {
-    promptBaseline: normalizePlusContributionPromptNumber(source.promptBaseline),
-    donationCredit: Math.max(0, normalizePlusContributionPromptNumber(source.donationCredit)),
-  };
-}
-
-function getPlusContributionPromptLedger() {
-  try {
-    return normalizePlusContributionPromptLedger(
-      JSON.parse(localStorage.getItem(PLUS_CONTRIBUTION_PROMPT_LEDGER_STORAGE_KEY) || '{}')
-    );
-  } catch {
-    return normalizePlusContributionPromptLedger();
-  }
-}
-
-function setPlusContributionPromptLedger(ledger) {
-  localStorage.setItem(
-    PLUS_CONTRIBUTION_PROMPT_LEDGER_STORAGE_KEY,
-    JSON.stringify(normalizePlusContributionPromptLedger(ledger))
+function shouldWarnCpaPhoneSignup(signupMethod = null, panelMode = null) {
+  const resolvedSignupMethod = normalizeSignupMethod(
+    signupMethod ?? (
+      typeof getSelectedSignupMethod === 'function'
+        ? getSelectedSignupMethod()
+        : DEFAULT_SIGNUP_METHOD
+    )
   );
+  const resolvedPanelMode = normalizePanelMode(
+    panelMode ?? (
+      typeof getSelectedPanelMode === 'function'
+        ? getSelectedPanelMode()
+        : 'cpa'
+    )
+  );
+
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({
+      panelMode: resolvedPanelMode,
+      signupMethod: resolvedSignupMethod,
+      state: {
+        ...(typeof latestState !== 'undefined' ? latestState : {}),
+        panelMode: resolvedPanelMode,
+        signupMethod: resolvedSignupMethod,
+      },
+    })
+    : (() => {
+      const rootScope = typeof window !== 'undefined' ? window : globalThis;
+      const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+        defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+      }) || null;
+      return registry?.resolveSidepanelCapabilities
+        ? registry.resolveSidepanelCapabilities({
+          activeFlowId: typeof latestState !== 'undefined' ? latestState?.activeFlowId : '',
+          panelMode: resolvedPanelMode,
+          signupMethod: resolvedSignupMethod,
+          state: {
+            ...(typeof latestState !== 'undefined' ? latestState : {}),
+            panelMode: resolvedPanelMode,
+            signupMethod: resolvedSignupMethod,
+          },
+        })
+        : null;
+    })();
+
+  if (capabilityState && typeof capabilityState.shouldWarnCpaPhoneSignup === 'boolean') {
+    return capabilityState.shouldWarnCpaPhoneSignup && !isCpaPhoneSignupPromptDismissed();
+  }
+
+  return resolvedSignupMethod === SIGNUP_METHOD_PHONE
+    && resolvedPanelMode === 'cpa'
+    && !isCpaPhoneSignupPromptDismissed();
 }
 
-function isSuccessfulPlusAccountRecord(record = {}) {
-  return record?.finalStatus === 'success' && Boolean(record.plusModeEnabled);
-}
-
-function getPlusContributionPromptTotals(records = []) {
-  return (Array.isArray(records) ? records : []).reduce((totals, record) => {
-    if (!isSuccessfulPlusAccountRecord(record)) {
-      return totals;
-    }
-    if (record.contributionMode) {
-      totals.contributionSuccess += 1;
-    } else {
-      totals.plusSuccess += 1;
-    }
-    return totals;
-  }, {
-    plusSuccess: 0,
-    contributionSuccess: 0,
+async function openCpaPhoneSignupWarningModal() {
+  const result = await openConfirmModalWithOption({
+    title: 'CPA 手机号注册提醒',
+    message: CPA_PHONE_SIGNUP_WARNING_MESSAGE,
+    confirmLabel: '继续',
+    optionLabel: '不再提醒',
   });
-}
 
-function getPlusContributionPromptProgress(records = [], ledger = getPlusContributionPromptLedger()) {
-  const totals = getPlusContributionPromptTotals(records);
-  const normalizedLedger = normalizePlusContributionPromptLedger(ledger);
-  const credit = (totals.contributionSuccess * PLUS_CONTRIBUTION_ACCOUNT_CREDIT)
-    + normalizedLedger.donationCredit;
-  const netCount = totals.plusSuccess - credit;
-  const sinceLastPrompt = netCount - normalizedLedger.promptBaseline;
   return {
-    ...totals,
-    credit,
-    netCount,
-    sinceLastPrompt,
-    shouldPrompt: sinceLastPrompt >= PLUS_CONTRIBUTION_PROMPT_THRESHOLD,
+    confirmed: result.confirmed,
+    dismissPrompt: result.optionChecked,
   };
 }
 
-function shouldShowPlusContributionPrompt(records = [], plusModeEnabled = false, ledger = getPlusContributionPromptLedger()) {
-  return Boolean(plusModeEnabled)
-    && getPlusContributionPromptProgress(records, ledger).shouldPrompt;
-}
+async function confirmCpaPhoneSignupIfNeeded(options = {}) {
+  const signupMethod = Object.prototype.hasOwnProperty.call(options, 'signupMethod')
+    ? options.signupMethod
+    : null;
+  const panelMode = Object.prototype.hasOwnProperty.call(options, 'panelMode')
+    ? options.panelMode
+    : null;
 
-function markPlusContributionPromptShown(records = [], ledger = getPlusContributionPromptLedger()) {
-  const progress = getPlusContributionPromptProgress(records, ledger);
-  const nextLedger = {
-    ...normalizePlusContributionPromptLedger(ledger),
-    promptBaseline: progress.netCount,
-  };
-  setPlusContributionPromptLedger(nextLedger);
-  return nextLedger;
-}
-
-function addPlusContributionPromptCredit(credit, ledger = getPlusContributionPromptLedger()) {
-  const normalizedLedger = normalizePlusContributionPromptLedger(ledger);
-  const nextLedger = {
-    ...normalizedLedger,
-    donationCredit: normalizedLedger.donationCredit + Math.max(0, normalizePlusContributionPromptNumber(credit)),
-  };
-  setPlusContributionPromptLedger(nextLedger);
-  return nextLedger;
-}
-
-function getPlusContributionSupportImageUrl() {
-  if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
-    return chrome.runtime.getURL('docs/images/微信.png');
-  }
-  return '../docs/images/微信.png';
-}
-
-function buildPlusContributionSupportPromptHtml() {
-  const imageUrl = getPlusContributionSupportImageUrl();
-  return [
-    '<span class="plus-contribution-prompt-copy">您觉得这个 Plus 功能怎么样？您的账户数量应该已经够个人使用啦。</span>',
-    '<span class="plus-contribution-prompt-copy">可以打开贡献给作者贡献几个账号，以便于让作者开发更好的功能出来吗？或者打赏一下作者？</span>',
-    `<img class="plus-contribution-prompt-image" src="${escapeHtml(imageUrl)}" alt="微信打赏二维码" />`,
-  ].join('');
-}
-
-function openPlusContributionSupportModal() {
-  return openActionModal({
-    title: 'Plus 功能使用反馈',
-    messageHtml: buildPlusContributionSupportPromptHtml(),
-    actions: [
-      { id: null, label: '取消', variant: 'btn-ghost' },
-      { id: 'contribute', label: '去贡献账号', variant: 'btn-outline' },
-      { id: 'donated', label: '已打赏', variant: 'btn-primary' },
-    ],
-  });
-}
-
-async function enterContributionModeFromPlusPrompt() {
-  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
-    return null;
-  }
-
-  const response = await chrome.runtime.sendMessage({
-    type: 'SET_CONTRIBUTION_MODE',
-    source: 'sidepanel',
-    payload: { enabled: true },
-  });
-
-  if (response?.error) {
-    throw new Error(response.error);
-  }
-  if (response?.state && typeof applySettingsState === 'function') {
-    applySettingsState(response.state);
-  }
-  if (typeof renderContributionMode === 'function') {
-    renderContributionMode();
-  }
-  return response?.state || null;
-}
-
-async function maybeShowPlusContributionPromptBeforeAutoRun(plusModeEnabled) {
-  const records = Array.isArray(latestState?.accountRunHistory) ? latestState.accountRunHistory : [];
-  if (!shouldShowPlusContributionPrompt(records, plusModeEnabled)) {
+  if (!shouldWarnCpaPhoneSignup(signupMethod, panelMode)) {
     return true;
   }
 
-  const choice = await openPlusContributionSupportModal();
-  const ledger = markPlusContributionPromptShown(records);
-  if (choice === 'donated') {
-    addPlusContributionPromptCredit(PLUS_CONTRIBUTION_DONATION_CREDIT, ledger);
-    showToast('感谢打赏支持，已延后下一次 Plus 提醒。', 'success', 2200);
+  const result = await openCpaPhoneSignupWarningModal();
+  if (result.dismissPrompt) {
+    setCpaPhoneSignupPromptDismissed(true);
+  }
+
+  return result.confirmed;
+}
+
+function buildCloudflareTempEmailRegistrationLookupPromptHtml() {
+  const repositoryUrl = escapeHtml(CLOUDFLARE_TEMP_EMAIL_REPOSITORY_URL);
+  return `需要部署本扩展作者修改后的 <a href="${repositoryUrl}" target="_blank" rel="noopener noreferrer" data-external-url="${repositoryUrl}">Cloudflare Temp Email</a>；部署后可支持多线程收码。`;
+}
+
+async function confirmCloudflareTempEmailRegistrationLookupIfNeeded() {
+  if (isCloudflareTempEmailRegistrationLookupPromptDismissed()) {
     return true;
   }
-  if (choice === 'contribute') {
-    openExternalUrl(getContributionPortalUrl());
-    try {
-      await enterContributionModeFromPlusPrompt();
-      showToast('已进入贡献模式，并打开贡献页面。', 'info', 2200);
-    } catch (error) {
-      showToast(`贡献模式开启失败：${error.message}`, 'error', 2600);
-    }
-    return false;
+
+  const result = await openConfirmModalWithOption({
+    title: '注册邮箱查信',
+    messageHtml: buildCloudflareTempEmailRegistrationLookupPromptHtml(),
+    confirmLabel: '我已知晓',
+    optionLabel: '不再提醒',
+  });
+
+  if (result.confirmed && result.optionChecked) {
+    setCloudflareTempEmailRegistrationLookupPromptDismissed(true);
   }
-  return true;
+
+  return result.confirmed;
 }
 
 async function openAutoSkipFailuresConfirmModal() {
@@ -2016,19 +2413,6 @@ async function openAutoRunFallbackRiskConfirmModal(totalRuns) {
     title: '自动运行风险提醒',
     message: `当前轮数已经不适合单节点情况，请确保已经配置并打开节点轮询功能（若没有配置，请点击贡献/使用按钮，根据网页中使用教程进行配置），避免连续使用一个节点注册，导致出现手机号验证。`,
     confirmLabel: '继续',
-  });
-
-  return {
-    confirmed: result.confirmed,
-    dismissPrompt: result.optionChecked,
-  };
-}
-
-async function openPlusAutoRunRiskConfirmModal(totalRuns) {
-  const result = await openConfirmModalWithOption({
-    title: 'Plus 自动轮数提醒',
-    message: `Plus 模式下当前设置为 ${totalRuns} 轮。轮数过多可能造成 PayPal 或账号快速封号。建议够用就好：我注册了几个使用，没多注册，完全足够使用，并且没有封号。这个模式下只要可以注册成功就能使用，所以不要贪杯哦。`,
-    confirmLabel: '我知道了，继续',
   });
 
   return {
@@ -2111,31 +2495,64 @@ function isDoneStatus(status) {
   return status === 'completed' || status === 'manual_completed' || status === 'skipped';
 }
 
+function escapeCssValue(value = '') {
+  const raw = String(value || '');
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(raw);
+  }
+  return raw.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function getNodeStatuses(state = latestState) {
+  const merged = { ...NODE_DEFAULT_STATUSES, ...(state?.nodeStatuses || {}) };
+  return Object.fromEntries(NODE_IDS.map((nodeId) => [nodeId, merged[nodeId] || 'pending']));
+}
+
 function getStepStatuses(state = latestState) {
-  const merged = { ...STEP_DEFAULT_STATUSES, ...(state?.stepStatuses || {}) };
+  const merged = { ...STEP_DEFAULT_STATUSES };
+  if (typeof getNodeStatuses === 'function') {
+    const nodeStatuses = getNodeStatuses(state);
+    for (const [nodeId, status] of Object.entries(nodeStatuses)) {
+      const step = getStepIdByNodeIdForCurrentMode(nodeId);
+      if (step) {
+        merged[step] = status || 'pending';
+      }
+    }
+  }
   return Object.fromEntries(STEP_IDS.map((stepId) => [stepId, merged[stepId] || 'pending']));
 }
 
-function getFirstUnfinishedStep(state = latestState) {
-  const statuses = getStepStatuses(state);
-  for (const step of STEP_IDS) {
-    if (!isDoneStatus(statuses[step])) {
-      return step;
+function getFirstUnfinishedNode(state = latestState) {
+  const statuses = getNodeStatuses(state);
+  for (const nodeId of NODE_IDS) {
+    if (!isDoneStatus(statuses[nodeId])) {
+      return nodeId;
     }
   }
-  return null;
+  return '';
+}
+
+function getFirstUnfinishedStep(state = latestState) {
+  const nodeId = getFirstUnfinishedNode(state);
+  return nodeId ? getStepIdByNodeIdForCurrentMode(nodeId) : null;
+}
+
+function getRunningNodes(state = latestState) {
+  const statuses = getNodeStatuses(state);
+  return Object.entries(statuses)
+    .filter(([, status]) => status === 'running')
+    .map(([nodeId]) => nodeId);
 }
 
 function getRunningSteps(state = latestState) {
-  const statuses = getStepStatuses(state);
-  return Object.entries(statuses)
-    .filter(([, status]) => status === 'running')
-    .map(([step]) => Number(step))
+  return getRunningNodes(state)
+    .map((nodeId) => getStepIdByNodeIdForCurrentMode(nodeId))
+    .filter((step) => Number.isInteger(step) && step > 0)
     .sort((a, b) => a - b);
 }
 
 function hasSavedProgress(state = latestState) {
-  const statuses = getStepStatuses(state);
+  const statuses = getNodeStatuses(state);
   return Object.values(statuses).some((status) => status !== 'pending');
 }
 
@@ -2150,17 +2567,81 @@ function shouldOfferAutoModeChoice(state = latestState) {
 }
 
 function syncLatestState(nextState) {
-  const mergedStepStatuses = nextState?.stepStatuses
-    ? { ...STEP_DEFAULT_STATUSES, ...(latestState?.stepStatuses || {}), ...nextState.stepStatuses }
-    : getStepStatuses(latestState);
+  const mergedNodeStatuses = nextState?.nodeStatuses
+    ? { ...NODE_DEFAULT_STATUSES, ...(latestState?.nodeStatuses || {}), ...nextState.nodeStatuses }
+    : getNodeStatuses(latestState);
 
   latestState = {
     ...(latestState || {}),
     ...(nextState || {}),
-    stepStatuses: mergedStepStatuses,
+    nodeStatuses: mergedNodeStatuses,
   };
 
   renderAccountRecords(latestState);
+}
+
+let accountRunHistoryRefreshTimer = null;
+
+function scheduleAccountRunHistoryRefresh(delayMs = 150) {
+  if (accountRunHistoryRefreshTimer) {
+    clearTimeout(accountRunHistoryRefreshTimer);
+  }
+  accountRunHistoryRefreshTimer = setTimeout(() => {
+    accountRunHistoryRefreshTimer = null;
+    chrome.runtime.sendMessage({ type: 'GET_STATE', source: 'sidepanel' }).then(state => {
+      syncLatestState(state);
+      syncAutoRunState(state);
+      updateStatusDisplay(latestState);
+      updateButtonStates();
+    }).catch(() => { });
+  }, Math.max(0, Number(delayMs) || 0));
+}
+
+function normalizeOperationDelayEnabled(value) {
+  return typeof value === 'boolean' ? value : true;
+}
+
+function appendOperationDelayLog(enabled, level = 'info', message = '') {
+  appendLog({
+    timestamp: Date.now(),
+    level,
+    message: message || (enabled
+      ? '操作间延迟已开启：页面输入、选择、点击、提交、继续、授权后等待 2 秒。'
+      : '操作间延迟已关闭：页面操作将连续执行。'),
+  });
+}
+
+function applyOperationDelayState(state = latestState, options = {}) {
+  const enabled = options.restoreFailed ? true : normalizeOperationDelayEnabled(state?.operationDelayEnabled);
+  lastConfirmedOperationDelayEnabled = enabled;
+  if (inputOperationDelayEnabled) inputOperationDelayEnabled.checked = enabled;
+  if (typeof syncLatestState === 'function') {
+    syncLatestState({ operationDelayEnabled: enabled });
+  }
+  if (options.restoreFailed) {
+    appendOperationDelayLog(true, 'warn', '操作间延迟设置读取失败，已回退为默认开启。');
+  }
+}
+
+async function persistOperationDelayToggle() {
+  const nextEnabled = normalizeOperationDelayEnabled(inputOperationDelayEnabled?.checked);
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SAVE_SETTING',
+      source: 'sidepanel',
+      payload: { operationDelayEnabled: nextEnabled },
+    });
+    if (response?.error) throw new Error(response.error);
+    const confirmed = normalizeOperationDelayEnabled(response?.state?.operationDelayEnabled ?? nextEnabled);
+    lastConfirmedOperationDelayEnabled = confirmed;
+    if (inputOperationDelayEnabled) inputOperationDelayEnabled.checked = confirmed;
+    syncLatestState({ operationDelayEnabled: confirmed });
+    appendOperationDelayLog(confirmed);
+  } catch (error) {
+    if (inputOperationDelayEnabled) inputOperationDelayEnabled.checked = lastConfirmedOperationDelayEnabled;
+    appendOperationDelayLog(lastConfirmedOperationDelayEnabled, 'error', `操作间延迟设置保存失败，已恢复为上一次确认的状态：${error.message}`);
+    throw error;
+  }
 }
 
 function normalizePlusPaymentMethod(value = '') {
@@ -2184,6 +2665,147 @@ function getSelectedPlusPaymentMethod(state = latestState) {
     return normalizePlusPaymentMethod(selectPlusPaymentMethod.value);
   }
   return normalizePlusPaymentMethod(state?.plusPaymentMethod || currentPlusPaymentMethod || defaultMethod);
+}
+
+function normalizeGpcHelperPhoneModeValue(value = '') {
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.GoPayUtils?.normalizeGpcHelperPhoneMode) {
+    return rootScope.GoPayUtils.normalizeGpcHelperPhoneMode(value);
+  }
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === GPC_HELPER_PHONE_MODE_AUTO || normalized === 'builtin'
+    ? GPC_HELPER_PHONE_MODE_AUTO
+    : GPC_HELPER_PHONE_MODE_MANUAL;
+}
+
+function getGpcHelperAutoModeEnabled(state = latestState) {
+  return Boolean(state?.gopayHelperAutoModeEnabled);
+}
+
+function normalizeGpcAutoModePermissionValue(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (['true', '1', 'yes', 'y', 'on', 'enabled', 'enable'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n', 'off', 'disabled', 'disable'].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+function getGpcAutoModePermissionFromPayload(payload = {}) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  for (const key of ['auto_mode_enabled', 'autoModeEnabled', 'auto_enabled', 'autoEnabled']) {
+    if (payload[key] !== undefined) {
+      return normalizeGpcAutoModePermissionValue(payload[key]);
+    }
+  }
+  if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+    return getGpcAutoModePermissionFromPayload(payload.data);
+  }
+  return null;
+}
+
+function shouldPreserveSelectedGpcAutoMode(state = latestState) {
+  const payloadPermission = getGpcAutoModePermissionFromPayload(state?.gopayHelperBalancePayload);
+  return normalizeGpcHelperPhoneModeValue(state?.gopayHelperPhoneMode) === GPC_HELPER_PHONE_MODE_AUTO
+    && (Boolean(state?.gopayHelperAutoModeEnabled) || payloadPermission === true);
+}
+
+function hasGpcAutoModePermissionField(payload = {}) {
+  return getGpcAutoModePermissionFromPayload(payload) !== null;
+}
+
+function isGpcAutoModePermissionDenied(state = latestState) {
+  const payloadPermission = getGpcAutoModePermissionFromPayload(state?.gopayHelperBalancePayload);
+  return payloadPermission === false;
+}
+
+function normalizeGpcRemainingUsesValue(value) {
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.GoPayUtils?.normalizeGpcRemainingUses) {
+    return rootScope.GoPayUtils.normalizeGpcRemainingUses(value);
+  }
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : null;
+}
+
+function getGpcBalanceRemainingUsesFromResponse(response = {}) {
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.GoPayUtils?.getGpcBalanceRemainingUses) {
+    const remaining = rootScope.GoPayUtils.getGpcBalanceRemainingUses(response?.data || response?.payload || response);
+    if (remaining !== null && remaining !== undefined) {
+      return remaining;
+    }
+  }
+  return normalizeGpcRemainingUsesValue(
+    response?.remainingUses
+    ?? response?.data?.remaining_uses
+    ?? response?.data?.remainingUses
+    ?? response?.payload?.data?.remaining_uses
+    ?? response?.payload?.remaining_uses
+    ?? response?.payload?.remainingUses
+  );
+}
+
+function getGpcAutoModeEnabledFromResponse(response = {}) {
+  if (typeof response?.autoModeEnabled === 'boolean') {
+    return response.autoModeEnabled;
+  }
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.GoPayUtils?.isGpcAutoModeEnabled) {
+    return rootScope.GoPayUtils.isGpcAutoModeEnabled(response?.data || response?.payload || response);
+  }
+  return Boolean(
+    response?.data?.auto_mode_enabled
+    ?? response?.data?.autoModeEnabled
+    ?? response?.payload?.data?.auto_mode_enabled
+    ?? response?.payload?.auto_mode_enabled
+    ?? response?.payload?.autoModeEnabled
+  );
+}
+
+function normalizeGpcOtpChannelValue(value = '') {
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.GoPayUtils?.normalizeGpcOtpChannel) {
+    return rootScope.GoPayUtils.normalizeGpcOtpChannel(value);
+  }
+  return String(value || '').trim().toLowerCase() === 'sms' ? 'sms' : 'whatsapp';
+}
+
+function normalizeGpcLocalSmsHelperBaseUrlValue(value = '') {
+  const fallback = 'http://127.0.0.1:18767';
+  const rawValue = String(value || fallback).trim();
+  try {
+    const parsed = new URL(rawValue);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return fallback;
+    }
+    const endpointPath = parsed.pathname.replace(/\/+$/g, '') || '/';
+    if (['/otp', '/latest-otp', '/health'].includes(endpointPath)) {
+      parsed.pathname = '';
+      parsed.search = '';
+      parsed.hash = '';
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return fallback;
+  }
 }
 
 function hasOwnStateValue(source, key) {
@@ -2715,6 +3337,18 @@ function normalizeCloudflareTempEmailDomains(values = []) {
   return domains;
 }
 
+function normalizeCloudMailBaseUrlValue(value = '') {
+  return normalizeCloudflareTempEmailBaseUrlValue(value);
+}
+
+function normalizeCloudMailReceiveMailboxValue(value = '') {
+  return normalizeCloudflareTempEmailReceiveMailboxValue(value);
+}
+
+function normalizeCloudMailDomainValue(value = '') {
+  return normalizeCloudflareDomainValue(value);
+}
+
 function getCloudflareDomainsFromState() {
   const domains = normalizeCloudflareDomains(latestState?.cloudflareDomains || []);
   const activeDomain = normalizeCloudflareDomainValue(latestState?.cloudflareDomain || '');
@@ -2765,16 +3399,11 @@ function setCloudflareDomainEditMode(editing, options = {}) {
 
 function setCloudflareTempEmailDomainEditMode(editing, options = {}) {
   const { clearInput = false } = options;
-  cloudflareTempEmailDomainEditMode = Boolean(editing);
-  tempEmailDomainPicker.setVisible(!cloudflareTempEmailDomainEditMode);
-  inputTempEmailDomain.style.display = cloudflareTempEmailDomainEditMode ? '' : 'none';
-  btnTempEmailDomainMode.textContent = cloudflareTempEmailDomainEditMode ? '保存' : '添加';
-  if (cloudflareTempEmailDomainEditMode) {
-    if (clearInput) {
-      inputTempEmailDomain.value = '';
-    }
-    inputTempEmailDomain.focus();
-  } else if (clearInput) {
+  cloudflareTempEmailDomainEditMode = false;
+  tempEmailDomainPicker.setVisible(true);
+  inputTempEmailDomain.style.display = 'none';
+  btnTempEmailDomainMode.textContent = '更新';
+  if (clearInput) {
     inputTempEmailDomain.value = '';
   }
 }
@@ -2784,6 +3413,7 @@ function applyCloudflareTempEmailSettingsState(state = {}) {
   inputTempEmailAdminAuth.value = state?.cloudflareTempEmailAdminAuth || '';
   inputTempEmailCustomAuth.value = state?.cloudflareTempEmailCustomAuth || '';
   inputTempEmailReceiveMailbox.value = state?.cloudflareTempEmailReceiveMailbox || '';
+  setCloudflareTempEmailLookupMode(state?.cloudflareTempEmailLookupMode);
   if (inputTempEmailUseRandomSubdomain) {
     inputTempEmailUseRandomSubdomain.checked = Boolean(state?.cloudflareTempEmailUseRandomSubdomain);
   }
@@ -2791,10 +3421,28 @@ function applyCloudflareTempEmailSettingsState(state = {}) {
   setCloudflareTempEmailDomainEditMode(false, { clearInput: true });
 }
 
+function applyCloudMailSettingsState(state = {}) {
+  if (inputCloudMailBaseUrl) {
+    inputCloudMailBaseUrl.value = state?.cloudMailBaseUrl || '';
+  }
+  if (inputCloudMailAdminEmail) {
+    inputCloudMailAdminEmail.value = state?.cloudMailAdminEmail || '';
+  }
+  if (inputCloudMailAdminPassword) {
+    inputCloudMailAdminPassword.value = state?.cloudMailAdminPassword || '';
+  }
+  if (inputCloudMailReceiveMailbox) {
+    inputCloudMailReceiveMailbox.value = state?.cloudMailReceiveMailbox || '';
+  }
+  if (inputCloudMailDomain) {
+    inputCloudMailDomain.value = state?.cloudMailDomain || '';
+  }
+}
+
 function collectSettingsPayload() {
   const defaultGpcHelperApiUrl = typeof DEFAULT_GPC_HELPER_API_URL !== 'undefined'
     ? DEFAULT_GPC_HELPER_API_URL
-    : 'https://gopay.hwork.pro';
+    : 'https://gpc.qlhazycoder.top';
   const { domains, activeDomain } = getCloudflareDomainsFromState();
   const selectedCloudflareDomain = normalizeCloudflareDomainValue(
     !cloudflareDomainEditMode ? selectCfDomain.value : activeDomain
@@ -2803,6 +3451,15 @@ function collectSettingsPayload() {
   const selectedCloudflareTempEmailDomain = normalizeCloudflareTempEmailDomainValue(
     !cloudflareTempEmailDomainEditMode ? selectTempEmailDomain.value : tempEmailActiveDomain
   ) || tempEmailActiveDomain;
+  const normalizeCloudMailBaseUrlInput = typeof normalizeCloudMailBaseUrlValue === 'function'
+    ? normalizeCloudMailBaseUrlValue
+    : normalizeCloudflareTempEmailBaseUrlValue;
+  const normalizeCloudMailReceiveMailboxInput = typeof normalizeCloudMailReceiveMailboxValue === 'function'
+    ? normalizeCloudMailReceiveMailboxValue
+    : normalizeCloudflareTempEmailReceiveMailboxValue;
+  const normalizeCloudMailDomainInput = typeof normalizeCloudMailDomainValue === 'function'
+    ? normalizeCloudMailDomainValue
+    : normalizeCloudflareTempEmailDomainValue;
   const contributionModeEnabled = Boolean(latestState?.contributionMode);
   const icloudFetchModeRawValue = typeof selectIcloudFetchMode !== 'undefined'
     ? String(selectIcloudFetchMode?.value || '')
@@ -2892,6 +3549,36 @@ function collectSettingsPayload() {
       .map((line) => line.trim())
       .filter(Boolean)
       .join('\n'));
+  const normalizeGpcOtpChannelSafe = typeof normalizeGpcOtpChannelValue === 'function'
+    ? normalizeGpcOtpChannelValue
+    : ((value = '') => {
+      const rootScope = typeof window !== 'undefined' ? window : globalThis;
+      if (rootScope.GoPayUtils?.normalizeGpcOtpChannel) {
+        return rootScope.GoPayUtils.normalizeGpcOtpChannel(value);
+      }
+      return String(value || '').trim().toLowerCase() === 'sms' ? 'sms' : 'whatsapp';
+    });
+  const normalizeGpcLocalSmsHelperBaseUrlSafe = typeof normalizeGpcLocalSmsHelperBaseUrlValue === 'function'
+    ? normalizeGpcLocalSmsHelperBaseUrlValue
+    : ((value = '') => {
+      const fallback = 'http://127.0.0.1:18767';
+      const rawValue = String(value || fallback).trim();
+      try {
+        const parsed = new URL(rawValue);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          return fallback;
+        }
+        const endpointPath = parsed.pathname.replace(/\/+$/g, '') || '/';
+        if (['/otp', '/latest-otp', '/health'].includes(endpointPath)) {
+          parsed.pathname = '';
+          parsed.search = '';
+          parsed.hash = '';
+        }
+        return parsed.toString().replace(/\/$/, '');
+      } catch {
+        return fallback;
+      }
+    });
   const getSelectedIpProxyEnabledSafe = typeof getSelectedIpProxyEnabled === 'function'
     ? getSelectedIpProxyEnabled
     : (() => false);
@@ -3065,9 +3752,35 @@ function collectSettingsPayload() {
   const defaultPhoneCodePollMaxRounds = typeof DEFAULT_PHONE_CODE_POLL_MAX_ROUNDS !== 'undefined'
     ? DEFAULT_PHONE_CODE_POLL_MAX_ROUNDS
     : 12;
-  const heroSmsReuseEnabledValue = typeof inputHeroSmsReuseEnabled !== 'undefined' && inputHeroSmsReuseEnabled
+  const selectedSignupMethod = typeof getSelectedSignupMethod === 'function'
+    ? getSelectedSignupMethod()
+    : (
+      (typeof normalizeSignupMethod === 'function'
+        ? normalizeSignupMethod(latestState?.signupMethod)
+        : (String(latestState?.signupMethod || '').trim().toLowerCase() === 'phone' ? 'phone' : 'email'))
+    );
+  const phoneSignupReuseLocked = typeof isPhoneSignupReuseLocked === 'function'
+    ? isPhoneSignupReuseLocked(latestState, { signupMethod: selectedSignupMethod })
+    : selectedSignupMethod === 'phone';
+  const phoneSmsReuseEnabledValue = phoneSignupReuseLocked
+    ? getStoredPhoneSmsReuseEnabled(latestState)
+    : typeof inputHeroSmsReuseEnabled !== 'undefined' && inputHeroSmsReuseEnabled
     ? normalizeHeroSmsReuseEnabledValue(inputHeroSmsReuseEnabled.checked)
-    : defaultHeroSmsReuseEnabled;
+    : normalizeHeroSmsReuseEnabledValue(
+      latestState?.phoneSmsReuseEnabled,
+      latestState?.heroSmsReuseEnabled
+    );
+  const heroSmsReuseEnabledValue = phoneSmsReuseEnabledValue;
+  const freePhoneReuseEnabledValue = phoneSignupReuseLocked
+    ? getStoredFreePhoneReuseEnabled(latestState)
+    : typeof inputFreePhoneReuseEnabled !== 'undefined' && inputFreePhoneReuseEnabled
+    ? Boolean(inputFreePhoneReuseEnabled.checked)
+    : Boolean(latestState?.freePhoneReuseEnabled);
+  const freePhoneReuseAutoEnabledValue = phoneSignupReuseLocked
+    ? getStoredFreePhoneReuseAutoEnabled(latestState)
+    : typeof inputFreePhoneReuseAutoEnabled !== 'undefined' && inputFreePhoneReuseAutoEnabled
+    ? Boolean(inputFreePhoneReuseAutoEnabled.checked)
+    : Boolean(latestState?.freePhoneReuseAutoEnabled);
   const defaultHeroSmsAcquirePriority = typeof DEFAULT_HERO_SMS_ACQUIRE_PRIORITY !== 'undefined'
     ? DEFAULT_HERO_SMS_ACQUIRE_PRIORITY
     : (typeof HERO_SMS_ACQUIRE_PRIORITY_COUNTRY !== 'undefined' ? HERO_SMS_ACQUIRE_PRIORITY_COUNTRY : 'country');
@@ -3081,12 +3794,33 @@ function collectSettingsPayload() {
   const currentPhoneSmsMaxPriceValue = typeof inputHeroSmsMaxPrice !== 'undefined' && inputHeroSmsMaxPrice
     ? normalizePhoneSmsMaxPriceValue(inputHeroSmsMaxPrice.value, phoneSmsProviderValue)
     : '';
+  const normalizePhoneSmsMinPriceValueSafe = typeof normalizePhoneSmsMinPriceValue === 'function'
+    ? normalizePhoneSmsMinPriceValue
+    : ((value = '', provider = phoneSmsProviderValue) => {
+      const normalizedProvider = normalizePhoneSmsProvider(provider);
+      if (normalizedProvider === PHONE_SMS_PROVIDER_FIVE_SIM && typeof normalizeFiveSimMaxPriceValue === 'function') {
+        return normalizeFiveSimMaxPriceValue(value);
+      }
+      if (typeof normalizeHeroSmsMaxPriceValue === 'function') {
+        return normalizeHeroSmsMaxPriceValue(value);
+      }
+      return String(value || '').trim();
+    });
+  const currentPhoneSmsMinPriceValue = typeof inputHeroSmsMinPrice !== 'undefined' && inputHeroSmsMinPrice
+    ? normalizePhoneSmsMinPriceValueSafe(inputHeroSmsMinPrice.value, phoneSmsProviderValue)
+    : '';
   const heroSmsMaxPriceValue = phoneSmsProviderValue === PHONE_SMS_PROVIDER_HERO_SMS
     ? currentPhoneSmsMaxPriceValue
     : normalizeHeroSmsMaxPriceValue(latestState?.heroSmsMaxPrice || '');
   const fiveSimMaxPriceValue = phoneSmsProviderValue === PHONE_SMS_PROVIDER_FIVE_SIM
     ? currentPhoneSmsMaxPriceValue
     : normalizeFiveSimMaxPriceValue(latestState?.fiveSimMaxPrice || '');
+  const heroSmsMinPriceValue = phoneSmsProviderValue === PHONE_SMS_PROVIDER_FIVE_SIM
+    ? normalizePhoneSmsMinPriceValueSafe(latestState?.heroSmsMinPrice || '', PHONE_SMS_PROVIDER_HERO_SMS)
+    : currentPhoneSmsMinPriceValue;
+  const fiveSimMinPriceValue = phoneSmsProviderValue === PHONE_SMS_PROVIDER_FIVE_SIM
+    ? currentPhoneSmsMinPriceValue
+    : normalizePhoneSmsMinPriceValueSafe(latestState?.fiveSimMinPrice || '', PHONE_SMS_PROVIDER_FIVE_SIM);
   const defaultFiveSimProduct = typeof DEFAULT_FIVE_SIM_PRODUCT !== 'undefined'
     ? DEFAULT_FIVE_SIM_PRODUCT
     : 'openai';
@@ -3133,7 +3867,9 @@ function collectSettingsPayload() {
   const heroSmsPreferredPriceValue = typeof inputHeroSmsPreferredPrice !== 'undefined' && inputHeroSmsPreferredPrice
     ? normalizeHeroSmsMaxPriceValue(inputHeroSmsPreferredPrice.value)
     : normalizeHeroSmsMaxPriceValue(latestState?.heroSmsPreferredPrice || '');
-  const phonePreferredActivationValue = typeof getSelectedPhonePreferredActivation === 'function'
+  const phonePreferredActivationValue = phoneSignupReuseLocked
+    ? (latestState?.phonePreferredActivation ? { ...latestState.phonePreferredActivation } : null)
+    : typeof getSelectedPhonePreferredActivation === 'function'
     ? getSelectedPhonePreferredActivation()
     : null;
   const phoneVerificationReplacementLimitValue = typeof inputPhoneReplacementLimit !== 'undefined' && inputPhoneReplacementLimit
@@ -3224,20 +3960,84 @@ function collectSettingsPayload() {
   const currentPayPalAccount = typeof getCurrentPayPalAccount === 'function'
     ? getCurrentPayPalAccount(latestState)
     : payPalAccounts.find((account) => account?.id === String(latestState?.currentPayPalAccountId || '').trim()) || null;
-  const selectedSignupMethod = typeof getSelectedSignupMethod === 'function'
-    ? getSelectedSignupMethod()
-    : (
-      (typeof normalizeSignupMethod === 'function'
-        ? normalizeSignupMethod(latestState?.signupMethod)
-        : (String(latestState?.signupMethod || '').trim().toLowerCase() === 'phone' ? 'phone' : 'email'))
-    );
+  const normalizePanelModeSafe = typeof normalizePanelMode === 'function'
+    ? normalizePanelMode
+    : ((value = '') => {
+      const normalized = String(value || '').trim().toLowerCase();
+      return normalized === 'sub2api' || normalized === 'codex2api' ? normalized : 'cpa';
+    });
+  const rawPanelMode = normalizePanelModeSafe(selectPanelMode?.value || latestState?.panelMode || 'cpa');
+  const rawPlusModeEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+    ? Boolean(inputPlusModeEnabled.checked)
+    : Boolean(latestState?.plusModeEnabled);
+  const rawPhoneVerificationEnabled = Boolean(inputPhoneVerificationEnabled?.checked);
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({
+      panelMode: rawPanelMode,
+      signupMethod: selectedSignupMethod,
+      state: {
+        ...(latestState || {}),
+        panelMode: rawPanelMode,
+        plusModeEnabled: rawPlusModeEnabled,
+        phoneVerificationEnabled: rawPhoneVerificationEnabled,
+        signupMethod: selectedSignupMethod,
+      },
+    })
+    : (() => {
+      const rootScope = typeof window !== 'undefined' ? window : globalThis;
+      const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+        defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+      }) || null;
+      return registry?.resolveSidepanelCapabilities
+        ? registry.resolveSidepanelCapabilities({
+          activeFlowId: latestState?.activeFlowId,
+          panelMode: rawPanelMode,
+          signupMethod: selectedSignupMethod,
+          state: {
+            ...(latestState || {}),
+            panelMode: rawPanelMode,
+            plusModeEnabled: rawPlusModeEnabled,
+            phoneVerificationEnabled: rawPhoneVerificationEnabled,
+            signupMethod: selectedSignupMethod,
+          },
+        })
+        : null;
+    })();
+  const effectivePanelMode = capabilityState?.effectivePanelMode || capabilityState?.panelMode || rawPanelMode;
+  const effectivePlusModeEnabled = capabilityState
+    ? Boolean(capabilityState.runtimeLocks?.plusModeEnabled)
+    : rawPlusModeEnabled;
+  const effectivePhoneVerificationEnabled = capabilityState
+    ? Boolean(capabilityState.runtimeLocks?.phoneVerificationEnabled)
+    : rawPhoneVerificationEnabled;
+  const effectiveSignupMethod = capabilityState?.effectiveSignupMethod || selectedSignupMethod;
   const plusPaymentMethod = getSelectedPlusPaymentMethod();
-  const selectedSub2ApiGroupName = String(inputSub2ApiGroup.value || '').trim();
+  const normalizeGpcHelperPhoneModeSafe = typeof normalizeGpcHelperPhoneModeValue === 'function'
+    ? normalizeGpcHelperPhoneModeValue
+    : ((value = '') => String(value || '').trim().toLowerCase() === 'auto' || String(value || '').trim().toLowerCase() === 'builtin' ? 'auto' : 'manual');
+  const selectedGpcPhoneMode = normalizeGpcHelperPhoneModeSafe(
+    typeof selectGpcHelperPhoneMode !== 'undefined' && selectGpcHelperPhoneMode
+      ? selectGpcHelperPhoneMode.value
+      : (latestState?.gopayHelperPhoneMode || 'manual')
+  );
+  const effectiveGpcPhoneMode = selectedGpcPhoneMode;
+  const selectedGpcOtpChannel = normalizeGpcOtpChannelSafe(
+    typeof selectGpcHelperOtpChannel !== 'undefined' && selectGpcHelperOtpChannel
+      ? selectGpcHelperOtpChannel.value
+      : (latestState?.gopayHelperOtpChannel || 'whatsapp')
+  );
+  const selectedGpcLocalSmsHelperEnabled = effectiveGpcPhoneMode === 'auto' ? false : Boolean(
+    typeof inputGpcHelperLocalSmsEnabled !== 'undefined' && inputGpcHelperLocalSmsEnabled
+      ? inputGpcHelperLocalSmsEnabled.checked
+      : latestState?.gopayHelperLocalSmsHelperEnabled
+  );
+  const sub2apiSelectedGroupNames = [];
   const sub2apiGroupNames = [];
+  const seenSelectedSub2ApiGroup = new Set();
   const seenSub2ApiGroupNames = new Set();
-  const appendSub2ApiGroupNames = (value) => {
+  const appendSub2ApiGroupNamesList = (value, target, seen) => {
     if (Array.isArray(value)) {
-      value.forEach(appendSub2ApiGroupNames);
+      value.forEach((item) => appendSub2ApiGroupNamesList(item, target, seen));
       return;
     }
     String(value || '')
@@ -3246,24 +4046,44 @@ function collectSettingsPayload() {
       .filter(Boolean)
       .forEach((name) => {
         const key = name.toLowerCase();
-        if (!key || seenSub2ApiGroupNames.has(key)) {
+        if (!key || seen.has(key)) {
           return;
         }
-        seenSub2ApiGroupNames.add(key);
-        sub2apiGroupNames.push(name);
+        seen.add(key);
+        target.push(name);
       });
   };
+  const pickerSelectedRaw = typeof sub2ApiGroupPicker !== 'undefined' && sub2ApiGroupPicker
+    && typeof sub2ApiGroupPicker.getSelected === 'function'
+    ? sub2ApiGroupPicker.getSelected()
+    : [];
+  [
+    pickerSelectedRaw,
+    inputSub2ApiGroup?.value,
+    latestState?.sub2apiSelectedGroupNames,
+    latestState?.sub2apiGroupName,
+  ].forEach((source) => appendSub2ApiGroupNamesList(source, sub2apiSelectedGroupNames, seenSelectedSub2ApiGroup));
   [
     latestState?.sub2apiGroupNames,
+    sub2apiSelectedGroupNames,
     latestState?.sub2apiGroupName,
-    selectedSub2ApiGroupName,
-  ].forEach(appendSub2ApiGroupNames);
+  ].forEach((source) => appendSub2ApiGroupNamesList(source, sub2apiGroupNames, seenSub2ApiGroupNames));
   if (sub2apiGroupNames.length === 0) {
-    appendSub2ApiGroupNames(['codex', 'openai-plus']);
+    appendSub2ApiGroupNamesList(['codex', 'openai-plus'], sub2apiGroupNames, seenSub2ApiGroupNames);
   }
+  const effectiveSub2ApiSelected = sub2apiSelectedGroupNames.length
+    ? sub2apiSelectedGroupNames
+    : [sub2apiGroupNames[0]];
+  const selectedSub2ApiGroupName = effectiveSub2ApiSelected[0] || '';
+  const sub2apiAccountPriorityNormalizer = typeof normalizeSub2ApiAccountPriorityValue === 'function'
+    ? normalizeSub2ApiAccountPriorityValue
+    : ((value) => {
+      const numeric = Number(String(value ?? '').trim());
+      return Number.isSafeInteger(numeric) && numeric >= 1 ? numeric : 1;
+    });
   return {
     ...(contributionModeEnabled ? {} : {
-      panelMode: selectPanelMode.value,
+      panelMode: effectivePanelMode,
     }),
     vpsUrl: inputVpsUrl.value.trim(),
     vpsPassword: inputVpsPassword.value,
@@ -3271,8 +4091,14 @@ function collectSettingsPayload() {
     sub2apiUrl: inputSub2ApiUrl.value.trim(),
     sub2apiEmail: inputSub2ApiEmail.value.trim(),
     sub2apiPassword: inputSub2ApiPassword.value,
-    sub2apiGroupName: selectedSub2ApiGroupName,
+    sub2apiGroupName: effectiveSub2ApiSelected[0] || selectedSub2ApiGroupName,
     sub2apiGroupNames,
+    sub2apiSelectedGroupNames: effectiveSub2ApiSelected,
+    sub2apiAccountPriority: sub2apiAccountPriorityNormalizer(
+      typeof inputSub2ApiAccountPriority !== 'undefined' && inputSub2ApiAccountPriority
+        ? inputSub2ApiAccountPriority.value
+        : latestState?.sub2apiAccountPriority
+    ),
     sub2apiDefaultProxyName: inputSub2ApiDefaultProxy.value.trim(),
     ipProxyEnabled: getSelectedIpProxyEnabledSafe(),
     ipProxyService: selectedIpProxyService,
@@ -3296,14 +4122,21 @@ function collectSettingsPayload() {
     ipProxyRegion: currentIpProxyServiceProfile.region,
     codex2apiUrl: inputCodex2ApiUrl.value.trim(),
     codex2apiAdminKey: inputCodex2ApiAdminKey.value.trim(),
-    plusModeEnabled: typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
-      ? Boolean(inputPlusModeEnabled.checked)
-      : Boolean(latestState?.plusModeEnabled),
-    plusPaymentMethod,
+    plusModeEnabled: true,
+    plusPaymentMethod: 'paypal',
     paypalEmail: String(currentPayPalAccount?.email || latestState?.paypalEmail || '').trim(),
     paypalPassword: String(currentPayPalAccount?.password || latestState?.paypalPassword || ''),
     currentPayPalAccountId: String(latestState?.currentPayPalAccountId || '').trim(),
     paypalAccounts: payPalAccounts,
+    paypalSmsPhone: typeof inputPayPalSmsPhone !== 'undefined' && inputPayPalSmsPhone
+      ? String(inputPayPalSmsPhone.value || '').trim()
+      : String(latestState?.paypalSmsPhone || '').trim(),
+    paypalSmsApiUrl: typeof inputPayPalSmsApi !== 'undefined' && inputPayPalSmsApi
+      ? String(inputPayPalSmsApi.value || '').trim()
+      : String(latestState?.paypalSmsApiUrl || '').trim(),
+    bindCardNumber: typeof inputBindCardNumber !== 'undefined' && inputBindCardNumber
+      ? String(inputBindCardNumber.value || '').trim()
+      : String(latestState?.bindCardNumber || '').trim(),
     gopayCountryCode: window.GoPayUtils?.normalizeGoPayCountryCode
       ? window.GoPayUtils.normalizeGoPayCountryCode(typeof selectGoPayCountryCode !== 'undefined' && selectGoPayCountryCode ? selectGoPayCountryCode.value : latestState?.gopayCountryCode)
       : (typeof selectGoPayCountryCode !== 'undefined' && selectGoPayCountryCode
@@ -3325,13 +4158,13 @@ function collectSettingsPayload() {
         ? String(inputGoPayPin.value || '')
         : String(latestState?.gopayPin || '')),
     gopayHelperApiUrl: window.GoPayUtils?.normalizeGpcHelperBaseUrl
-      ? window.GoPayUtils.normalizeGpcHelperBaseUrl(typeof inputGpcHelperApi !== 'undefined' && inputGpcHelperApi ? inputGpcHelperApi.value : (latestState?.gopayHelperApiUrl || defaultGpcHelperApiUrl))
-      : (typeof inputGpcHelperApi !== 'undefined' && inputGpcHelperApi
-        ? String(inputGpcHelperApi.value || defaultGpcHelperApiUrl).trim().replace(/\/+$/g, '')
-        : String(latestState?.gopayHelperApiUrl || defaultGpcHelperApiUrl).trim()),
-    gopayHelperCardKey: typeof inputGpcHelperCardKey !== 'undefined' && inputGpcHelperCardKey
+      ? window.GoPayUtils.normalizeGpcHelperBaseUrl(defaultGpcHelperApiUrl)
+      : String(defaultGpcHelperApiUrl).trim().replace(/\/+$/g, ''),
+    gopayHelperApiKey: typeof inputGpcHelperCardKey !== 'undefined' && inputGpcHelperCardKey
       ? String(inputGpcHelperCardKey.value || '').trim()
-      : String(latestState?.gopayHelperCardKey || '').trim(),
+      : String(latestState?.gopayHelperApiKey || latestState?.gopayHelperCardKey || '').trim(),
+    gopayHelperCardKey: '',
+    gopayHelperPhoneMode: effectiveGpcPhoneMode,
     gopayHelperCountryCode: window.GoPayUtils?.normalizeGoPayCountryCode
       ? window.GoPayUtils.normalizeGoPayCountryCode(typeof selectGpcHelperCountryCode !== 'undefined' && selectGpcHelperCountryCode ? selectGpcHelperCountryCode.value : latestState?.gopayHelperCountryCode)
       : (typeof selectGpcHelperCountryCode !== 'undefined' && selectGpcHelperCountryCode
@@ -3347,6 +4180,13 @@ function collectSettingsPayload() {
       : (typeof inputGpcHelperPin !== 'undefined' && inputGpcHelperPin
         ? String(inputGpcHelperPin.value || '')
         : String(latestState?.gopayHelperPin || '')),
+    gopayHelperOtpChannel: selectedGpcOtpChannel,
+    gopayHelperLocalSmsHelperEnabled: selectedGpcLocalSmsHelperEnabled,
+    gopayHelperLocalSmsHelperUrl: normalizeGpcLocalSmsHelperBaseUrlSafe(
+      typeof inputGpcHelperLocalSmsUrl !== 'undefined' && inputGpcHelperLocalSmsUrl
+        ? inputGpcHelperLocalSmsUrl.value
+        : (latestState?.gopayHelperLocalSmsHelperUrl || '')
+    ),
     ...(contributionModeEnabled ? {} : {
       customPassword: inputPassword.value,
     }),
@@ -3386,20 +4226,34 @@ function collectSettingsPayload() {
     cloudflareTempEmailBaseUrl: normalizeCloudflareTempEmailBaseUrlValue(inputTempEmailBaseUrl.value),
     cloudflareTempEmailAdminAuth: inputTempEmailAdminAuth.value,
     cloudflareTempEmailCustomAuth: inputTempEmailCustomAuth.value,
+    cloudflareTempEmailLookupMode: typeof getSelectedCloudflareTempEmailLookupMode === 'function'
+      ? getSelectedCloudflareTempEmailLookupMode()
+      : 'receive-mailbox',
     cloudflareTempEmailReceiveMailbox: normalizeCloudflareTempEmailReceiveMailboxValue(inputTempEmailReceiveMailbox.value),
     cloudflareTempEmailUseRandomSubdomain: Boolean(inputTempEmailUseRandomSubdomain?.checked),
     cloudflareTempEmailDomain: selectedCloudflareTempEmailDomain,
     cloudflareTempEmailDomains: tempEmailDomains,
+    cloudMailBaseUrl: normalizeCloudMailBaseUrlInput((typeof inputCloudMailBaseUrl !== 'undefined' && inputCloudMailBaseUrl) ? inputCloudMailBaseUrl.value : ''),
+    cloudMailAdminEmail: ((typeof inputCloudMailAdminEmail !== 'undefined' && inputCloudMailAdminEmail) ? inputCloudMailAdminEmail.value : '').trim(),
+    cloudMailAdminPassword: (typeof inputCloudMailAdminPassword !== 'undefined' && inputCloudMailAdminPassword) ? inputCloudMailAdminPassword.value : '',
+    cloudMailReceiveMailbox: normalizeCloudMailReceiveMailboxInput((typeof inputCloudMailReceiveMailbox !== 'undefined' && inputCloudMailReceiveMailbox) ? inputCloudMailReceiveMailbox.value : ''),
+    cloudMailDomain: normalizeCloudMailDomainInput((typeof inputCloudMailDomain !== 'undefined' && inputCloudMailDomain) ? inputCloudMailDomain.value : ''),
     autoRunSkipFailures: inputAutoSkipFailures.checked,
     autoRunFallbackThreadIntervalMinutes: normalizeAutoRunThreadIntervalMinutes(inputAutoSkipFailuresThreadIntervalMinutes.value),
+    step6CookieCleanupEnabled: typeof inputStep6CookieCleanupEnabled !== 'undefined' && inputStep6CookieCleanupEnabled
+      ? Boolean(inputStep6CookieCleanupEnabled.checked)
+      : false,
     autoRunDelayEnabled: inputAutoDelayEnabled.checked,
     autoRunDelayMinutes: normalizeAutoDelayMinutes(inputAutoDelayMinutes.value),
     autoStepDelaySeconds: normalizeAutoStepDelaySeconds(inputAutoStepDelaySeconds.value),
     oauthFlowTimeoutEnabled: typeof inputOAuthFlowTimeoutEnabled !== 'undefined' && inputOAuthFlowTimeoutEnabled
       ? Boolean(inputOAuthFlowTimeoutEnabled.checked)
       : true,
-    phoneVerificationEnabled: Boolean(inputPhoneVerificationEnabled?.checked),
-    signupMethod: selectedSignupMethod,
+    phoneVerificationEnabled: effectivePhoneVerificationEnabled,
+    signupMethod: effectiveSignupMethod,
+    phoneSignupReloginAfterBindEmailEnabled: typeof inputPhoneSignupReloginAfterBindEmail !== 'undefined' && inputPhoneSignupReloginAfterBindEmail
+      ? Boolean(inputPhoneSignupReloginAfterBindEmail.checked)
+      : false,
     phoneSmsProvider: phoneSmsProviderValue,
     phoneSmsProviderOrder: phoneSmsProviderOrderValue,
     verificationResendCount: normalizeVerificationResendCount(
@@ -3414,8 +4268,12 @@ function collectSettingsPayload() {
     nexSmsApiKey: nexSmsApiKeyValue,
     nexSmsCountryOrder: nexSmsCountryOrderValue,
     nexSmsServiceCode: nexSmsServiceCodeValue,
+    phoneSmsReuseEnabled: phoneSmsReuseEnabledValue,
     heroSmsReuseEnabled: heroSmsReuseEnabledValue,
+    freePhoneReuseEnabled: freePhoneReuseEnabledValue,
+    freePhoneReuseAutoEnabled: freePhoneReuseAutoEnabledValue,
     heroSmsAcquirePriority: heroSmsAcquirePriorityValue,
+    heroSmsMinPrice: heroSmsMinPriceValue,
     heroSmsMaxPrice: heroSmsMaxPriceValue,
     heroSmsPreferredPrice: heroSmsPreferredPriceValue,
     phonePreferredActivation: phonePreferredActivationValue,
@@ -3431,6 +4289,7 @@ function collectSettingsPayload() {
     fiveSimCountryLabel: fiveSimCountry.label,
     fiveSimCountryFallback,
     fiveSimMaxPrice: fiveSimMaxPriceValue,
+    fiveSimMinPrice: fiveSimMinPriceValue,
   };
 }
 
@@ -3444,6 +4303,12 @@ function normalizeMail2925Mode(value = '') {
   return String(value || '').trim().toLowerCase() === MAIL_2925_MODE_RECEIVE
     ? MAIL_2925_MODE_RECEIVE
     : DEFAULT_MAIL_2925_MODE;
+}
+
+function normalizeCloudflareTempEmailLookupMode(value = '') {
+  return String(value || '').trim().toLowerCase() === CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL
+    ? CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL
+    : DEFAULT_CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE;
 }
 
 function normalizeHotmailServiceMode(value = '') {
@@ -3481,15 +4346,22 @@ function normalizeAccountRunHistoryHelperBaseUrlValue(value = '') {
 
 
 function normalizePhoneSmsProvider(value = '') {
-  if (typeof window !== 'undefined' && window.PhoneSmsProviderRegistry?.normalizeProviderId) {
-    return window.PhoneSmsProviderRegistry.normalizeProviderId(value);
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.PhoneSmsProviderRegistry?.normalizeProviderId) {
+    return rootScope.PhoneSmsProviderRegistry.normalizeProviderId(value);
   }
+  const nexSmsProvider = typeof PHONE_SMS_PROVIDER_NEXSMS !== 'undefined'
+    ? PHONE_SMS_PROVIDER_NEXSMS
+    : 'nexsms';
   const normalized = String(value || '').trim().toLowerCase();
-  return normalized === PHONE_SMS_PROVIDER_FIVE_SIM
-    ? PHONE_SMS_PROVIDER_FIVE_SIM
-    : PHONE_SMS_PROVIDER_HERO_SMS;
+  if (normalized === PHONE_SMS_PROVIDER_FIVE_SIM) {
+    return PHONE_SMS_PROVIDER_FIVE_SIM;
+  }
+  if (normalized === nexSmsProvider) {
+    return nexSmsProvider;
+  }
+  return PHONE_SMS_PROVIDER_HERO_SMS;
 }
-
 function setPhoneSmsProviderSelectValue(provider) {
   const normalizedProvider = normalizePhoneSmsProvider(provider);
   if (selectPhoneSmsProvider) {
@@ -3539,6 +4411,13 @@ function normalizePhoneSmsCountryLabel(value = '', provider = getSelectedPhoneSm
 }
 
 function normalizePhoneSmsMaxPriceValue(value = '', provider = getSelectedPhoneSmsProvider()) {
+  if (normalizePhoneSmsProvider(provider) === PHONE_SMS_PROVIDER_FIVE_SIM) {
+    return normalizeFiveSimMaxPriceValue(value);
+  }
+  return normalizeHeroSmsMaxPriceValue(value);
+}
+
+function normalizePhoneSmsMinPriceValue(value = '', provider = getSelectedPhoneSmsProvider()) {
   if (normalizePhoneSmsProvider(provider) === PHONE_SMS_PROVIDER_FIVE_SIM) {
     return normalizeFiveSimMaxPriceValue(value);
   }
@@ -3672,21 +4551,21 @@ function normalizeHeroSmsMaxPriceValue(value = '') {
 }
 
 function normalizePhoneSmsProviderValue(value = '') {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === PHONE_SMS_PROVIDER_FIVE_SIM) {
-    return PHONE_SMS_PROVIDER_FIVE_SIM;
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.PhoneSmsProviderRegistry?.normalizeProviderId) {
+    return rootScope.PhoneSmsProviderRegistry.normalizeProviderId(value);
   }
-  if (normalized === PHONE_SMS_PROVIDER_NEXSMS) {
-    return PHONE_SMS_PROVIDER_NEXSMS;
-  }
-  return PHONE_SMS_PROVIDER_HERO;
+  return normalizePhoneSmsProvider(value);
 }
-
 function normalizePhoneSmsProviderOrderValue(value = [], fallbackOrder = []) {
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  if (rootScope.PhoneSmsProviderRegistry?.normalizeProviderOrder) {
+    return rootScope.PhoneSmsProviderRegistry.normalizeProviderOrder(value, fallbackOrder);
+  }
   const source = Array.isArray(value)
     ? value
     : String(value || '')
-      .split(/[\r\n,，;；|/]+/)
+      .split(/[\r\n,]+/)
       .map((entry) => String(entry || '').trim())
       .filter(Boolean);
   const normalized = [];
@@ -3719,7 +4598,6 @@ function normalizePhoneSmsProviderOrderValue(value = [], fallbackOrder = []) {
   });
   return fallbackNormalized.slice(0, 3);
 }
-
 function formatPhoneSmsProviderOrderSummary(order = []) {
   const normalized = normalizePhoneSmsProviderOrderValue(order, []);
   if (!normalized.length) {
@@ -4223,8 +5101,11 @@ function normalizePhoneCodePollMaxRoundsValue(value, fallback = DEFAULT_PHONE_CO
   return Math.max(PHONE_CODE_POLL_MAX_ROUNDS_MIN, Math.min(PHONE_CODE_POLL_MAX_ROUNDS_MAX, parsed));
 }
 
-function normalizeHeroSmsReuseEnabledValue(value) {
+function normalizeHeroSmsReuseEnabledValue(value, fallbackValue = undefined) {
   if (value === undefined || value === null) {
+    if (fallbackValue !== undefined && fallbackValue !== null) {
+      return Boolean(fallbackValue);
+    }
     return DEFAULT_HERO_SMS_REUSE_ENABLED;
   }
   return Boolean(value);
@@ -4684,6 +5565,97 @@ function summarizeHeroSmsPreviewError(payload, responseStatus = 0) {
     return `HTTP ${responseStatus}`;
   }
   return text || '未知错误';
+}
+
+function resolvePhoneSmsPricePreviewRange(provider = '') {
+  const activeProvider = provider || (
+    typeof getSelectedPhoneSmsProvider === 'function'
+      ? getSelectedPhoneSmsProvider()
+      : (typeof DEFAULT_PHONE_SMS_PROVIDER !== 'undefined' ? DEFAULT_PHONE_SMS_PROVIDER : 'hero-sms')
+  );
+  const rawMinPrice = typeof inputHeroSmsMinPrice !== 'undefined' && inputHeroSmsMinPrice
+    ? inputHeroSmsMinPrice.value
+    : '';
+  const rawMaxPrice = typeof inputHeroSmsMaxPrice !== 'undefined' && inputHeroSmsMaxPrice
+    ? inputHeroSmsMaxPrice.value
+    : '';
+  const minPriceText = typeof normalizePhoneSmsMinPriceValue === 'function'
+    ? normalizePhoneSmsMinPriceValue(rawMinPrice, activeProvider)
+    : normalizeHeroSmsMaxPriceValue(rawMinPrice);
+  const maxPriceText = typeof normalizePhoneSmsMaxPriceValue === 'function'
+    ? normalizePhoneSmsMaxPriceValue(rawMaxPrice, activeProvider)
+    : normalizeHeroSmsMaxPriceValue(rawMaxPrice);
+  const minPrice = minPriceText ? Number(minPriceText) : null;
+  const maxPrice = maxPriceText ? Number(maxPriceText) : null;
+  return {
+    minPrice,
+    maxPrice,
+    hasMinPrice: Number.isFinite(minPrice) && minPrice > 0,
+    hasMaxPrice: Number.isFinite(maxPrice) && maxPrice > 0,
+    invalid: Number.isFinite(minPrice) && minPrice > 0
+      && Number.isFinite(maxPrice) && maxPrice > 0
+      && minPrice > maxPrice,
+  };
+}
+
+function isPhoneSmsPriceWithinPreviewRange(price, range = {}) {
+  const numeric = Number(price);
+  if (!Number.isFinite(numeric) || numeric <= 0 || range?.invalid) {
+    return false;
+  }
+  const normalized = Math.round(numeric * 10000) / 10000;
+  if (range?.hasMinPrice && normalized < Number(range.minPrice)) {
+    return false;
+  }
+  if (range?.hasMaxPrice && normalized > Number(range.maxPrice)) {
+    return false;
+  }
+  return true;
+}
+
+function filterPhoneSmsPriceEntriesForPreviewRange(entries = [], range = {}) {
+  if (!range?.hasMinPrice && !range?.hasMaxPrice && !range?.invalid) {
+    return Array.isArray(entries) ? [...entries] : [];
+  }
+  return (Array.isArray(entries) ? entries : []).filter((entry) => (
+    isPhoneSmsPriceWithinPreviewRange(entry?.price ?? entry?.cost, range)
+  ));
+}
+
+function filterPhoneSmsPriceValuesForPreviewRange(values = [], range = {}) {
+  if (!range?.hasMinPrice && !range?.hasMaxPrice && !range?.invalid) {
+    return Array.isArray(values) ? [...values] : [];
+  }
+  return (Array.isArray(values) ? values : []).filter((price) => (
+    isPhoneSmsPriceWithinPreviewRange(price, range)
+  ));
+}
+
+function formatPhoneSmsPriceRangePreviewText(range = {}) {
+  const minText = range?.hasMinPrice
+    ? (formatHeroSmsPriceForPreview(range.minPrice) || String(range.minPrice))
+    : '';
+  const maxText = range?.hasMaxPrice
+    ? (formatHeroSmsPriceForPreview(range.maxPrice) || String(range.maxPrice))
+    : '';
+  if (minText && maxText) {
+    return `${minText}~${maxText}`;
+  }
+  if (minText) {
+    return `${minText}~`;
+  }
+  if (maxText) {
+    return `~${maxText}`;
+  }
+  return '';
+}
+
+function buildPhoneSmsPriceRangePreviewMessage(range = {}) {
+  const rangeText = formatPhoneSmsPriceRangePreviewText(range);
+  if (range?.invalid) {
+    return `价格区间无效：最低购买价 ${formatHeroSmsPriceForPreview(range.minPrice) || range.minPrice} 高于价格上限 ${formatHeroSmsPriceForPreview(range.maxPrice) || range.maxPrice}`;
+  }
+  return rangeText ? `区间内无可用号源（当前 ${rangeText}）` : '暂无可用号源';
 }
 
 function formatPriceTiersForPreview(entries = [], options = {}) {
@@ -5414,8 +6386,77 @@ function updateHeroSmsRuntimeDisplay(state = {}) {
     const code = String(state?.currentPhoneVerificationCode ?? latestState?.currentPhoneVerificationCode ?? '').trim();
     displayHeroSmsCurrentCode.textContent = code || '未获取';
   }
+  if (displayFreeReusablePhone || displayFreeReusablePhoneCountry || inputFreeReusablePhone) {
+    const activation = state?.freeReusablePhoneActivation ?? latestState?.freeReusablePhoneActivation ?? null;
+    const phoneNumber = String(activation?.phoneNumber || '').trim();
+    const activationId = String(activation?.activationId || '').trim();
+    const successfulUses = Number.isFinite(Number(activation?.successfulUses))
+      ? Number(activation.successfulUses)
+      : null;
+    const maxUses = Number.isFinite(Number(activation?.maxUses))
+      ? Number(activation.maxUses)
+      : null;
+    const countryLabel = normalizePhoneSmsCountryLabel(
+      activation?.countryLabel
+      || getHeroSmsCountryLabelById(activation?.countryId || '')
+      || state?.heroSmsCountryLabel
+      || latestState?.heroSmsCountryLabel
+      || getHeroSmsCountryLabelById(state?.heroSmsCountryId || latestState?.heroSmsCountryId || ''),
+      activation?.provider || getSelectedPhoneSmsProvider()
+    );
+    const usesText = successfulUses !== null || maxUses !== null
+      ? ` / ${successfulUses ?? 0}/${maxUses ?? 3}`
+      : '';
+    if (displayFreeReusablePhone) {
+      displayFreeReusablePhone.textContent = phoneNumber
+        ? `${phoneNumber}${activationId ? ` (#${activationId})` : ''}${usesText}`
+        : '未保存';
+    }
+    if (displayFreeReusablePhoneCountry) {
+      displayFreeReusablePhoneCountry.textContent = phoneNumber
+        ? `地区：${countryLabel || '未保存'}`
+        : '地区：未保存';
+    }
+    if (inputFreeReusablePhone) {
+      inputFreeReusablePhone.value = phoneNumber;
+    }
+  }
   syncPhoneRuntimeCountdown(state);
   renderPhonePreferredActivationOptions(state);
+}
+
+function applyFreeReusablePhoneMutationResult(refreshedState = {}, mutationResult = {}, options = {}) {
+  const { clear = false } = options;
+  const explicitActivation = clear
+    ? null
+    : (
+      mutationResult?.freeReusablePhoneActivation
+      || mutationResult?.state?.freeReusablePhoneActivation
+      || null
+    );
+  const statePatch = {
+    ...(refreshedState || {}),
+    ...(mutationResult?.state || {}),
+    ...(clear || explicitActivation
+      ? { freeReusablePhoneActivation: explicitActivation }
+      : {}),
+  };
+  syncLatestState(statePatch);
+  updateHeroSmsRuntimeDisplay(latestState || statePatch);
+}
+
+async function refreshFreeReusablePhoneStateFallback(mutationResult = {}, options = {}) {
+  if (mutationResult?.state || mutationResult?.freeReusablePhoneActivation || options.clear) {
+    applyFreeReusablePhoneMutationResult(latestState, mutationResult, options);
+    return;
+  }
+  try {
+    const refreshedState = await chrome.runtime.sendMessage({ type: 'GET_STATE', source: 'sidepanel' });
+    applyFreeReusablePhoneMutationResult(refreshedState || latestState, mutationResult, options);
+  } catch (error) {
+    console.warn('Failed to refresh free reusable phone state:', error);
+    applyFreeReusablePhoneMutationResult(latestState, mutationResult, options);
+  }
 }
 
 async function loadHeroSmsCountries() {
@@ -5481,14 +6522,14 @@ async function loadHeroSmsCountries() {
         .filter((entry) => entry.id)
         .sort((left, right) => String(left.label || '').localeCompare(String(right.label || '')));
       if (!optionItems.length) {
-        throw new Error('empty country list');
+        throw new Error('国家列表为空');
       }
       heroSmsCountrySearchTextById.clear();
       optionItems.forEach((entry) => heroSmsCountrySearchTextById.set(String(entry.id), entry.searchText));
       applyOptions(optionItems, selectHeroSmsCountry);
       applyOptions(optionItems, selectHeroSmsCountryFallback);
     } catch (error) {
-      console.warn('Failed to load 5sim countries:', error);
+      console.warn('加载 5sim 国家列表失败：', error);
       const fallbackItems = FIVE_SIM_SUPPORTED_COUNTRY_ITEMS.map((item) => ({
         id: item.id,
         label: formatFiveSimCountryDisplayLabel(item.id, item.eng),
@@ -5513,7 +6554,7 @@ async function loadHeroSmsCountries() {
     const payload = await response.json();
     const countries = Array.isArray(payload?.value) ? payload.value : (Array.isArray(payload) ? payload : []);
     if (!countries.length) {
-      throw new Error('empty country list');
+      throw new Error('国家列表为空');
     }
     const optionItems = countries
       .filter((item) => Number(item?.id) > 0 && (String(item?.eng || '').trim() || String(item?.chn || '').trim()))
@@ -5529,7 +6570,7 @@ async function loadHeroSmsCountries() {
       });
 
     if (!optionItems.length) {
-      throw new Error('empty country list');
+      throw new Error('国家列表为空');
     }
 
     heroSmsCountrySearchTextById.clear();
@@ -5540,7 +6581,7 @@ async function loadHeroSmsCountries() {
     applyOptions(optionItems, selectHeroSmsCountry);
     applyOptions(optionItems, selectHeroSmsCountryFallback);
   } catch (error) {
-    console.warn('Failed to load HeroSMS countries:', error);
+    console.warn('加载 HeroSMS 国家列表失败：', error);
     const fallbackItems = HERO_SMS_FALLBACK_COUNTRY_ITEMS
       .map((item) => {
         const id = normalizeHeroSmsCountryId(item.id);
@@ -5909,7 +6950,7 @@ async function loadFiveSimCountries() {
     const items = parseFiveSimCountriesPayload(payload);
     applyOptions(items.length ? items : fallbackItems);
   } catch (error) {
-    console.warn('Failed to load 5sim countries:', error);
+    console.warn('加载 5sim 国家列表失败：', error);
     applyOptions(fallbackItems);
   }
 
@@ -6217,13 +7258,18 @@ async function buildNexSmsPricePreviewLines(options = {}) {
   const serviceCode = normalizeNexSmsServiceCodeValue(
     inputNexSmsServiceCode?.value || latestState?.nexSmsServiceCode || DEFAULT_NEX_SMS_SERVICE_CODE
   );
-  const maxPriceText = normalizeHeroSmsMaxPriceValue(inputHeroSmsMaxPrice?.value || '');
-  const maxPrice = maxPriceText ? Number(maxPriceText) : null;
+  const priceRange = resolvePhoneSmsPricePreviewRange(
+    typeof PHONE_SMS_PROVIDER_NEXSMS !== 'undefined' ? PHONE_SMS_PROVIDER_NEXSMS : 'nexsms'
+  );
+  const maxPrice = priceRange.maxPrice;
   const apiKey = String(inputNexSmsApiKey?.value || '').trim();
   const providerLabel = String(options?.providerLabel || 'NexSMS').trim();
 
   if (!apiKey) {
     return [`${providerLabel}: 请先填写 NexSMS API Key`];
+  }
+  if (priceRange.invalid) {
+    return [`${providerLabel}: ${buildPhoneSmsPriceRangePreviewMessage(priceRange)}`];
   }
   if (!countryIds.length) {
     return [`${providerLabel}: 请先选择至少 1 个国家`];
@@ -6264,19 +7310,22 @@ async function buildNexSmsPricePreviewLines(options = {}) {
         .map((entry) => entry.price);
       const uniqueSorted = Array.from(new Set(availablePrices)).sort((left, right) => left - right);
       const fallbackMin = Number(data?.minPrice);
-      const lowest = uniqueSorted.length
-        ? uniqueSorted[0]
-        : (Number.isFinite(fallbackMin) && fallbackMin > 0 ? Math.round(fallbackMin * 10000) / 10000 : null);
+      const filteredTierEntries = filterPhoneSmsPriceEntriesForPreviewRange(tierEntries, priceRange);
+      const rangePrices = filterPhoneSmsPriceValuesForPreviewRange(uniqueSorted, priceRange);
+      const fallbackMinPrice = Number.isFinite(fallbackMin) && fallbackMin > 0
+        ? Math.round(fallbackMin * 10000) / 10000
+        : null;
+      const rangeFallbackMin = isPhoneSmsPriceWithinPreviewRange(fallbackMinPrice, priceRange)
+        ? fallbackMinPrice
+        : null;
+      const lowest = rangePrices.length ? rangePrices[0] : rangeFallbackMin;
       if (!Number.isFinite(lowest)) {
-        previews.push(`${countryLabel}: 暂无可用号源`);
+        previews.push(`${countryLabel}: ${buildPhoneSmsPriceRangePreviewMessage(priceRange)}`);
         continue;
       }
-      const tierText = formatPriceTiersForPreview(tierEntries, { maxPrice });
-      if (Number.isFinite(maxPrice) && maxPrice > 0 && lowest > maxPrice) {
-        previews.push(`${countryLabel}: 最低 ${lowest}（高于上限 ${maxPrice}）${tierText ? `；档位：${tierText}` : ''}`);
-      } else {
-        previews.push(`${countryLabel}: 最低 ${lowest}${tierText ? `；档位：${tierText}` : ''}`);
-      }
+      const tierText = formatPriceTiersForPreview(filteredTierEntries, { maxPrice });
+      const lowestLabel = priceRange.hasMinPrice || priceRange.hasMaxPrice ? '区间内最低' : '最低';
+      previews.push(`${countryLabel}: ${lowestLabel} ${lowest}${tierText ? `；档位：${tierText}` : ''}`);
     } catch (error) {
       previews.push(`${countryLabel}: 查询失败（${normalizeHeroSmsFetchErrorMessage(error)}）`);
     }
@@ -6304,12 +7353,18 @@ async function previewFiveSimPriceTiers() {
   const product = normalizeFiveSimProductValue(
     inputFiveSimProduct?.value || latestState?.fiveSimProduct || DEFAULT_FIVE_SIM_PRODUCT
   );
-  const maxPriceText = normalizeHeroSmsMaxPriceValue(inputHeroSmsMaxPrice?.value || '');
-  const maxPrice = maxPriceText ? Number(maxPriceText) : null;
+  const priceRange = resolvePhoneSmsPricePreviewRange(
+    typeof PHONE_SMS_PROVIDER_FIVE_SIM !== 'undefined' ? PHONE_SMS_PROVIDER_FIVE_SIM : '5sim'
+  );
+  const maxPrice = priceRange.maxPrice;
 
   displayHeroSmsPriceTiers.textContent = '查询中...';
   if (rowHeroSmsPriceTiers) {
     rowHeroSmsPriceTiers.style.display = '';
+  }
+  if (priceRange.invalid) {
+    displayHeroSmsPriceTiers.textContent = buildPhoneSmsPriceRangePreviewMessage(priceRange);
+    return;
   }
   if (!countryCodes.length) {
     displayHeroSmsPriceTiers.textContent = '请先选择至少 1 个国家，再查询价格';
@@ -6380,17 +7435,16 @@ async function previewFiveSimPriceTiers() {
         .filter((entry) => entry.count === null || entry.count > 0)
         .map((entry) => entry.price);
       const uniqueSorted = Array.from(new Set(prices)).sort((left, right) => left - right);
-      if (!uniqueSorted.length) {
-        previews.push(`${countryLabel}: 暂无可用号源`);
+      const rangePrices = filterPhoneSmsPriceValuesForPreviewRange(uniqueSorted, priceRange);
+      const filteredTierEntries = filterPhoneSmsPriceEntriesForPreviewRange(tierEntries, priceRange);
+      if (!rangePrices.length) {
+        previews.push(`${countryLabel}: ${buildPhoneSmsPriceRangePreviewMessage(priceRange)}`);
         continue;
       }
-      const lowest = uniqueSorted[0];
-      const tierText = formatPriceTiersForPreview(tierEntries, { maxPrice });
-      if (Number.isFinite(maxPrice) && maxPrice > 0 && lowest > maxPrice) {
-        previews.push(`${countryLabel}: 最低 ${lowest}（高于上限 ${maxPrice}）${tierText ? `；档位：${tierText}` : ''}`);
-      } else {
-        previews.push(`${countryLabel}: 最低 ${lowest}${tierText ? `；档位：${tierText}` : ''}`);
-      }
+      const lowest = rangePrices[0];
+      const tierText = formatPriceTiersForPreview(filteredTierEntries, { maxPrice });
+      const lowestLabel = priceRange.hasMinPrice || priceRange.hasMaxPrice ? '区间内最低' : '最低';
+      previews.push(`${countryLabel}: ${lowestLabel} ${lowest}${tierText ? `；档位：${tierText}` : ''}`);
     } catch (error) {
       previews.push(`${countryLabel}: 查询失败（${normalizeHeroSmsFetchErrorMessage(error)}）`);
     }
@@ -6411,12 +7465,17 @@ async function buildFiveSimPricePreviewLines(options = {}) {
   const product = normalizeFiveSimProductValue(
     inputFiveSimProduct?.value || latestState?.fiveSimProduct || DEFAULT_FIVE_SIM_PRODUCT
   );
-  const maxPriceText = normalizeHeroSmsMaxPriceValue(inputHeroSmsMaxPrice?.value || '');
-  const maxPrice = maxPriceText ? Number(maxPriceText) : null;
+  const priceRange = resolvePhoneSmsPricePreviewRange(
+    typeof PHONE_SMS_PROVIDER_FIVE_SIM !== 'undefined' ? PHONE_SMS_PROVIDER_FIVE_SIM : '5sim'
+  );
+  const maxPrice = priceRange.maxPrice;
   const providerLabel = String(options?.providerLabel || '5sim').trim();
 
   if (!countryCodes.length) {
     return [`${providerLabel}: 请先选择至少 1 个国家`];
+  }
+  if (priceRange.invalid) {
+    return [`${providerLabel}: ${buildPhoneSmsPriceRangePreviewMessage(priceRange)}`];
   }
 
   const collectPriceEntries = (payload, entries = []) => {
@@ -6483,17 +7542,16 @@ async function buildFiveSimPricePreviewLines(options = {}) {
         .filter((entry) => entry.count === null || entry.count > 0)
         .map((entry) => entry.price);
       const uniqueSorted = Array.from(new Set(prices)).sort((left, right) => left - right);
-      if (!uniqueSorted.length) {
-        previews.push(`${countryLabel}: 暂无可用号源`);
+      const rangePrices = filterPhoneSmsPriceValuesForPreviewRange(uniqueSorted, priceRange);
+      const filteredTierEntries = filterPhoneSmsPriceEntriesForPreviewRange(tierEntries, priceRange);
+      if (!rangePrices.length) {
+        previews.push(`${countryLabel}: ${buildPhoneSmsPriceRangePreviewMessage(priceRange)}`);
         continue;
       }
-      const lowest = uniqueSorted[0];
-      const tierText = formatPriceTiersForPreview(tierEntries, { maxPrice });
-      if (Number.isFinite(maxPrice) && maxPrice > 0 && lowest > maxPrice) {
-        previews.push(`${countryLabel}: 最低 ${lowest}（高于上限 ${maxPrice}）${tierText ? `；档位：${tierText}` : ''}`);
-      } else {
-        previews.push(`${countryLabel}: 最低 ${lowest}${tierText ? `；档位：${tierText}` : ''}`);
-      }
+      const lowest = rangePrices[0];
+      const tierText = formatPriceTiersForPreview(filteredTierEntries, { maxPrice });
+      const lowestLabel = priceRange.hasMinPrice || priceRange.hasMaxPrice ? '区间内最低' : '最低';
+      previews.push(`${countryLabel}: ${lowestLabel} ${lowest}${tierText ? `；档位：${tierText}` : ''}`);
     } catch (error) {
       previews.push(`${countryLabel}: 查询失败（${normalizeHeroSmsFetchErrorMessage(error)}）`);
     }
@@ -6565,13 +7623,18 @@ async function previewHeroSmsPriceTiers() {
         label: normalizeHeroSmsCountryLabel(country?.label, ''),
       }))
       .filter((country) => country.id > 0);
-    const maxPriceText = normalizeHeroSmsMaxPriceValue(inputHeroSmsMaxPrice?.value || '');
-    const maxPrice = maxPriceText ? Number(maxPriceText) : null;
+    const priceRange = resolvePhoneSmsPricePreviewRange(heroProviderValue);
+    const maxPrice = priceRange.maxPrice;
     const apiKey = String(inputHeroSmsApiKey?.value || '').trim();
 
     const heroLines = ['HeroSMS:'];
     if (!apiKey) {
       heroLines.push('请先填写接码 API Key');
+      previews.push(...heroLines, '');
+      continue;
+    }
+    if (priceRange.invalid) {
+      heroLines.push(buildPhoneSmsPriceRangePreviewMessage(priceRange));
       previews.push(...heroLines, '');
       continue;
     }
@@ -6699,13 +7762,18 @@ async function previewHeroSmsPriceTiers() {
           price,
           count: Math.max(0, Number(tierStockByPrice.get(price)) || 0),
         }));
-        const withinLimitInStockPrices = Number.isFinite(maxPrice) && maxPrice > 0
-          ? inStockPrices.filter((price) => price <= maxPrice)
-          : inStockPrices;
-        const tierPreviewText = formatPriceTiersWithZeroStockForPreview(tierEntries, { maxPrice });
-        if (!inStockPrices.length) {
-          if (allPrices.length) {
-            const lowestKnown = formatHeroSmsPriceForPreview(allPrices[0]) || String(allPrices[0]);
+        const rangeAllPrices = filterPhoneSmsPriceValuesForPreviewRange(allPrices, priceRange);
+        const rangeInStockPrices = filterPhoneSmsPriceValuesForPreviewRange(inStockPrices, priceRange);
+        const filteredTierEntries = filterPhoneSmsPriceEntriesForPreviewRange(tierEntries, priceRange);
+        const tierPreviewText = formatPriceTiersWithZeroStockForPreview(filteredTierEntries, { maxPrice });
+        if (!rangeInStockPrices.length) {
+          if ((priceRange.hasMinPrice || priceRange.hasMaxPrice) && allPrices.length && !rangeAllPrices.length) {
+            heroLines.push(`${countryLabel}: ${buildPhoneSmsPriceRangePreviewMessage(priceRange)}`);
+            continue;
+          }
+          if (rangeAllPrices.length || allPrices.length) {
+            const lowestKnownPrice = rangeAllPrices.length ? rangeAllPrices[0] : allPrices[0];
+            const lowestKnown = formatHeroSmsPriceForPreview(lowestKnownPrice) || String(lowestKnownPrice);
             heroLines.push(`${countryLabel}: 全档位均无库存（最低标价 ${lowestKnown}）${tierPreviewText ? `；档位：${tierPreviewText}` : ''}`);
             continue;
           }
@@ -6716,14 +7784,10 @@ async function previewHeroSmsPriceTiers() {
           heroLines.push(`${countryLabel}: 无可用价格`);
           continue;
         }
-        if (Number.isFinite(maxPrice) && maxPrice > 0 && !withinLimitInStockPrices.length) {
-          const lowestInStockText = formatHeroSmsPriceForPreview(inStockPrices[0]) || String(inStockPrices[0]);
-          heroLines.push(`${countryLabel}: 上限内无可用号源（上限 ${formatHeroSmsPriceForPreview(maxPrice) || maxPrice}，最低可用 ${lowestInStockText}）${tierPreviewText ? `；档位：${tierPreviewText}` : ''}`);
-        } else {
-          const lowestWithinLimit = withinLimitInStockPrices[0];
-          const lowestText = formatHeroSmsPriceForPreview(lowestWithinLimit) || String(lowestWithinLimit);
-          heroLines.push(`${countryLabel}: 上限内最低 ${lowestText}${tierPreviewText ? `；档位：${tierPreviewText}` : ''}`);
-        }
+        const lowestWithinRange = rangeInStockPrices[0];
+        const lowestText = formatHeroSmsPriceForPreview(lowestWithinRange) || String(lowestWithinRange);
+        const lowestLabel = priceRange.hasMinPrice || priceRange.hasMaxPrice ? '区间内最低' : '最低';
+        heroLines.push(`${countryLabel}: ${lowestLabel} ${lowestText}${tierPreviewText ? `；档位：${tierPreviewText}` : ''}`);
       } catch (error) {
         heroLines.push(`${countryLabel}: 查询失败（${normalizeHeroSmsFetchErrorMessage(error)}）`);
       }
@@ -6822,6 +7886,20 @@ function setMail2925Mode(mode) {
   });
 }
 
+function getSelectedCloudflareTempEmailLookupMode() {
+  const activeButton = tempEmailLookupModeButtons.find((button) => button.classList.contains('is-active'));
+  return normalizeCloudflareTempEmailLookupMode(activeButton?.dataset.tempEmailLookupMode);
+}
+
+function setCloudflareTempEmailLookupMode(mode) {
+  const resolvedMode = normalizeCloudflareTempEmailLookupMode(mode);
+  tempEmailLookupModeButtons.forEach((button) => {
+    const active = button.dataset.tempEmailLookupMode === resolvedMode;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+
 function getSelectedHotmailServiceMode() {
   const activeButton = hotmailServiceModeButtons.find((button) => button.classList.contains('is-active'));
   return normalizeHotmailServiceMode(activeButton?.dataset.hotmailServiceMode);
@@ -6852,6 +7930,139 @@ function normalizeSignupMethod(value = '') {
     : 'email';
 }
 
+function isPhoneSignupReuseLocked(state = latestState, options = {}) {
+  const hasOptionMethod = Object.prototype.hasOwnProperty.call(options || {}, 'signupMethod');
+  const rawMethod = hasOptionMethod
+    ? options.signupMethod
+    : (typeof getSelectedSignupMethod === 'function'
+      ? getSelectedSignupMethod()
+      : (state?.signupMethod || DEFAULT_SIGNUP_METHOD));
+  const selectedMethod = normalizeSignupMethod(rawMethod);
+  if (selectedMethod === SIGNUP_METHOD_PHONE) {
+    return true;
+  }
+
+  if (!options?.includeRuntimeIdentity) {
+    return false;
+  }
+
+  const identifierType = String(
+    options?.accountIdentifierType
+    ?? state?.accountIdentifierType
+    ?? ''
+  ).trim().toLowerCase();
+  return identifierType === 'phone';
+}
+
+function getStoredPhoneSmsReuseEnabled(state = latestState) {
+  return normalizeHeroSmsReuseEnabledValue(
+    state?.phoneSmsReuseEnabled,
+    state?.heroSmsReuseEnabled
+  );
+}
+
+function getStoredFreePhoneReuseEnabled(state = latestState) {
+  return Boolean(state?.freePhoneReuseEnabled);
+}
+
+function getStoredFreePhoneReuseAutoEnabled(state = latestState) {
+  return Boolean(state?.freePhoneReuseAutoEnabled);
+}
+
+function restorePhoneReuseControlsFromState(state = latestState) {
+  if (typeof inputHeroSmsReuseEnabled !== 'undefined' && inputHeroSmsReuseEnabled) {
+    inputHeroSmsReuseEnabled.checked = getStoredPhoneSmsReuseEnabled(state);
+  }
+  if (typeof inputFreePhoneReuseEnabled !== 'undefined' && inputFreePhoneReuseEnabled) {
+    inputFreePhoneReuseEnabled.checked = getStoredFreePhoneReuseEnabled(state);
+  }
+  if (typeof inputFreePhoneReuseAutoEnabled !== 'undefined' && inputFreePhoneReuseAutoEnabled) {
+    inputFreePhoneReuseAutoEnabled.checked = getStoredFreePhoneReuseAutoEnabled(state);
+  }
+}
+
+function setElementReuseLockedState(element, locked, title = PHONE_SIGNUP_REUSE_LOCK_TITLE) {
+  if (!element) {
+    return;
+  }
+  element.classList?.toggle?.('is-disabled', Boolean(locked));
+  if (locked) {
+    element.title = title;
+  } else if (element.title === title) {
+    element.title = '';
+  }
+}
+
+function normalizePanelMode(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'sub2api' || normalized === 'codex2api') {
+    return normalized;
+  }
+  return 'cpa';
+}
+
+let flowCapabilityRegistry = null;
+
+function getFlowCapabilityRegistry() {
+  if (flowCapabilityRegistry) {
+    return flowCapabilityRegistry;
+  }
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  flowCapabilityRegistry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+    defaultFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  }) || null;
+  return flowCapabilityRegistry;
+}
+
+function resolveCurrentSidepanelCapabilities(options = {}) {
+  const registry = getFlowCapabilityRegistry();
+  if (!registry?.resolveSidepanelCapabilities) {
+    return null;
+  }
+  const state = {
+    ...(latestState || {}),
+    ...(options?.state || {}),
+  };
+  return registry.resolveSidepanelCapabilities({
+    activeFlowId: options?.activeFlowId ?? state?.activeFlowId,
+    panelMode: options?.panelMode ?? state?.panelMode,
+    signupMethod: options?.signupMethod ?? state?.signupMethod,
+    state,
+  });
+}
+
+function resolveStepDefinitionCapabilityState(state = latestState, options = {}) {
+  const nextState = {
+    ...(state || {}),
+    ...(options?.state || {}),
+  };
+  const capabilityState = resolveCurrentSidepanelCapabilities({
+    activeFlowId: options?.activeFlowId ?? nextState?.activeFlowId,
+    panelMode: options?.panelMode ?? nextState?.panelMode,
+    signupMethod: options?.signupMethod ?? nextState?.signupMethod,
+    state: nextState,
+  });
+  return {
+    capabilityState,
+    plusModeEnabled: capabilityState
+      ? Boolean(capabilityState.runtimeLocks?.plusModeEnabled)
+      : Boolean(nextState?.plusModeEnabled),
+    signupMethod: capabilityState?.effectiveSignupMethod
+      || normalizeSignupMethod((options?.signupMethod ?? nextState?.signupMethod) || DEFAULT_SIGNUP_METHOD),
+  };
+}
+
+function getSelectedPanelMode() {
+  const selectedValue = typeof selectPanelMode !== 'undefined' && selectPanelMode
+    ? selectPanelMode.value
+    : (typeof latestState !== 'undefined' ? latestState?.panelMode : '');
+  const resolvedPanelMode = normalizePanelMode(selectedValue || 'cpa');
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({ panelMode: resolvedPanelMode })
+    : null;
+  return capabilityState?.effectivePanelMode || capabilityState?.panelMode || resolvedPanelMode;
+}
+
 function getSelectedSignupMethod() {
   const activeButton = signupMethodButtons.find((button) => button.classList.contains('is-active'));
   return normalizeSignupMethod(activeButton?.dataset.signupMethod || latestState?.signupMethod || DEFAULT_SIGNUP_METHOD);
@@ -6870,7 +8081,41 @@ function setSignupMethod(method) {
 
 function canSelectPhoneSignupMethod() {
   const phoneEnabled = Boolean(inputPhoneVerificationEnabled?.checked);
+  const plusModeEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+    ? Boolean(inputPlusModeEnabled.checked)
+    : Boolean(latestState?.plusModeEnabled);
   const contributionModeEnabled = Boolean(latestState?.contributionMode);
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({
+      panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : latestState?.panelMode,
+      state: {
+        ...(typeof latestState !== 'undefined' ? latestState : {}),
+        phoneVerificationEnabled: phoneEnabled,
+        plusModeEnabled,
+        contributionMode: contributionModeEnabled,
+      },
+    })
+    : (() => {
+      const rootScope = typeof window !== 'undefined' ? window : globalThis;
+      const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+        defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+      }) || null;
+      return registry?.resolveSidepanelCapabilities
+        ? registry.resolveSidepanelCapabilities({
+          activeFlowId: typeof latestState !== 'undefined' ? latestState?.activeFlowId : '',
+          panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : (latestState?.panelMode || 'cpa'),
+          state: {
+            ...(typeof latestState !== 'undefined' ? latestState : {}),
+            phoneVerificationEnabled: phoneEnabled,
+            plusModeEnabled,
+            contributionMode: contributionModeEnabled,
+          },
+        })
+        : null;
+    })();
+  if (capabilityState && typeof capabilityState.canSelectPhoneSignup === 'boolean') {
+    return capabilityState.canSelectPhoneSignup;
+  }
   return phoneEnabled && !contributionModeEnabled;
 }
 
@@ -6911,6 +8156,8 @@ function updateSignupMethodUI(options = {}) {
     if (method === SIGNUP_METHOD_PHONE) {
       if (!Boolean(inputPhoneVerificationEnabled?.checked)) {
         button.title = '开启接码后可选择手机号注册';
+      } else if (typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled?.checked) {
+        button.title = 'Plus 模式第一版暂不支持手机号注册';
       } else if (latestState?.contributionMode) {
         button.title = '贡献模式第一版暂不支持手机号注册';
       } else if (locked) {
@@ -6920,23 +8167,77 @@ function updateSignupMethodUI(options = {}) {
       }
     }
   });
-  syncStepDefinitionsForMode(
-    typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
-      ? Boolean(inputPlusModeEnabled.checked)
-      : Boolean(latestState?.plusModeEnabled),
-    {
-      plusPaymentMethod: getSelectedPlusPaymentMethod(latestState),
+  const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+    ? resolveStepDefinitionCapabilityState({
+      ...(latestState || {}),
+      plusModeEnabled: typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+        ? Boolean(inputPlusModeEnabled.checked)
+        : Boolean(latestState?.plusModeEnabled),
       signupMethod: selectedMethod,
-    }
-  );
+    }, {
+      signupMethod: selectedMethod,
+    })
+    : {
+      plusModeEnabled: typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+        ? Boolean(inputPlusModeEnabled.checked)
+        : Boolean(latestState?.plusModeEnabled),
+      signupMethod: selectedMethod,
+    };
+  syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
+    plusPaymentMethod: getSelectedPlusPaymentMethod(latestState),
+    signupMethod: selectedMethod,
+    phoneSignupReloginAfterBindEmailEnabled: typeof inputPhoneSignupReloginAfterBindEmail !== 'undefined' && inputPhoneSignupReloginAfterBindEmail
+      ? Boolean(inputPhoneSignupReloginAfterBindEmail.checked)
+      : currentPhoneSignupReloginAfterBindEmailEnabled,
+  });
   if (typeof syncSignupPhoneInputFromState === 'function') {
     syncSignupPhoneInputFromState(latestState);
   }
 }
 
 function updatePhoneVerificationSettingsUI() {
-  const enabled = Boolean(inputPhoneVerificationEnabled?.checked);
+  const rawEnabled = Boolean(inputPhoneVerificationEnabled?.checked);
+  const rawPlusModeEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+    ? Boolean(inputPlusModeEnabled.checked)
+    : Boolean(latestState?.plusModeEnabled);
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({
+      panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : latestState?.panelMode,
+      signupMethod: typeof getSelectedSignupMethod === 'function' ? getSelectedSignupMethod() : latestState?.signupMethod,
+      state: {
+        ...(latestState || {}),
+        phoneVerificationEnabled: rawEnabled,
+        plusModeEnabled: rawPlusModeEnabled,
+      },
+    })
+    : (() => {
+      const rootScope = typeof window !== 'undefined' ? window : globalThis;
+      const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+        defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+      }) || null;
+      return registry?.resolveSidepanelCapabilities
+        ? registry.resolveSidepanelCapabilities({
+          activeFlowId: latestState?.activeFlowId,
+          panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : (latestState?.panelMode || 'cpa'),
+          signupMethod: typeof getSelectedSignupMethod === 'function' ? getSelectedSignupMethod() : latestState?.signupMethod,
+          state: {
+            ...(latestState || {}),
+            phoneVerificationEnabled: rawEnabled,
+            plusModeEnabled: rawPlusModeEnabled,
+          },
+        })
+        : null;
+    })();
+  const canShowPhoneSettings = capabilityState
+    ? Boolean(capabilityState.canShowPhoneSettings)
+    : true;
+  const enabled = canShowPhoneSettings && rawEnabled;
   const showSettings = enabled && phoneVerificationSectionExpanded;
+  const selectedSignupMethodForPhoneSettings = typeof getSelectedSignupMethod === 'function'
+    ? getSelectedSignupMethod()
+    : normalizeSignupMethod(latestState?.signupMethod || DEFAULT_SIGNUP_METHOD);
+  const showPhoneSignupReloginAfterBindEmail = showSettings
+    && selectedSignupMethodForPhoneSettings === SIGNUP_METHOD_PHONE;
   const normalizeProvider = typeof normalizePhoneSmsProviderValue === 'function'
     ? normalizePhoneSmsProviderValue
     : ((value = '') => {
@@ -6958,10 +8259,10 @@ function updatePhoneVerificationSettingsUI() {
   const fiveSimProvider = provider === fiveSimProviderValue;
   const nexSmsProvider = provider === nexSmsProviderValue;
   if (rowPhoneVerificationEnabled) {
-    rowPhoneVerificationEnabled.style.display = '';
+    rowPhoneVerificationEnabled.style.display = canShowPhoneSettings ? '' : 'none';
   }
   if (rowHeroSmsPlatform) {
-    rowHeroSmsPlatform.style.display = '';
+    rowHeroSmsPlatform.style.display = canShowPhoneSettings ? '' : 'none';
   }
   updateSignupMethodUI();
   if (btnTogglePhoneVerificationSection) {
@@ -7001,12 +8302,17 @@ function updatePhoneVerificationSettingsUI() {
     typeof rowPhoneCodeTimeoutWindows !== 'undefined' ? rowPhoneCodeTimeoutWindows : null,
     typeof rowPhoneCodePollIntervalSeconds !== 'undefined' ? rowPhoneCodePollIntervalSeconds : null,
     typeof rowPhoneCodePollMaxRounds !== 'undefined' ? rowPhoneCodePollMaxRounds : null,
+    typeof rowFreePhoneReuseEnabled !== 'undefined' ? rowFreePhoneReuseEnabled : null,
+    typeof rowFreePhoneReuseAutoEnabled !== 'undefined' ? rowFreePhoneReuseAutoEnabled : null,
   ];
   phoneVerificationRows.forEach((row) => {
     if (row) {
       row.style.display = showSettings ? '' : 'none';
     }
   });
+  if (typeof rowPhoneSignupReloginAfterBindEmail !== 'undefined' && rowPhoneSignupReloginAfterBindEmail) {
+    rowPhoneSignupReloginAfterBindEmail.style.display = showPhoneSignupReloginAfterBindEmail ? '' : 'none';
+  }
   if (rowHeroSmsCountry) rowHeroSmsCountry.style.display = showSettings && heroProvider ? '' : 'none';
   if (rowHeroSmsCountryFallback) rowHeroSmsCountryFallback.style.display = showSettings && heroProvider ? '' : 'none';
   if (rowHeroSmsAcquirePriority) rowHeroSmsAcquirePriority.style.display = showSettings && heroProvider ? '' : 'none';
@@ -7023,12 +8329,99 @@ function updatePhoneVerificationSettingsUI() {
   if (rowFiveSimOperator) {
     rowFiveSimOperator.style.display = showSettings && fiveSimProvider ? '' : 'none';
   }
+  if (typeof rowFreePhoneReuseEnabled !== 'undefined' && rowFreePhoneReuseEnabled) {
+    rowFreePhoneReuseEnabled.style.display = showSettings ? '' : 'none';
+  }
+  if (typeof rowFreePhoneReuseAutoEnabled !== 'undefined' && rowFreePhoneReuseAutoEnabled) {
+    rowFreePhoneReuseAutoEnabled.style.display = showSettings ? '' : 'none';
+  }
+  const phoneSignupReuseLocked = typeof isPhoneSignupReuseLocked === 'function'
+    ? isPhoneSignupReuseLocked(latestState, {
+      signupMethod: typeof getSelectedSignupMethod === 'function'
+        ? getSelectedSignupMethod()
+        : latestState?.signupMethod,
+    })
+    : false;
+  if (!phoneSignupReuseLocked && phoneSignupReuseUiWasLocked) {
+    restorePhoneReuseControlsFromState(latestState);
+  }
+  if (phoneSignupReuseLocked) {
+    if (typeof inputHeroSmsReuseEnabled !== 'undefined' && inputHeroSmsReuseEnabled) {
+      inputHeroSmsReuseEnabled.checked = false;
+    }
+    if (typeof inputFreePhoneReuseEnabled !== 'undefined' && inputFreePhoneReuseEnabled) {
+      inputFreePhoneReuseEnabled.checked = false;
+    }
+    if (typeof inputFreePhoneReuseAutoEnabled !== 'undefined' && inputFreePhoneReuseAutoEnabled) {
+      inputFreePhoneReuseAutoEnabled.checked = false;
+    }
+  }
+  phoneSignupReuseUiWasLocked = phoneSignupReuseLocked;
+  const settingsLocked = isAutoRunLockedPhase() || isAutoRunScheduledPhase();
+  if (typeof inputPhoneSignupReloginAfterBindEmail !== 'undefined' && inputPhoneSignupReloginAfterBindEmail) {
+    inputPhoneSignupReloginAfterBindEmail.disabled = settingsLocked || !showPhoneSignupReloginAfterBindEmail;
+  }
+  if (typeof rowPhoneSignupReloginAfterBindEmail !== 'undefined' && rowPhoneSignupReloginAfterBindEmail) {
+    rowPhoneSignupReloginAfterBindEmail.classList.toggle('is-disabled', settingsLocked || !showPhoneSignupReloginAfterBindEmail);
+  }
+  const freePhoneReuseEnabled = Boolean(
+    !phoneSignupReuseLocked
+    && typeof inputFreePhoneReuseEnabled !== 'undefined'
+    && inputFreePhoneReuseEnabled?.checked
+  );
+  const freePhoneReuseAutoAvailable = showSettings && !phoneSignupReuseLocked && freePhoneReuseEnabled;
+  if (typeof inputHeroSmsReuseEnabled !== 'undefined' && inputHeroSmsReuseEnabled) {
+    inputHeroSmsReuseEnabled.disabled = settingsLocked || phoneSignupReuseLocked;
+  }
+  if (typeof inputFreePhoneReuseAutoEnabled !== 'undefined' && inputFreePhoneReuseAutoEnabled) {
+    inputFreePhoneReuseAutoEnabled.disabled = settingsLocked || phoneSignupReuseLocked || !freePhoneReuseAutoAvailable;
+    if (!freePhoneReuseAutoAvailable) {
+      inputFreePhoneReuseAutoEnabled.checked = false;
+    }
+  }
+  setFreePhoneReuseControlsLocked(settingsLocked || phoneSignupReuseLocked);
+  if (typeof selectHeroSmsPreferredActivation !== 'undefined' && selectHeroSmsPreferredActivation) {
+    selectHeroSmsPreferredActivation.disabled = settingsLocked || phoneSignupReuseLocked;
+  }
+  if (typeof inputFreeReusablePhone !== 'undefined' && inputFreeReusablePhone) {
+    inputFreeReusablePhone.disabled = settingsLocked || phoneSignupReuseLocked;
+  }
+  if (typeof btnSaveFreeReusablePhone !== 'undefined' && btnSaveFreeReusablePhone) {
+    btnSaveFreeReusablePhone.disabled = settingsLocked || phoneSignupReuseLocked;
+  }
+  if (typeof btnClearFreeReusablePhone !== 'undefined' && btnClearFreeReusablePhone) {
+    btnClearFreeReusablePhone.disabled = settingsLocked || phoneSignupReuseLocked;
+  }
+  const heroSmsReuseRow = typeof inputHeroSmsReuseEnabled !== 'undefined' && inputHeroSmsReuseEnabled?.closest
+    ? inputHeroSmsReuseEnabled.closest('.hero-sms-price-control')
+    : null;
+  setElementReuseLockedState(heroSmsReuseRow, phoneSignupReuseLocked);
+  setElementReuseLockedState(
+    typeof rowFreePhoneReuseEnabled !== 'undefined' ? rowFreePhoneReuseEnabled : null,
+    phoneSignupReuseLocked
+  );
+  setElementReuseLockedState(
+    typeof rowFreePhoneReuseAutoEnabled !== 'undefined' ? rowFreePhoneReuseAutoEnabled : null,
+    phoneSignupReuseLocked
+  );
+  setElementReuseLockedState(
+    typeof rowHeroSmsPreferredActivation !== 'undefined' ? rowHeroSmsPreferredActivation : null,
+    phoneSignupReuseLocked
+  );
+  setElementReuseLockedState(
+    typeof rowFreeReusablePhone !== 'undefined' ? rowFreeReusablePhone : null,
+    phoneSignupReuseLocked
+  );
+  if (typeof rowFreePhoneReuseAutoEnabled !== 'undefined' && rowFreePhoneReuseAutoEnabled) {
+    rowFreePhoneReuseAutoEnabled.classList.toggle('is-disabled', phoneSignupReuseLocked || !freePhoneReuseAutoAvailable);
+  }
   const runtimeVisible = enabled;
   [
     typeof rowHeroSmsRuntimePair !== 'undefined' ? rowHeroSmsRuntimePair : null,
     typeof rowHeroSmsCurrentNumber !== 'undefined' ? rowHeroSmsCurrentNumber : null,
     typeof rowHeroSmsCurrentCountdown !== 'undefined' ? rowHeroSmsCurrentCountdown : null,
     typeof rowHeroSmsCurrentCode !== 'undefined' ? rowHeroSmsCurrentCode : null,
+    typeof rowFreeReusablePhone !== 'undefined' ? rowFreeReusablePhone : null,
     typeof rowHeroSmsPreferredActivation !== 'undefined' ? rowHeroSmsPreferredActivation : null,
   ].forEach((row) => {
     if (row) {
@@ -7049,58 +8442,144 @@ function updatePlusModeUI() {
   const gopayValue = typeof PLUS_PAYMENT_METHOD_GOPAY !== 'undefined' ? PLUS_PAYMENT_METHOD_GOPAY : 'gopay';
   const gpcValue = typeof PLUS_PAYMENT_METHOD_GPC_HELPER !== 'undefined' ? PLUS_PAYMENT_METHOD_GPC_HELPER : 'gpc-helper';
   const defaultMethod = typeof DEFAULT_PLUS_PAYMENT_METHOD !== 'undefined' ? DEFAULT_PLUS_PAYMENT_METHOD : paypalValue;
-  const enabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+  const rawEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
     ? Boolean(inputPlusModeEnabled.checked)
     : false;
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({
+      panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : latestState?.panelMode,
+      state: {
+        ...(latestState || {}),
+        plusModeEnabled: rawEnabled,
+      },
+    })
+    : (() => {
+      const rootScope = typeof window !== 'undefined' ? window : globalThis;
+      const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+        defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+      }) || null;
+      return registry?.resolveSidepanelCapabilities
+        ? registry.resolveSidepanelCapabilities({
+          activeFlowId: latestState?.activeFlowId,
+          panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : (latestState?.panelMode || 'cpa'),
+          state: {
+            ...(latestState || {}),
+            plusModeEnabled: rawEnabled,
+          },
+        })
+        : null;
+    })();
+  const supportsPlusMode = capabilityState
+    ? Boolean(capabilityState.canShowPlusSettings)
+    : true;
+  const enabled = supportsPlusMode && rawEnabled;
   const method = enabled ? getSelectedPlusPaymentMethod() : defaultMethod;
+  const gpcPhoneMode = normalizeGpcHelperPhoneModeValue(
+    typeof selectGpcHelperPhoneMode !== 'undefined' && selectGpcHelperPhoneMode
+      ? selectGpcHelperPhoneMode.value
+      : (latestState?.gopayHelperPhoneMode || 'manual')
+  );
+  const gpcAutoModeDenied = isGpcAutoModePermissionDenied(latestState);
+  const isGpcAutoMode = gpcPhoneMode === GPC_HELPER_PHONE_MODE_AUTO;
+  const gpcAutoModeBlocked = isGpcAutoMode && gpcAutoModeDenied;
+  const gpcOtpChannel = normalizeGpcOtpChannelValue(
+    typeof selectGpcHelperOtpChannel !== 'undefined' && selectGpcHelperOtpChannel
+      ? selectGpcHelperOtpChannel.value
+      : (latestState?.gopayHelperOtpChannel || 'whatsapp')
+  );
+  const localSmsEnabled = Boolean(
+    typeof inputGpcHelperLocalSmsEnabled !== 'undefined' && inputGpcHelperLocalSmsEnabled
+      ? inputGpcHelperLocalSmsEnabled.checked
+      : latestState?.gopayHelperLocalSmsHelperEnabled
+  );
+  const selectedMethod = typeof selectPlusPaymentMethod !== 'undefined' && selectPlusPaymentMethod?.value
+    ? normalizePlusPaymentMethod(selectPlusPaymentMethod.value)
+    : method;
+  const gpcRowsVisible = enabled && selectedMethod === gpcValue;
+  const canShowGpcModeSelector = gpcRowsVisible;
+  const localSmsControlsVisible = gpcRowsVisible && !isGpcAutoMode;
+  const effectiveLocalSmsEnabled = !isGpcAutoMode && localSmsEnabled;
+  if (typeof rowPlusMode !== 'undefined' && rowPlusMode) {
+    rowPlusMode.style.display = 'none';
+  }
   if (typeof selectPlusPaymentMethod !== 'undefined' && selectPlusPaymentMethod) {
-    selectPlusPaymentMethod.value = method;
+    selectPlusPaymentMethod.value = 'paypal';
     if (selectPlusPaymentMethod.style) {
-      selectPlusPaymentMethod.style.display = enabled ? '' : 'none';
+      selectPlusPaymentMethod.style.display = 'none';
     }
+  }
+  if (typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled) {
+    inputPlusModeEnabled.checked = true;
   }
   if (typeof plusPaymentMethodCaption !== 'undefined' && plusPaymentMethodCaption) {
     plusPaymentMethodCaption.textContent = method === gpcValue
-      ? 'GPC 订阅链路'
+      ? `GPC ${isGpcAutoMode ? '自动' : '手动'}订阅链路`
       : method === gopayValue
       ? 'GoPay 印尼订阅链路'
       : 'PayPal 订阅链路';
   }
+  if (typeof plusPaymentMethodCaption !== 'undefined' && plusPaymentMethodCaption && method === gpcValue && gpcAutoModeBlocked) {
+    plusPaymentMethodCaption.textContent = 'GPC 自动订阅链路（需手动切换）';
+  }
   [
     typeof rowPlusPaymentMethod !== 'undefined' ? rowPlusPaymentMethod : null,
-  ].forEach((row) => {
-    if (!row) {
-      return;
-    }
-    row.style.display = enabled ? '' : 'none';
-  });
-  [
     typeof rowPayPalAccount !== 'undefined' ? rowPayPalAccount : null,
   ].forEach((row) => {
     if (!row) {
       return;
     }
-    const selectedMethod = typeof selectPlusPaymentMethod !== 'undefined' && selectPlusPaymentMethod?.value
-      ? normalizePlusPaymentMethod(selectPlusPaymentMethod.value)
-      : method;
-    row.style.display = enabled && selectedMethod === paypalValue ? '' : 'none';
+    row.style.display = 'none';
   });
   [
+    typeof rowPayPalSmsPhone !== 'undefined' ? rowPayPalSmsPhone : null,
+    typeof rowPayPalSmsApi !== 'undefined' ? rowPayPalSmsApi : null,
+    typeof rowBindCardNumber !== 'undefined' ? rowBindCardNumber : null,
+  ].forEach((row) => {
+    if (!row) {
+      return;
+    }
+    row.style.display = '';
+  });
+  [
+    typeof rowGpcHelperApi !== 'undefined' ? rowGpcHelperApi : null,
     typeof rowGpcHelperCardKey !== 'undefined' ? rowGpcHelperCardKey : null,
+  ].forEach((row) => {
+    if (!row) {
+      return;
+    }
+    row.style.display = gpcRowsVisible ? '' : 'none';
+  });
+  if (typeof rowGpcHelperPhoneMode !== 'undefined' && rowGpcHelperPhoneMode) {
+    rowGpcHelperPhoneMode.style.display = canShowGpcModeSelector ? '' : 'none';
+  }
+  if (typeof selectGpcHelperPhoneMode !== 'undefined' && selectGpcHelperPhoneMode) {
+    selectGpcHelperPhoneMode.value = gpcPhoneMode;
+  }
+  [
     typeof rowGpcHelperCountryCode !== 'undefined' ? rowGpcHelperCountryCode : null,
     typeof rowGpcHelperPhone !== 'undefined' ? rowGpcHelperPhone : null,
+    typeof rowGpcHelperOtpChannel !== 'undefined' ? rowGpcHelperOtpChannel : null,
     typeof rowGpcHelperPin !== 'undefined' ? rowGpcHelperPin : null,
   ].forEach((row) => {
     if (!row) {
       return;
     }
-    const selectedMethod = typeof selectPlusPaymentMethod !== 'undefined' && selectPlusPaymentMethod?.value
-      ? normalizePlusPaymentMethod(selectPlusPaymentMethod.value)
-      : method;
-    row.style.display = enabled && selectedMethod === gpcValue ? '' : 'none';
+    row.style.display = gpcRowsVisible && !isGpcAutoMode ? '' : 'none';
   });
+  if (typeof selectGpcHelperOtpChannel !== 'undefined' && selectGpcHelperOtpChannel) {
+    selectGpcHelperOtpChannel.value = gpcOtpChannel;
+  }
+  if (typeof inputGpcHelperLocalSmsEnabled !== 'undefined' && inputGpcHelperLocalSmsEnabled) {
+    inputGpcHelperLocalSmsEnabled.checked = effectiveLocalSmsEnabled;
+  }
+  if (typeof rowGpcHelperLocalSmsEnabled !== 'undefined' && rowGpcHelperLocalSmsEnabled) {
+    rowGpcHelperLocalSmsEnabled.style.display = localSmsControlsVisible ? '' : 'none';
+  }
+  if (typeof rowGpcHelperLocalSmsUrl !== 'undefined' && rowGpcHelperLocalSmsUrl) {
+    rowGpcHelperLocalSmsUrl.style.display = localSmsControlsVisible && effectiveLocalSmsEnabled ? '' : 'none';
+  }
   if (typeof btnGpcCardKeyPurchase !== 'undefined' && btnGpcCardKeyPurchase) {
-    btnGpcCardKeyPurchase.style.display = enabled && method === gpcValue ? '' : 'none';
+    btnGpcCardKeyPurchase.style.display = gpcRowsVisible ? '' : 'none';
   }
   [
     typeof rowGoPayCountryCode !== 'undefined' ? rowGoPayCountryCode : null,
@@ -7111,9 +8590,6 @@ function updatePlusModeUI() {
     if (!row) {
       return;
     }
-    const selectedMethod = typeof selectPlusPaymentMethod !== 'undefined' && selectPlusPaymentMethod?.value
-      ? normalizePlusPaymentMethod(selectPlusPaymentMethod.value)
-      : method;
     row.style.display = enabled && selectedMethod === gopayValue ? '' : 'none';
   });
 }
@@ -7128,6 +8604,17 @@ function setSettingsCardLocked(locked) {
     const keepInteractive = child?.id === 'row-custom-email-pool';
     child.toggleAttribute('inert', Boolean(locked && !keepInteractive));
   });
+}
+
+function setFreePhoneReuseControlsLocked(locked) {
+  if (inputFreePhoneReuseEnabled) {
+    inputFreePhoneReuseEnabled.disabled = locked;
+  }
+  if (inputFreePhoneReuseAutoEnabled) {
+    inputFreePhoneReuseAutoEnabled.disabled = locked
+      || !Boolean(inputFreePhoneReuseEnabled?.checked)
+      || !Boolean(inputPhoneVerificationEnabled?.checked && phoneVerificationSectionExpanded);
+  }
 }
 
 async function setRuntimeEmailState(email) {
@@ -7202,7 +8689,39 @@ function syncSignupPhoneInputFromState(state = latestState) {
     const selectedMethod = typeof normalizeSignupMethod === 'function'
       ? normalizeSignupMethod(rawSignupMethod)
       : (String(rawSignupMethod || '').trim().toLowerCase() === 'phone' ? 'phone' : 'email');
-    rowSignupPhone.style.display = phoneVerificationEnabled
+    const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+      ? resolveCurrentSidepanelCapabilities({
+        panelMode: state?.panelMode || latestState?.panelMode,
+        signupMethod: selectedMethod,
+        state: {
+          ...(latestState || {}),
+          ...(state || {}),
+          phoneVerificationEnabled,
+        },
+      })
+      : (() => {
+        const rootScope = typeof window !== 'undefined' ? window : globalThis;
+        const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+          defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+        }) || null;
+        return registry?.resolveSidepanelCapabilities
+          ? registry.resolveSidepanelCapabilities({
+            activeFlowId: state?.activeFlowId || latestState?.activeFlowId,
+            panelMode: state?.panelMode || latestState?.panelMode,
+            signupMethod: selectedMethod,
+            state: {
+              ...(latestState || {}),
+              ...(state || {}),
+              phoneVerificationEnabled,
+            },
+          })
+          : null;
+      })();
+    const canShowPhoneSettings = capabilityState
+      ? Boolean(capabilityState.canShowPhoneSettings)
+      : true;
+    rowSignupPhone.style.display = canShowPhoneSettings
+      && phoneVerificationEnabled
       && (selectedMethod === 'phone' || Boolean(signupPhone) || Boolean(getSignupPhoneInputValue()) || signupPhoneInputDirty)
       ? ''
       : 'none';
@@ -7293,6 +8812,95 @@ async function persistSignupPhoneInputForAction() {
   await persistSignupPhoneInputValue({ final: true, silent: true });
 }
 
+function isGpcHelperCheckoutSelected() {
+  const gpcValue = typeof PLUS_PAYMENT_METHOD_GPC_HELPER !== 'undefined' ? PLUS_PAYMENT_METHOD_GPC_HELPER : 'gpc-helper';
+  const plusEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+    ? Boolean(inputPlusModeEnabled.checked)
+    : Boolean(latestState?.plusModeEnabled);
+  return plusEnabled && getSelectedPlusPaymentMethod() === gpcValue;
+}
+
+function getSelectedGpcHelperPhoneMode() {
+  return normalizeGpcHelperPhoneModeValue(
+    typeof selectGpcHelperPhoneMode !== 'undefined' && selectGpcHelperPhoneMode
+      ? selectGpcHelperPhoneMode.value
+      : (latestState?.gopayHelperPhoneMode || GPC_HELPER_PHONE_MODE_MANUAL)
+  );
+}
+
+async function showGpcStartBlockedDialog(message) {
+  await openConfirmModal({
+    title: 'GPC 任务无法开启',
+    message,
+    confirmLabel: '知道了',
+  });
+}
+
+async function refreshGpcBalanceForStart() {
+  const response = await chrome.runtime.sendMessage({
+    type: 'REFRESH_GPC_CARD_BALANCE',
+    source: 'sidepanel',
+    payload: {
+      gopayHelperApiUrl: inputGpcHelperApi?.value || DEFAULT_GPC_HELPER_API_URL,
+      gopayHelperApiKey: inputGpcHelperCardKey?.value || latestState?.gopayHelperApiKey || '',
+      reason: 'before_start',
+    },
+  });
+  if (response?.error) {
+    throw new Error(response.error);
+  }
+  const nextState = {
+    gopayHelperBalance: response?.balance || latestState?.gopayHelperBalance || '',
+    gopayHelperBalancePayload: response?.data || response?.payload?.data || response?.payload || latestState?.gopayHelperBalancePayload || null,
+    gopayHelperBalanceUpdatedAt: response?.updatedAt || Date.now(),
+    gopayHelperBalanceError: '',
+    gopayHelperRemainingUses: getGpcBalanceRemainingUsesFromResponse(response) ?? 0,
+    gopayHelperAutoModeEnabled: getGpcAutoModeEnabledFromResponse(response),
+    gopayHelperApiKeyStatus: response?.apiKeyStatus || response?.data?.status || response?.payload?.data?.status || response?.payload?.status || '',
+  };
+  syncLatestState(nextState);
+  if (displayGpcHelperBalance && nextState.gopayHelperBalance) {
+    displayGpcHelperBalance.textContent = nextState.gopayHelperBalance;
+  }
+  updatePlusModeUI();
+  return nextState;
+}
+
+async function ensureGpcApiKeyReadyForStart(options = {}) {
+  if (!isGpcHelperCheckoutSelected()) {
+    return true;
+  }
+  const selectedMode = getSelectedGpcHelperPhoneMode();
+  let balanceState;
+  try {
+    balanceState = await refreshGpcBalanceForStart();
+  } catch (error) {
+    await showGpcStartBlockedDialog(`API Key 余额校验失败：${error?.message || '未知错误'}。请先确认 API Key 是否正确。`);
+    return false;
+  }
+
+  const remainingUses = normalizeGpcRemainingUsesValue(balanceState.gopayHelperRemainingUses);
+  const apiKeyStatus = String(balanceState.gopayHelperApiKeyStatus || '').trim().toLowerCase();
+  if (apiKeyStatus && apiKeyStatus !== 'active') {
+    await showGpcStartBlockedDialog(`当前 GPC API Key 状态为 ${balanceState.gopayHelperApiKeyStatus}，不能开启任务。`);
+    return false;
+  }
+  if (remainingUses !== null && remainingUses <= 0) {
+    await showGpcStartBlockedDialog('当前 GPC API Key 剩余次数不足，不能开启任务。');
+    return false;
+  }
+
+  if (selectedMode === GPC_HELPER_PHONE_MODE_AUTO && isGpcAutoModePermissionDenied(balanceState)) {
+    await showGpcStartBlockedDialog('当前 GPC API Key 未开通自动模式，已保留你的当前选择。如需继续，请由你手动切换到手动模式后再开启任务。');
+    return false;
+  }
+
+  if (options?.notify) {
+    showToast('GPC API Key 余额和权限校验通过。', 'success', 1800);
+  }
+  return true;
+}
+
 async function openPlusManualConfirmationDialog(options = {}) {
   const method = String(options.method || '').trim().toLowerCase();
   const gopayValue = typeof PLUS_PAYMENT_METHOD_GOPAY !== 'undefined' ? PLUS_PAYMENT_METHOD_GOPAY : 'gopay';
@@ -7317,7 +8925,7 @@ async function openPlusManualConfirmationDialog(options = {}) {
           validate: (value) => {
             const normalized = String(value || '').trim().replace(/[^\d]/g, '');
             if (!normalized) return '请输入 OTP 验证码。';
-            if (normalized.length < 4) return 'OTP 验证码长度过短，请检查。';
+            if (!/^\d{6}$/.test(normalized)) return 'OTP 必须是 6 位数字，请检查。';
             return '';
           },
         },
@@ -7569,6 +9177,7 @@ function applyAutoRunStatus(payload = currentAutoRun) {
   const settingsCardLocked = scheduled || locked;
 
   setSettingsCardLocked(settingsCardLocked);
+  setFreePhoneReuseControlsLocked(settingsCardLocked);
 
   inputRunCount.disabled = currentAutoRun.autoRunning || (
     typeof shouldLockRunCountToEmailPool === 'function'
@@ -7582,6 +9191,9 @@ function applyAutoRunStatus(payload = currentAutoRun) {
   inputEmail.disabled = locked;
   if (typeof inputSignupPhone !== 'undefined' && inputSignupPhone) {
     inputSignupPhone.disabled = locked;
+  }
+  if (typeof inputSub2ApiAccountPriority !== 'undefined' && inputSub2ApiAccountPriority) {
+    inputSub2ApiAccountPriority.disabled = locked;
   }
   inputAutoSkipFailures.disabled = scheduled;
 
@@ -7649,6 +9261,7 @@ function initializeManualStepActions() {
       return;
     }
     const step = Number(row.dataset.step);
+    const nodeId = String(row.dataset.nodeId || getNodeIdByStepForCurrentMode(step) || '').trim();
     const statusEl = row.querySelector('.step-status');
     if (!statusEl) return;
 
@@ -7659,13 +9272,14 @@ function initializeManualStepActions() {
     manualBtn.type = 'button';
     manualBtn.className = 'step-manual-btn';
     manualBtn.dataset.step = String(step);
-    manualBtn.title = '跳过此步';
-    manualBtn.setAttribute('aria-label', `跳过步骤 ${step}`);
+    manualBtn.dataset.nodeId = nodeId;
+    manualBtn.title = '跳过此节点';
+    manualBtn.setAttribute('aria-label', `跳过节点 ${nodeId || step}`);
     manualBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>';
     manualBtn.addEventListener('click', async (event) => {
       event.stopPropagation();
       try {
-        await handleSkipStep(step);
+        await handleSkipNode(nodeId || getNodeIdByStepForCurrentMode(step));
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -7680,16 +9294,20 @@ function initializeManualStepActions() {
 function renderStepsList() {
   if (!stepsList) return;
 
-  stepsList.innerHTML = stepDefinitions.map((step) => `
-    <div class="step-row" data-step="${step.id}" data-step-key="${escapeHtml(step.key)}">
-      <div class="step-indicator" data-step="${step.id}"><span class="step-num">${step.id}</span></div>
-      <button class="step-btn" data-step="${step.id}" data-step-key="${escapeHtml(step.key)}">${escapeHtml(step.title)}</button>
-      <span class="step-status" data-step="${step.id}"></span>
+  stepsList.innerHTML = workflowNodes.map((node) => {
+    const step = getStepIdByNodeIdForCurrentMode(node.nodeId);
+    const nodeId = String(node.nodeId || '').trim();
+    return `
+    <div class="step-row" data-step="${step}" data-node-id="${escapeHtml(nodeId)}" data-step-key="${escapeHtml(node.executeKey || nodeId)}">
+      <div class="step-indicator" data-step="${step}" data-node-id="${escapeHtml(nodeId)}"><span class="step-num">${step || node.displayOrder || ''}</span></div>
+      <button class="step-btn" data-step="${step}" data-node-id="${escapeHtml(nodeId)}" data-step-key="${escapeHtml(node.executeKey || nodeId)}">${escapeHtml(node.title)}</button>
+      <span class="step-status" data-step="${step}" data-node-id="${escapeHtml(nodeId)}"></span>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   if (stepsProgress) {
-    stepsProgress.textContent = `0 / ${STEP_IDS.length}`;
+    stepsProgress.textContent = `0 / ${NODE_IDS.length}`;
   }
 
   initializeManualStepActions();
@@ -7698,6 +9316,7 @@ function renderStepsList() {
 }
 
 function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOrOptions = {}, maybeOptions = {}) {
+  const defaultFlowId = typeof DEFAULT_ACTIVE_FLOW_ID !== 'undefined' ? DEFAULT_ACTIVE_FLOW_ID : 'openai';
   const nextPlusModeEnabled = Boolean(plusModeEnabled);
   const options = typeof plusPaymentMethodOrOptions === 'string'
     ? maybeOptions
@@ -7706,27 +9325,43 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     ? plusPaymentMethodOrOptions
     : (options.plusPaymentMethod || getSelectedPlusPaymentMethod(latestState));
   const nextSignupMethod = normalizeSignupMethod(options.signupMethod || currentSignupMethod || DEFAULT_SIGNUP_METHOD);
+  const nextPhoneSignupReloginAfterBindEmailEnabled = Boolean(
+    options.phoneSignupReloginAfterBindEmailEnabled
+      ?? (typeof inputPhoneSignupReloginAfterBindEmail !== 'undefined' && inputPhoneSignupReloginAfterBindEmail
+        ? inputPhoneSignupReloginAfterBindEmail.checked
+        : currentPhoneSignupReloginAfterBindEmailEnabled)
+  );
   const nextPaymentMethod = normalizePlusPaymentMethod(rawPaymentMethod);
+  const nextActiveFlowId = String(
+    options.activeFlowId
+    || (typeof latestState !== 'undefined' ? latestState?.activeFlowId : '')
+    || defaultFlowId
+  ).trim().toLowerCase() || defaultFlowId;
   const rootScope = typeof window !== 'undefined' ? window : globalThis;
   const currentPaymentStep = stepDefinitions.find((step) => step.key === 'paypal-approve');
   const nextPaymentTitle = rootScope.MultiPageStepDefinitions?.getPlusPaymentStepTitle?.({
+    activeFlowId: nextActiveFlowId,
     plusModeEnabled: nextPlusModeEnabled,
     plusPaymentMethod: nextPaymentMethod,
     signupMethod: nextSignupMethod,
+    phoneSignupReloginAfterBindEmailEnabled: nextPhoneSignupReloginAfterBindEmailEnabled,
   });
   const paymentTitleChanged = Boolean(nextPlusModeEnabled && currentPaymentStep && nextPaymentTitle && currentPaymentStep.title !== nextPaymentTitle);
   const shouldRender = Boolean(options.render)
     || nextPlusModeEnabled !== currentPlusModeEnabled
     || nextPaymentMethod !== currentPlusPaymentMethod
     || nextSignupMethod !== currentSignupMethod
+    || nextPhoneSignupReloginAfterBindEmailEnabled !== currentPhoneSignupReloginAfterBindEmailEnabled
     || paymentTitleChanged;
   if (!shouldRender) {
     return;
   }
 
   rebuildStepDefinitionState(nextPlusModeEnabled, {
+    activeFlowId: nextActiveFlowId,
     plusPaymentMethod: nextPaymentMethod,
     signupMethod: nextSignupMethod,
+    phoneSignupReloginAfterBindEmailEnabled: nextPhoneSignupReloginAfterBindEmailEnabled,
   });
   renderStepsList();
 }
@@ -7737,9 +9372,19 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
 
 function applySettingsState(state) {
   if (typeof syncStepDefinitionsForMode === 'function') {
-    syncStepDefinitionsForMode(Boolean(state?.plusModeEnabled), {
+    const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+      ? resolveStepDefinitionCapabilityState(state, {
+        signupMethod: state?.signupMethod,
+      })
+      : {
+        plusModeEnabled: Boolean(state?.plusModeEnabled),
+        signupMethod: normalizeSignupMethod(state?.signupMethod || DEFAULT_SIGNUP_METHOD),
+      };
+    syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
+      activeFlowId: state?.flowId || state?.activeFlowId,
       plusPaymentMethod: state?.plusPaymentMethod,
-      signupMethod: state?.signupMethod,
+      signupMethod: stepDefinitionState.signupMethod,
+      phoneSignupReloginAfterBindEmailEnabled: Boolean(state?.phoneSignupReloginAfterBindEmailEnabled),
     });
   }
   const fallbackIpProxyService = '711proxy';
@@ -7789,6 +9434,9 @@ function applySettingsState(state) {
     return Math.max(1, Math.min(1440, numeric));
   };
   syncLatestState(state);
+  if (typeof applyOperationDelayState === 'function') {
+    applyOperationDelayState(state);
+  }
   syncAutoRunState(state);
   renderStepStatuses(latestState);
 
@@ -7798,19 +9446,31 @@ function applySettingsState(state) {
   }
   syncPasswordField(state || {});
   if (typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled) {
-    inputPlusModeEnabled.checked = Boolean(state?.plusModeEnabled);
+    inputPlusModeEnabled.checked = true;
   }
   if (typeof selectPlusPaymentMethod !== 'undefined' && selectPlusPaymentMethod) {
-    selectPlusPaymentMethod.value = normalizePlusPaymentMethod(state?.plusPaymentMethod);
+    selectPlusPaymentMethod.value = 'paypal';
+  }
+  if (typeof inputPayPalSmsPhone !== 'undefined' && inputPayPalSmsPhone) {
+    inputPayPalSmsPhone.value = String(state?.paypalSmsPhone || '');
+  }
+  if (typeof inputPayPalSmsApi !== 'undefined' && inputPayPalSmsApi) {
+    inputPayPalSmsApi.value = String(state?.paypalSmsApiUrl || '');
+  }
+  if (typeof inputBindCardNumber !== 'undefined' && inputBindCardNumber) {
+    inputBindCardNumber.value = String(state?.bindCardNumber || '');
   }
   if (typeof inputGpcHelperApi !== 'undefined' && inputGpcHelperApi) {
     const defaultGpcHelperApiUrl = typeof DEFAULT_GPC_HELPER_API_URL !== 'undefined'
       ? DEFAULT_GPC_HELPER_API_URL
-      : 'https://gopay.hwork.pro';
-    inputGpcHelperApi.value = state?.gopayHelperApiUrl || defaultGpcHelperApiUrl;
+      : 'https://gpc.qlhazycoder.top';
+    inputGpcHelperApi.value = `${defaultGpcHelperApiUrl.replace(/\/+$/g, '')}/`;
   }
   if (typeof inputGpcHelperCardKey !== 'undefined' && inputGpcHelperCardKey) {
-    inputGpcHelperCardKey.value = state?.gopayHelperCardKey || '';
+    inputGpcHelperCardKey.value = state?.gopayHelperApiKey || state?.gopayHelperCardKey || '';
+  }
+  if (typeof selectGpcHelperPhoneMode !== 'undefined' && selectGpcHelperPhoneMode) {
+    selectGpcHelperPhoneMode.value = normalizeGpcHelperPhoneModeValue(state?.gopayHelperPhoneMode || 'manual');
   }
   if (typeof selectGpcHelperCountryCode !== 'undefined' && selectGpcHelperCountryCode) {
     const normalizedCountryCode = window.GoPayUtils?.normalizeGoPayCountryCode
@@ -7828,6 +9488,15 @@ function applySettingsState(state) {
   }
   if (typeof inputGpcHelperPhone !== 'undefined' && inputGpcHelperPhone) {
     inputGpcHelperPhone.value = state?.gopayHelperPhoneNumber || '';
+  }
+  if (typeof selectGpcHelperOtpChannel !== 'undefined' && selectGpcHelperOtpChannel) {
+    selectGpcHelperOtpChannel.value = normalizeGpcOtpChannelValue(state?.gopayHelperOtpChannel || 'whatsapp');
+  }
+  if (typeof inputGpcHelperLocalSmsEnabled !== 'undefined' && inputGpcHelperLocalSmsEnabled) {
+    inputGpcHelperLocalSmsEnabled.checked = Boolean(state?.gopayHelperLocalSmsHelperEnabled);
+  }
+  if (typeof inputGpcHelperLocalSmsUrl !== 'undefined' && inputGpcHelperLocalSmsUrl) {
+    inputGpcHelperLocalSmsUrl.value = normalizeGpcLocalSmsHelperBaseUrlValue(state?.gopayHelperLocalSmsHelperUrl || '');
   }
   if (typeof inputGpcHelperPin !== 'undefined' && inputGpcHelperPin) {
     inputGpcHelperPin.value = state?.gopayHelperPin || '';
@@ -7866,11 +9535,14 @@ function applySettingsState(state) {
   inputVpsUrl.value = state?.vpsUrl || '';
   inputVpsPassword.value = state?.vpsPassword || '';
   setLocalCpaStep9Mode(state?.localCpaStep9Mode);
-  selectPanelMode.value = state?.panelMode || 'cpa';
+  selectPanelMode.value = normalizePanelMode(state?.panelMode || 'cpa');
   inputSub2ApiUrl.value = state?.sub2apiUrl || '';
   inputSub2ApiEmail.value = state?.sub2apiEmail || '';
   inputSub2ApiPassword.value = state?.sub2apiPassword || '';
-  renderSub2ApiGroupOptions(state, state?.sub2apiGroupName || '');
+  renderSub2ApiGroupOptions(state);
+  if (typeof inputSub2ApiAccountPriority !== 'undefined' && inputSub2ApiAccountPriority) {
+    inputSub2ApiAccountPriority.value = String(normalizeSub2ApiAccountPriorityValue(state?.sub2apiAccountPriority));
+  }
   inputSub2ApiDefaultProxy.value = state?.sub2apiDefaultProxyName || '';
   const normalizedIpProxyService = resolveIpProxyService(state?.ipProxyService);
   const normalizedIpProxyServiceProfiles = typeof normalizeIpProxyServiceProfiles === 'function'
@@ -7960,7 +9632,7 @@ function applySettingsState(state) {
   inputCodex2ApiUrl.value = state?.codex2apiUrl || '';
   inputCodex2ApiAdminKey.value = state?.codex2apiAdminKey || '';
   const restoredMailProvider = isCustomMailProvider(state?.mailProvider)
-    || [ICLOUD_PROVIDER, 'hotmail-api', GMAIL_PROVIDER, 'luckmail-api', '163', '163-vip', '126', 'qq', 'inbucket', '2925', 'cloudflare-temp-email'].includes(String(state?.mailProvider || '').trim())
+    || [ICLOUD_PROVIDER, 'hotmail-api', GMAIL_PROVIDER, 'luckmail-api', '163', '163-vip', '126', 'qq', 'inbucket', '2925', 'cloudflare-temp-email', 'cloudmail'].includes(String(state?.mailProvider || '').trim())
     ? String(state?.mailProvider || '163').trim()
     : (String(state?.emailGenerator || '').trim().toLowerCase() === 'custom'
       || String(state?.emailGenerator || '').trim().toLowerCase() === 'manual'
@@ -7982,6 +9654,8 @@ function applySettingsState(state) {
       selectEmailGenerator.value = 'cloudflare';
     } else if (restoredEmailGenerator === 'cloudflare-temp-email') {
       selectEmailGenerator.value = 'cloudflare-temp-email';
+    } else if (restoredEmailGenerator === 'cloudmail') {
+      selectEmailGenerator.value = 'cloudmail';
     } else {
       selectEmailGenerator.value = 'duck';
     }
@@ -8037,10 +9711,16 @@ function applySettingsState(state) {
   selectLuckmailEmailType.value = normalizeLuckmailEmailType(state?.luckmailEmailType);
   inputLuckmailDomain.value = state?.luckmailDomain || '';
   applyCloudflareTempEmailSettingsState(state);
+  if (typeof applyCloudMailSettingsState === 'function') {
+    applyCloudMailSettingsState(state);
+  }
   renderCloudflareDomainOptions(state?.cloudflareDomain || '');
   setCloudflareDomainEditMode(false, { clearInput: true });
   inputAutoSkipFailures.checked = Boolean(state?.autoRunSkipFailures);
   inputAutoSkipFailuresThreadIntervalMinutes.value = String(normalizeAutoRunThreadIntervalMinutes(state?.autoRunFallbackThreadIntervalMinutes));
+  if (typeof inputStep6CookieCleanupEnabled !== 'undefined' && inputStep6CookieCleanupEnabled) {
+    inputStep6CookieCleanupEnabled.checked = Boolean(state?.step6CookieCleanupEnabled);
+  }
   inputAutoDelayEnabled.checked = Boolean(state?.autoRunDelayEnabled);
   inputAutoDelayMinutes.value = String(normalizeAutoDelayMinutes(state?.autoRunDelayMinutes));
   inputAutoStepDelaySeconds.value = formatAutoStepDelayInputValue(state?.autoStepDelaySeconds);
@@ -8065,6 +9745,11 @@ function applySettingsState(state) {
   if (typeof setSignupMethod === 'function') {
     setSignupMethod(state?.signupMethod || DEFAULT_SIGNUP_METHOD);
   }
+  if (typeof inputPhoneSignupReloginAfterBindEmail !== 'undefined' && inputPhoneSignupReloginAfterBindEmail) {
+    inputPhoneSignupReloginAfterBindEmail.checked = state?.phoneSignupReloginAfterBindEmailEnabled !== undefined
+      ? Boolean(state.phoneSignupReloginAfterBindEmailEnabled)
+      : DEFAULT_PHONE_SIGNUP_RELOGIN_AFTER_BIND_EMAIL_ENABLED;
+  }
   const restoredPhoneSmsProvider = normalizePhoneSmsProvider(state?.phoneSmsProvider);
   const previousPhoneSmsProvider = selectPhoneSmsProvider ? normalizePhoneSmsProvider(selectPhoneSmsProvider.value) : restoredPhoneSmsProvider;
   const defaultFiveSimProduct = typeof DEFAULT_FIVE_SIM_PRODUCT !== 'undefined'
@@ -8084,7 +9769,7 @@ function applySettingsState(state) {
   if (previousPhoneSmsProvider !== restoredPhoneSmsProvider) {
     heroSmsCountrySelectionOrder = [];
     loadHeroSmsCountries().catch((error) => {
-      console.warn('Failed to reload SMS countries after provider restore:', error);
+      console.warn('恢复接码平台后重新加载国家列表失败：', error);
     });
   }
   if (inputHeroSmsApiKey) {
@@ -8114,7 +9799,16 @@ function applySettingsState(state) {
       : String(state?.nexSmsServiceCode || defaultNexSmsServiceCode).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '') || defaultNexSmsServiceCode;
   }
   if (typeof inputHeroSmsReuseEnabled !== 'undefined' && inputHeroSmsReuseEnabled) {
-    inputHeroSmsReuseEnabled.checked = normalizeHeroSmsReuseEnabledValue(state?.heroSmsReuseEnabled);
+    inputHeroSmsReuseEnabled.checked = normalizeHeroSmsReuseEnabledValue(
+      state?.phoneSmsReuseEnabled,
+      state?.heroSmsReuseEnabled
+    );
+  }
+  if (typeof inputFreePhoneReuseEnabled !== 'undefined' && inputFreePhoneReuseEnabled) {
+    inputFreePhoneReuseEnabled.checked = Boolean(state?.freePhoneReuseEnabled);
+  }
+  if (typeof inputFreePhoneReuseAutoEnabled !== 'undefined' && inputFreePhoneReuseAutoEnabled) {
+    inputFreePhoneReuseAutoEnabled.checked = Boolean(state?.freePhoneReuseAutoEnabled);
   }
   if (typeof selectHeroSmsAcquirePriority !== 'undefined' && selectHeroSmsAcquirePriority) {
     selectHeroSmsAcquirePriority.value = normalizeHeroSmsAcquirePriority(state?.heroSmsAcquirePriority);
@@ -8123,6 +9817,11 @@ function applySettingsState(state) {
     inputHeroSmsMaxPrice.value = restoredPhoneSmsProvider === PHONE_SMS_PROVIDER_FIVE_SIM
       ? normalizeFiveSimMaxPriceValue(state?.fiveSimMaxPrice || '')
       : normalizeHeroSmsMaxPriceValue(state?.heroSmsMaxPrice || '');
+  }
+  if (typeof inputHeroSmsMinPrice !== 'undefined' && inputHeroSmsMinPrice) {
+    inputHeroSmsMinPrice.value = restoredPhoneSmsProvider === PHONE_SMS_PROVIDER_FIVE_SIM
+      ? normalizePhoneSmsMinPriceValue(state?.fiveSimMinPrice || '', PHONE_SMS_PROVIDER_FIVE_SIM)
+      : normalizePhoneSmsMinPriceValue(state?.heroSmsMinPrice || '', restoredPhoneSmsProvider);
   }
   if (inputFiveSimOperator) {
     inputFiveSimOperator.value = normalizeFiveSimOperator(state?.fiveSimOperator);
@@ -8252,9 +9951,9 @@ async function restoreState() {
       displayLocalhostUrl.textContent = state.localhostUrl;
       displayLocalhostUrl.classList.add('has-value');
     }
-    if (state.stepStatuses) {
-      for (const [step, status] of Object.entries(state.stepStatuses)) {
-        updateStepUI(Number(step), status);
+    if (state.nodeStatuses) {
+      for (const [nodeId, status] of Object.entries(state.nodeStatuses)) {
+        updateNodeUI(nodeId, status);
       }
     }
 
@@ -8269,6 +9968,9 @@ async function restoreState() {
     renderContributionMode();
   } catch (err) {
     console.error('Failed to restore state:', err);
+    if (typeof applyOperationDelayState === 'function') {
+      applyOperationDelayState(undefined, { restoreFailed: true });
+    }
   }
 }
 
@@ -8299,7 +10001,7 @@ function getRepositoryHomeUrl() {
     return releasesPageUrl.replace(/\/releases\/?$/, '');
   }
 
-  return 'https://github.com/QLHazyCoder/codex-oauth-automation-extension';
+  return 'https://github.com/QLHazyCoder/FlowPilot';
 }
 
 function getReleaseListUrl() {
@@ -8393,7 +10095,7 @@ function renderUpdateReleaseList(releases = []) {
 
     const version = document.createElement('span');
     version.className = 'update-release-version';
-    version.textContent = release.displayVersion || `Ultra${release.version}`;
+    version.textContent = release.displayVersion || `FlowPilot${release.version}`;
     titleRow.appendChild(version);
 
     if (release.title) {
@@ -8495,21 +10197,21 @@ function renderReleaseSnapshot(snapshot) {
     }
 
     case 'ignored': {
-      extensionUpdateStatus.textContent = localVersionText || 'Ultra0.0';
+      extensionUpdateStatus.textContent = localVersionText || 'FlowPilot0.0';
       extensionUpdateStatus.classList.add('is-version-label');
       resetUpdateCard();
       break;
     }
 
     case 'latest': {
-      extensionUpdateStatus.textContent = localVersionText || 'Ultra0.0';
+      extensionUpdateStatus.textContent = localVersionText || 'FlowPilot0.0';
       extensionUpdateStatus.classList.add('is-version-label');
       resetUpdateCard();
       break;
     }
 
     case 'empty': {
-      extensionUpdateStatus.textContent = localVersionText || 'Ultra0.0';
+      extensionUpdateStatus.textContent = localVersionText || 'FlowPilot0.0';
       extensionUpdateStatus.classList.add('is-version-label');
       resetUpdateCard();
       break;
@@ -8517,7 +10219,7 @@ function renderReleaseSnapshot(snapshot) {
 
     case 'error':
     default: {
-      extensionUpdateStatus.textContent = localVersionText || 'Ultra0.0';
+      extensionUpdateStatus.textContent = localVersionText || 'FlowPilot0.0';
       extensionUpdateStatus.classList.add('is-version-label', 'is-check-failed');
       extensionVersionMeta.textContent = snapshot?.errorMessage || 'GitHub Releases 检查失败';
       extensionVersionMeta.hidden = false;
@@ -8528,7 +10230,7 @@ function renderReleaseSnapshot(snapshot) {
 }
 
 async function initializeReleaseInfo() {
-  const fallbackReleaseUrl = sidepanelUpdateService?.releasesPageUrl || 'https://github.com/QLHazyCoder/codex-oauth-automation-extension/releases';
+  const fallbackReleaseUrl = sidepanelUpdateService?.releasesPageUrl || 'https://github.com/QLHazyCoder/FlowPilot/releases';
 
   if (btnReleaseLog) {
     btnReleaseLog.onclick = () => openExternalUrl(currentReleaseSnapshot?.logUrl || fallbackReleaseUrl);
@@ -8540,8 +10242,8 @@ async function initializeReleaseInfo() {
 
   const localVersion = sidepanelUpdateService?.getLocalVersionLabel?.(chrome.runtime.getManifest())
     || chrome.runtime.getManifest()?.version_name
-    || (chrome.runtime.getManifest()?.version ? `Ultra${chrome.runtime.getManifest().version}` : '');
-  extensionUpdateStatus.textContent = localVersion || 'Ultra0.0';
+    || (chrome.runtime.getManifest()?.version ? `FlowPilot${chrome.runtime.getManifest().version}` : '');
+  extensionUpdateStatus.textContent = localVersion || 'FlowPilot0.0';
   extensionUpdateStatus.classList.remove('is-update-available', 'is-check-failed');
   extensionUpdateStatus.classList.add('is-version-label');
   extensionVersionMeta.hidden = true;
@@ -8774,6 +10476,7 @@ function getSelectedEmailGenerator() {
   }
   if (generator === 'cloudflare') return 'cloudflare';
   if (generator === 'cloudflare-temp-email') return 'cloudflare-temp-email';
+  if (generator === 'cloudmail') return 'cloudmail';
   return 'duck';
 }
 
@@ -8819,6 +10522,14 @@ function getEmailGeneratorUiCopy() {
       placeholder: '点击生成 Cloudflare Temp Email，或手动粘贴邮箱',
       successVerb: '生成',
       label: 'Cloudflare Temp Email',
+    };
+  }
+  if (getSelectedEmailGenerator() === 'cloudmail') {
+    return {
+      buttonLabel: '生成',
+      placeholder: '点击生成 Cloud Mail 邮箱，或手动粘贴邮箱',
+      successVerb: '生成',
+      label: 'Cloud Mail',
     };
   }
 
@@ -9184,6 +10895,30 @@ function updateMailProviderUI() {
   const icloudHostPreferenceValue = typeof selectIcloudHostPreference !== 'undefined'
     ? selectIcloudHostPreference?.value
     : latestState?.icloudHostPreference;
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({
+      panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : latestState?.panelMode,
+      state: latestState || {},
+    })
+    : null;
+  const canShowLuckmail = capabilityState
+    ? Boolean(capabilityState.canShowLuckmail)
+    : true;
+  const mailProviderOptions = Array.from(selectMailProvider?.options || []);
+  mailProviderOptions.forEach((option) => {
+    if (!option) {
+      return;
+    }
+    if (String(option.value || '').trim().toLowerCase() === 'luckmail-api') {
+      option.hidden = !canShowLuckmail;
+    }
+  });
+  if (!canShowLuckmail && String(selectMailProvider?.value || '').trim().toLowerCase() === 'luckmail-api') {
+    const fallbackOption = mailProviderOptions.find((option) => option && !option.hidden);
+    if (fallbackOption) {
+      selectMailProvider.value = String(fallbackOption.value || '').trim();
+    }
+  }
   const use2925 = selectMailProvider.value === '2925';
   const useGmail = selectMailProvider.value === GMAIL_PROVIDER;
   const useMail2925 = selectMailProvider.value === '2925';
@@ -9214,12 +10949,13 @@ function updateMailProviderUI() {
   const useGeneratedAlias = usesGeneratedAliasMailProvider(selectMailProvider.value, mail2925Mode, selectedGenerator);
   const useInbucket = selectMailProvider.value === 'inbucket';
   const useHotmail = selectMailProvider.value === 'hotmail-api';
-  const useLuckmail = isLuckmailProvider();
+  const useLuckmail = canShowLuckmail && isLuckmailProvider();
   const useCustomEmail = isCustomMailProvider();
   const useCustomMailProviderPool = useCustomEmail && usesCustomMailProviderPool(selectMailProvider.value);
   const useIcloudProvider = isIcloudMailProvider();
   const useEmailGenerator = !useHotmail && !useLuckmail && !useCustomEmail && (!useGeneratedAlias || useGmail);
   const useCloudflareTempEmailProvider = selectMailProvider.value === 'cloudflare-temp-email';
+  const useCloudMailProvider = selectMailProvider.value === 'cloudmail';
   const aliasUiCopy = useGeneratedAlias
     ? getManagedAliasProviderUiCopy(selectMailProvider.value, mail2925Mode)
     : null;
@@ -9242,9 +10978,23 @@ function updateMailProviderUI() {
   const useCloudflare = selectedGenerator === 'cloudflare';
   const useIcloud = selectedGenerator === 'icloud';
   const useCloudflareTempEmailGenerator = selectedGenerator === 'cloudflare-temp-email';
+  const useCloudMailGenerator = selectedGenerator === 'cloudmail';
   const showCloudflareDomain = useEmailGenerator && useCloudflare;
   const showCloudflareTempEmailSettings = useCloudflareTempEmailProvider || (useEmailGenerator && useCloudflareTempEmailGenerator);
-  const showCloudflareTempEmailReceiveMailbox = useCloudflareTempEmailProvider && !useCloudflareTempEmailGenerator;
+  const showCloudflareTempEmailLookupMode = useCloudflareTempEmailProvider && !useCloudflareTempEmailGenerator;
+  const selectedCloudflareTempEmailLookupMode = typeof getSelectedCloudflareTempEmailLookupMode === 'function'
+    ? getSelectedCloudflareTempEmailLookupMode()
+    : 'receive-mailbox';
+  const cloudflareTempEmailRegistrationLookupMode = typeof CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL === 'string'
+    ? CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL
+    : 'registration-email';
+  const useCloudflareTempEmailRegistrationLookup = showCloudflareTempEmailLookupMode
+    && selectedCloudflareTempEmailLookupMode === cloudflareTempEmailRegistrationLookupMode;
+  const showCloudflareTempEmailReceiveMailbox = showCloudflareTempEmailLookupMode
+    && !useCloudflareTempEmailRegistrationLookup;
+  const showCloudMailSettings = useCloudMailProvider || (useEmailGenerator && useCloudMailGenerator);
+  const showCloudMailReceiveMailbox = useCloudMailProvider && !useCloudMailGenerator;
+  const showCloudMailDomain = useEmailGenerator && useCloudMailGenerator;
   const selectedIcloudHost = typeof getSelectedIcloudHostPreference === 'function'
     ? getSelectedIcloudHostPreference()
     : (normalizeIcloudHostValue(icloudHostPreferenceValue || latestState?.icloudHostPreference || '')
@@ -9270,6 +11020,14 @@ function updateMailProviderUI() {
   if (cloudflareTempEmailSection) {
     cloudflareTempEmailSection.style.display = showCloudflareTempEmailSettings ? '' : 'none';
   }
+  if (typeof cloudMailSection !== 'undefined' && cloudMailSection) {
+    cloudMailSection.style.display = showCloudMailSettings ? '' : 'none';
+  }
+  if (typeof rowCloudMailBaseUrl !== 'undefined' && rowCloudMailBaseUrl) rowCloudMailBaseUrl.style.display = showCloudMailSettings ? '' : 'none';
+  if (typeof rowCloudMailAdminEmail !== 'undefined' && rowCloudMailAdminEmail) rowCloudMailAdminEmail.style.display = showCloudMailSettings ? '' : 'none';
+  if (typeof rowCloudMailAdminPassword !== 'undefined' && rowCloudMailAdminPassword) rowCloudMailAdminPassword.style.display = showCloudMailSettings ? '' : 'none';
+  if (typeof rowCloudMailReceiveMailbox !== 'undefined' && rowCloudMailReceiveMailbox) rowCloudMailReceiveMailbox.style.display = showCloudMailReceiveMailbox ? '' : 'none';
+  if (typeof rowCloudMailDomain !== 'undefined' && rowCloudMailDomain) rowCloudMailDomain.style.display = showCloudMailDomain ? '' : 'none';
   if (icloudSection) {
     const showIcloudSection = (useEmailGenerator && useIcloud) || useIcloudProvider;
     icloudSection.style.display = showIcloudSection ? '' : 'none';
@@ -9296,6 +11054,9 @@ function updateMailProviderUI() {
   rowTempEmailBaseUrl.style.display = showCloudflareTempEmailSettings ? '' : 'none';
   rowTempEmailAdminAuth.style.display = showCloudflareTempEmailSettings ? '' : 'none';
   rowTempEmailCustomAuth.style.display = showCloudflareTempEmailSettings ? '' : 'none';
+  if (typeof rowTempEmailLookupMode !== 'undefined' && rowTempEmailLookupMode) {
+    rowTempEmailLookupMode.style.display = showCloudflareTempEmailLookupMode ? '' : 'none';
+  }
   rowTempEmailReceiveMailbox.style.display = showCloudflareTempEmailReceiveMailbox ? '' : 'none';
   if (rowTempEmailRandomSubdomainToggle) {
     rowTempEmailRandomSubdomainToggle.style.display = showCloudflareTempEmailRandomSubdomainToggle ? '' : 'none';
@@ -9498,6 +11259,152 @@ async function saveCloudflareTempEmailDomainSettings(domains, activeDomain, opti
   }
 }
 
+function joinCloudflareTempEmailSettingsUrl(baseUrl, path) {
+  const normalizedBaseUrl = normalizeCloudflareTempEmailBaseUrlValue(baseUrl);
+  const normalizedPath = String(path || '').trim();
+  if (!normalizedBaseUrl || !normalizedPath) {
+    return normalizedBaseUrl || '';
+  }
+  return `${normalizedBaseUrl}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
+}
+
+function buildCloudflareTempEmailSyncHeaders(options = {}) {
+  const { includeAdminAuth = false } = options;
+  const headers = {
+    Accept: 'application/json',
+  };
+  const customAuth = String(inputTempEmailCustomAuth?.value || '').trim();
+  if (customAuth) {
+    headers['x-custom-auth'] = customAuth;
+  }
+  if (includeAdminAuth) {
+    const adminAuth = String(inputTempEmailAdminAuth?.value || '').trim();
+    if (adminAuth) {
+      headers['x-admin-auth'] = adminAuth;
+    }
+  }
+  return headers;
+}
+
+async function requestCloudflareTempEmailSyncPayload(baseUrl, path, options = {}) {
+  const url = joinCloudflareTempEmailSettingsUrl(baseUrl, path);
+  if (!url) {
+    throw new Error('Cloudflare Temp Email 服务地址为空或格式无效。');
+  }
+
+  const response = await fetch(url, {
+    cache: 'no-store',
+    headers: buildCloudflareTempEmailSyncHeaders(options),
+  });
+  const rawText = await response.text();
+  let payload = rawText;
+  try {
+    payload = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    payload = rawText;
+  }
+
+  if (!response.ok) {
+    const message = typeof payload === 'object' && payload
+      ? (payload.message || payload.error || payload.msg)
+      : '';
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
+function mergeCloudflareTempEmailDomains(existingDomains, fetchedDomains) {
+  const mergedDomains = [];
+  const seen = new Set();
+  for (const domain of normalizeCloudflareTempEmailDomains(fetchedDomains)) {
+    if (seen.has(domain)) continue;
+    seen.add(domain);
+    mergedDomains.push(domain);
+  }
+  for (const domain of normalizeCloudflareTempEmailDomains(existingDomains)) {
+    if (seen.has(domain)) continue;
+    seen.add(domain);
+    mergedDomains.push(domain);
+  }
+  return mergedDomains;
+}
+
+async function fetchCloudflareTempEmailAvailableDomains(baseUrl) {
+  let openSettingsError = null;
+  try {
+    const payload = await requestCloudflareTempEmailSyncPayload(baseUrl, '/open_api/settings');
+    const domains = normalizeCloudflareTempEmailDomains(payload?.domains || []);
+    if (domains.length) {
+      return {
+        domains,
+        source: 'open_api/settings',
+      };
+    }
+    openSettingsError = new Error('公开设置未返回可用域名。');
+  } catch (error) {
+    openSettingsError = error;
+  }
+
+  const adminAuth = String(inputTempEmailAdminAuth?.value || '').trim();
+  if (!adminAuth) {
+    throw openSettingsError || new Error('未获取到可用域名。');
+  }
+
+  const payload = await requestCloudflareTempEmailSyncPayload(baseUrl, '/admin/worker/configs', {
+    includeAdminAuth: true,
+  });
+  const domains = normalizeCloudflareTempEmailDomains(payload?.DOMAINS || []);
+  if (!domains.length) {
+    throw openSettingsError || new Error('管理配置未返回可用域名。');
+  }
+  return {
+    domains,
+    source: 'admin/worker/configs',
+  };
+}
+
+async function syncCloudflareTempEmailDomainsFromService() {
+  const normalizedBaseUrl = normalizeCloudflareTempEmailBaseUrlValue(inputTempEmailBaseUrl?.value || '');
+  if (!normalizedBaseUrl) {
+    throw new Error('请先填写有效的 Cloudflare Temp Email 服务地址。');
+  }
+
+  const previousButtonText = btnTempEmailDomainMode.textContent;
+  btnTempEmailDomainMode.disabled = true;
+  btnTempEmailDomainMode.textContent = '更新中...';
+
+  try {
+    const { domains: fetchedDomains, source } = await fetchCloudflareTempEmailAvailableDomains(normalizedBaseUrl);
+    const { domains: existingDomains, activeDomain } = getCloudflareTempEmailDomainsFromState();
+    const currentDomain = normalizeCloudflareTempEmailDomainValue(selectTempEmailDomain.value || activeDomain);
+    const mergedDomains = mergeCloudflareTempEmailDomains(existingDomains, fetchedDomains);
+    const nextActiveDomain = mergedDomains.includes(currentDomain)
+      ? currentDomain
+      : (fetchedDomains[0] || mergedDomains[0] || '');
+    const existingSet = new Set(normalizeCloudflareTempEmailDomains(existingDomains));
+    const addedCount = fetchedDomains.filter((domain) => !existingSet.has(domain)).length;
+
+    await saveCloudflareTempEmailDomainSettings(mergedDomains, nextActiveDomain, { silent: true });
+    if (addedCount > 0) {
+      showToast(`已更新 Cloudflare Temp Email 域名，新增 ${addedCount} 个。`, 'success', 2200);
+    } else {
+      showToast('已同步 Cloudflare Temp Email 域名，暂无新增项。', 'info', 2200);
+    }
+    return {
+      domains: mergedDomains,
+      activeDomain: nextActiveDomain,
+      source,
+    };
+  } catch (error) {
+    const message = error?.message || String(error || '未知错误');
+    throw new Error(`更新 Cloudflare Temp Email 域名失败：${message}`);
+  } finally {
+    btnTempEmailDomainMode.disabled = false;
+    btnTempEmailDomainMode.textContent = previousButtonText || '更新';
+  }
+}
+
 async function handleDeleteCloudflareDomain(domain) {
   const targetDomain = normalizeCloudflareDomainValue(domain);
   if (!targetDomain) {
@@ -9573,23 +11480,25 @@ async function handleAddSub2ApiGroup() {
     return;
   }
 
+  const selectedGroup = newGroups[0];
   const nextGroups = normalizeSub2ApiGroupOptions(
     getSub2ApiGroupOptionsState(latestState),
     newGroups
   );
-  const nextSelected = normalizeSub2ApiGroupOptions(
-    getSelectedSub2ApiGroupNames(),
-    newGroups
+  const previousSelected = normalizeSub2ApiGroupOptions(
+    latestState?.sub2apiSelectedGroupNames,
+    latestState?.sub2apiGroupName,
   );
+  const nextSelectedGroups = normalizeSub2ApiGroupOptions(previousSelected, newGroups);
   syncLatestState({
-    sub2apiGroupName: nextSelected.join(', '),
+    sub2apiGroupName: nextSelectedGroups[0] || selectedGroup,
     sub2apiGroupNames: nextGroups,
+    sub2apiSelectedGroupNames: nextSelectedGroups,
   });
-  renderSub2ApiGroupOptions(latestState, nextSelected);
+  renderSub2ApiGroupOptions(latestState, nextSelectedGroups);
   markSettingsDirty(true);
   await saveSettings({ silent: true }).catch(() => { });
-  const addedLabel = newGroups.join('、');
-  showToast(`已添加并选中 SUB2API 分组：${addedLabel}`, 'success', 1800);
+  showToast(`已添加 SUB2API 分组：${selectedGroup}`, 'success', 1800);
 }
 
 async function handleDeleteSub2ApiGroup(groupName) {
@@ -9610,17 +11519,19 @@ async function handleDeleteSub2ApiGroup(groupName) {
     return;
   }
 
-  const currentSelection = getSelectedSub2ApiGroupNames();
-  let nextSelection = currentSelection.filter((name) => name.toLowerCase() !== targetKey);
-  if (!nextSelection.length && nextGroups.length) {
-    nextSelection = [nextGroups[0]];
-  }
+  const previousSelected = normalizeSub2ApiGroupOptions(
+    latestState?.sub2apiSelectedGroupNames,
+    latestState?.sub2apiGroupName,
+  );
+  const nextSelected = previousSelected.filter((name) => name.toLowerCase() !== targetKey);
+  const effectiveSelected = nextSelected.length ? nextSelected : [nextGroups[0]];
 
   syncLatestState({
-    sub2apiGroupName: nextSelection.join(', '),
+    sub2apiGroupName: effectiveSelected[0],
     sub2apiGroupNames: nextGroups,
+    sub2apiSelectedGroupNames: effectiveSelected,
   });
-  renderSub2ApiGroupOptions(latestState, nextSelection);
+  renderSub2ApiGroupOptions(latestState, effectiveSelected);
   sub2ApiGroupPicker.setOpen(true);
   markSettingsDirty(true);
   await saveSettings({ silent: true }).catch(() => { });
@@ -9628,8 +11539,44 @@ async function handleDeleteSub2ApiGroup(groupName) {
 }
 
 function updatePanelModeUI() {
-  const useSub2Api = selectPanelMode.value === 'sub2api';
-  const useCodex2Api = selectPanelMode.value === 'codex2api';
+  const rawPanelMode = normalizePanelMode(selectPanelMode?.value || latestState?.panelMode || 'cpa');
+  const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
+    ? resolveCurrentSidepanelCapabilities({
+      panelMode: rawPanelMode,
+      state: {
+        ...(latestState || {}),
+        panelMode: rawPanelMode,
+      },
+    })
+    : null;
+  const supportedPanelModes = Array.isArray(capabilityState?.supportedPanelModes)
+    ? capabilityState.supportedPanelModes
+    : [];
+  if (selectPanelMode?.options && supportedPanelModes.length) {
+    Array.from(selectPanelMode.options).forEach((option) => {
+      if (!option) {
+        return;
+      }
+      const optionMode = normalizePanelMode(option.value || '');
+      const enabled = supportedPanelModes.includes(optionMode);
+      option.disabled = !enabled;
+      option.hidden = !enabled;
+    });
+  } else if (selectPanelMode?.options) {
+    Array.from(selectPanelMode.options).forEach((option) => {
+      if (!option) {
+        return;
+      }
+      option.disabled = false;
+      option.hidden = false;
+    });
+  }
+  const panelMode = capabilityState?.effectivePanelMode || capabilityState?.panelMode || getSelectedPanelMode();
+  if (selectPanelMode) {
+    selectPanelMode.value = panelMode;
+  }
+  const useSub2Api = panelMode === 'sub2api';
+  const useCodex2Api = panelMode === 'codex2api';
   const useCpa = !useSub2Api && !useCodex2Api;
   rowVpsUrl.style.display = useCpa ? '' : 'none';
   rowVpsPassword.style.display = useCpa ? '' : 'none';
@@ -9638,6 +11585,7 @@ function updatePanelModeUI() {
   rowSub2ApiEmail.style.display = useSub2Api ? '' : 'none';
   rowSub2ApiPassword.style.display = useSub2Api ? '' : 'none';
   rowSub2ApiGroup.style.display = useSub2Api ? '' : 'none';
+  rowSub2ApiAccountPriority.style.display = useSub2Api ? '' : 'none';
   rowSub2ApiDefaultProxy.style.display = useSub2Api ? '' : 'none';
   rowCodex2ApiUrl.style.display = useCodex2Api ? '' : 'none';
   rowCodex2ApiAdminKey.style.display = useCodex2Api ? '' : 'none';
@@ -9654,21 +11602,54 @@ function updatePanelModeUI() {
 // UI Updates
 // ============================================================
 
-function updateStepUI(step, status) {
+function updateNodeUI(nodeId, status) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) return;
   syncLatestState({
-    stepStatuses: {
-      ...getStepStatuses(),
-      [step]: status,
+    nodeStatuses: {
+      ...getNodeStatuses(),
+      [normalizedNodeId]: status,
     },
   });
 
-  renderSingleStepStatus(step, status);
+  renderSingleNodeStatus(normalizedNodeId, status);
   updateButtonStates();
   updateProgressCounter();
   updateConfigMenuControls();
 }
 
+function updateStepUI(step, status) {
+  const nodeId = getNodeIdByStepForCurrentMode(step);
+  if (nodeId) {
+    updateNodeUI(nodeId, status);
+    return;
+  }
+  updateButtonStates();
+  updateProgressCounter();
+  updateConfigMenuControls();
+}
+
+function renderSingleNodeStatus(nodeId, status) {
+  const normalizedStatus = status || 'pending';
+  const normalizedNodeId = String(nodeId || '').trim();
+  const selectorNodeId = escapeCssValue(normalizedNodeId);
+  const statusEl = document.querySelector(`.step-status[data-node-id="${selectorNodeId}"]`);
+  const row = document.querySelector(`.step-row[data-node-id="${selectorNodeId}"]`);
+
+  if (statusEl) statusEl.textContent = STATUS_ICONS[normalizedStatus] || '';
+  if (row) {
+    row.className = `step-row ${normalizedStatus}`;
+  }
+}
+
 function renderSingleStepStatus(step, status) {
+  const nodeId = typeof getNodeIdByStepForCurrentMode === 'function'
+    ? getNodeIdByStepForCurrentMode(step)
+    : '';
+  if (nodeId && typeof renderSingleNodeStatus === 'function') {
+    renderSingleNodeStatus(nodeId, status);
+    return;
+  }
   const normalizedStatus = status || 'pending';
   const statusEl = document.querySelector(`.step-status[data-step="${step}"]`);
   const row = document.querySelector(`.step-row[data-step="${step}"]`);
@@ -9680,20 +11661,32 @@ function renderSingleStepStatus(step, status) {
 }
 
 function renderStepStatuses(state = latestState) {
-  const statuses = getStepStatuses(state);
-  for (const step of STEP_IDS) {
-    renderSingleStepStatus(step, statuses[step]);
+  if (typeof getNodeStatuses === 'function' && typeof NODE_IDS !== 'undefined') {
+    const statuses = getNodeStatuses(state);
+    for (const nodeId of NODE_IDS) {
+      renderSingleNodeStatus(nodeId, statuses[nodeId]);
+    }
+  } else {
+    const statuses = getStepStatuses(state);
+    for (const step of STEP_IDS) {
+      renderSingleStepStatus(step, statuses[step]);
+    }
   }
   updateProgressCounter();
 }
 
 function updateProgressCounter() {
+  if (typeof getNodeStatuses === 'function' && typeof NODE_IDS !== 'undefined') {
+    const completed = Object.values(getNodeStatuses()).filter(isDoneStatus).length;
+    stepsProgress.textContent = `${completed} / ${NODE_IDS.length}`;
+    return;
+  }
   const completed = Object.values(getStepStatuses()).filter(isDoneStatus).length;
   stepsProgress.textContent = `${completed} / ${STEP_IDS.length}`;
 }
 
 function updateButtonStates() {
-  const statuses = getStepStatuses();
+  const statuses = getNodeStatuses();
   const anyRunning = Object.values(statuses).some(s => s === 'running');
   const autoLocked = isAutoRunLockedPhase();
   const autoScheduled = isAutoRunScheduledPhase();
@@ -9701,47 +11694,49 @@ function updateButtonStates() {
     ? selectIcloudTargetMailboxType?.value
     : latestState?.icloudTargetMailboxType;
 
-  for (const step of STEP_IDS) {
-    const btn = document.querySelector(`.step-btn[data-step="${step}"]`);
+  for (const nodeId of NODE_IDS) {
+    const step = getStepIdByNodeIdForCurrentMode(nodeId);
+    const btn = document.querySelector(`.step-btn[data-node-id="${escapeCssValue(nodeId)}"]`);
     if (!btn) continue;
 
     if (anyRunning || autoLocked || autoScheduled) {
       btn.disabled = true;
-    } else if (step === 1) {
+    } else if (NODE_IDS.indexOf(nodeId) === 0) {
       btn.disabled = false;
     } else {
-      const currentIndex = STEP_IDS.indexOf(step);
-      const prevStep = currentIndex > 0 ? STEP_IDS[currentIndex - 1] : null;
-      const prevStatus = prevStep === null ? 'completed' : statuses[prevStep];
-      const currentStatus = statuses[step];
+      const currentIndex = NODE_IDS.indexOf(nodeId);
+      const prevNodeId = currentIndex > 0 ? NODE_IDS[currentIndex - 1] : null;
+      const prevStatus = prevNodeId === null ? 'completed' : statuses[prevNodeId];
+      const currentStatus = statuses[nodeId];
       btn.disabled = !(isDoneStatus(prevStatus) || currentStatus === 'failed' || isDoneStatus(currentStatus) || currentStatus === 'stopped');
     }
   }
 
   document.querySelectorAll('.step-manual-btn').forEach((btn) => {
     const step = Number(btn.dataset.step);
-    const currentStatus = statuses[step];
-    const currentIndex = STEP_IDS.indexOf(step);
-    const prevStep = currentIndex > 0 ? STEP_IDS[currentIndex - 1] : null;
-    const prevStatus = prevStep === null ? 'completed' : statuses[prevStep];
+    const nodeId = String(btn.dataset.nodeId || getNodeIdByStepForCurrentMode(step) || '').trim();
+    const currentStatus = statuses[nodeId];
+    const currentIndex = NODE_IDS.indexOf(nodeId);
+    const prevNodeId = currentIndex > 0 ? NODE_IDS[currentIndex - 1] : null;
+    const prevStatus = prevNodeId === null ? 'completed' : statuses[prevNodeId];
 
-    if (!SKIPPABLE_STEPS.has(step) || anyRunning || autoLocked || autoScheduled || currentStatus === 'running' || isDoneStatus(currentStatus)) {
+    if (!SKIPPABLE_NODES.has(nodeId) || anyRunning || autoLocked || autoScheduled || currentStatus === 'running' || isDoneStatus(currentStatus)) {
       btn.style.display = 'none';
       btn.disabled = true;
       btn.title = '当前不可跳过';
       return;
     }
 
-    if (prevStep !== null && !isDoneStatus(prevStatus)) {
+    if (prevNodeId !== null && !isDoneStatus(prevStatus)) {
       btn.style.display = 'none';
       btn.disabled = true;
-      btn.title = `请先完成步骤 ${prevStep}`;
+      btn.title = `请先完成节点 ${prevNodeId}`;
       return;
     }
 
     btn.style.display = '';
     btn.disabled = false;
-    btn.title = `跳过步骤 ${step}`;
+    btn.title = `跳过节点 ${nodeId}`;
   });
 
   btnReset.disabled = anyRunning || autoScheduled || isAutoRunPausedPhase() || autoLocked;
@@ -9775,9 +11770,10 @@ function updateStopButtonState(active) {
 }
 
 function updateStatusDisplay(state) {
-  if (!state || !state.stepStatuses) return;
+  if (!state || !state.nodeStatuses) return;
 
   statusBar.className = 'status-bar';
+  const nodeStatuses = getNodeStatuses(state);
 
   const countdown = getActiveAutoRunCountdown();
   if (countdown) {
@@ -9807,17 +11803,17 @@ function updateStatusDisplay(state) {
   }
 
   if (isAutoRunWaitingStepPhase()) {
-    const runningSteps = getRunningSteps(state);
-    displayStatus.textContent = runningSteps.length
-      ? `自动等待步骤 ${runningSteps.join(', ')} 完成后继续${getAutoRunLabel()}`
+    const runningNodes = getRunningNodes(state);
+    displayStatus.textContent = runningNodes.length
+      ? `自动等待节点 ${runningNodes.join(', ')} 完成后继续${getAutoRunLabel()}`
       : `自动正在按最新进度准备继续${getAutoRunLabel()}`;
     statusBar.classList.add('running');
     return;
   }
 
-  const running = Object.entries(state.stepStatuses).find(([, s]) => s === 'running');
+  const running = Object.entries(nodeStatuses).find(([, s]) => s === 'running');
   if (running) {
-    displayStatus.textContent = `步骤 ${running[0]} 运行中...`;
+    displayStatus.textContent = `节点 ${running[0]} 运行中...`;
     statusBar.classList.add('running');
     return;
   }
@@ -9828,42 +11824,35 @@ function updateStatusDisplay(state) {
     return;
   }
 
-  const failed = Object.entries(state.stepStatuses).find(([, s]) => s === 'failed');
+  const failed = Object.entries(nodeStatuses).find(([, s]) => s === 'failed');
   if (failed) {
-    displayStatus.textContent = `步骤 ${failed[0]} 失败`;
+    displayStatus.textContent = `节点 ${failed[0]} 失败`;
     statusBar.classList.add('failed');
     return;
   }
 
-  const stopped = Object.entries(state.stepStatuses).find(([, s]) => s === 'stopped');
+  const stopped = Object.entries(nodeStatuses).find(([, s]) => s === 'stopped');
   if (stopped) {
-    displayStatus.textContent = `步骤 ${stopped[0]} 已停止`;
+    displayStatus.textContent = `节点 ${stopped[0]} 已停止`;
     statusBar.classList.add('stopped');
     return;
   }
 
-  const lastCompleted = Object.entries(state.stepStatuses)
+  const lastCompleted = Object.entries(nodeStatuses)
     .filter(([, s]) => isDoneStatus(s))
-    .map(([k]) => Number(k))
-    .sort((a, b) => b - a)[0];
+    .map(([nodeId]) => nodeId)
+    .sort((left, right) => NODE_IDS.indexOf(right) - NODE_IDS.indexOf(left))[0];
 
-  if (lastCompleted === STEP_IDS[STEP_IDS.length - 1]) {
-    displayStatus.textContent = (state.stepStatuses[lastCompleted] === 'manual_completed' || state.stepStatuses[lastCompleted] === 'skipped') ? '全部步骤已跳过/完成' : '全部步骤已完成';
+  if (lastCompleted === NODE_IDS[NODE_IDS.length - 1]) {
+    displayStatus.textContent = (nodeStatuses[lastCompleted] === 'manual_completed' || nodeStatuses[lastCompleted] === 'skipped') ? '全部节点已跳过/完成' : '全部节点已完成';
     statusBar.classList.add('completed');
   } else if (lastCompleted) {
-    displayStatus.textContent = (state.stepStatuses[lastCompleted] === 'manual_completed' || state.stepStatuses[lastCompleted] === 'skipped')
-      ? `步骤 ${lastCompleted} 已跳过`
-      : `步骤 ${lastCompleted} 已完成`;
+    displayStatus.textContent = (nodeStatuses[lastCompleted] === 'manual_completed' || nodeStatuses[lastCompleted] === 'skipped')
+      ? `节点 ${lastCompleted} 已跳过`
+      : `节点 ${lastCompleted} 已完成`;
   } else {
     displayStatus.textContent = '就绪';
   }
-}
-
-/** 视口是否已经贴底；向上翻看旧日志时为 false，新日志不应自动拉到最底下。 */
-function isLogPinnedToBottom(thresholdPx = 24) {
-  if (!logArea) return true;
-  const maxScrollTop = Math.max(0, logArea.scrollHeight - logArea.clientHeight);
-  return maxScrollTop - (Number(logArea.scrollTop) || 0) <= thresholdPx;
 }
 
 function appendLog(entry) {
@@ -9886,11 +11875,8 @@ function appendLog(entry) {
   html += `<span class="log-msg">${escapeHtml(entry.message)}</span>`;
 
   line.innerHTML = html;
-  const shouldStickToBottom = isLogPinnedToBottom();
   logArea.appendChild(line);
-  if (shouldStickToBottom) {
-    logArea.scrollTop = logArea.scrollHeight;
-  }
+  logArea.scrollTop = logArea.scrollHeight;
 }
 
 function escapeHtml(text) {
@@ -9915,6 +11901,7 @@ async function fetchGeneratedEmail(options = {}) {
       source: 'sidepanel',
       payload: {
         generateNew: true,
+        currentEmail: inputEmail.value.trim(),
         generator: selectEmailGenerator.value,
         mailProvider: selectMailProvider.value,
         mail2925Mode: getSelectedMail2925Mode(),
@@ -10389,6 +12376,7 @@ const contributionModeManager = window.SidepanelContributionMode?.createContribu
     rowPhoneVerificationEnabled,
     rowCustomPassword,
     rowLocalCpaStep9Mode,
+    rowSub2ApiAccountPriority,
     rowSub2ApiDefaultProxy,
     rowSub2ApiEmail,
     rowSub2ApiGroup,
@@ -10593,7 +12581,11 @@ async function maybeTakeoverAutoRun(actionLabel) {
   return true;
 }
 
-async function handleSkipStep(step) {
+async function handleSkipNode(nodeId) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) {
+    throw new Error('缺少要跳过的节点。');
+  }
   if (isAutoRunPausedPhase()) {
     const takeoverResponse = await chrome.runtime.sendMessage({
       type: 'TAKEOVER_AUTO_RUN',
@@ -10608,16 +12600,27 @@ async function handleSkipStep(step) {
   await persistCurrentSettingsForAction();
 
   const response = await chrome.runtime.sendMessage({
-    type: 'SKIP_STEP',
+    type: 'SKIP_NODE',
     source: 'sidepanel',
-    payload: { step },
+    payload: {
+      nodeId: normalizedNodeId,
+      step: getStepIdByNodeIdForCurrentMode(normalizedNodeId),
+    },
   });
 
   if (response?.error) {
     throw new Error(response.error);
   }
 
-  showToast(`步骤 ${step} 已跳过`, 'success', 2200);
+  showToast(`节点 ${normalizedNodeId} 已跳过`, 'success', 2200);
+}
+
+async function handleSkipStep(step) {
+  const nodeId = getNodeIdByStepForCurrentMode(step);
+  if (!nodeId) {
+    throw new Error(`无效步骤：${step}`);
+  }
+  return handleSkipNode(nodeId);
 }
 
 // ============================================================
@@ -10631,10 +12634,15 @@ stepsList?.addEventListener('click', async (event) => {
   }
   try {
     const step = Number(btn.dataset.step);
-    if (!(await maybeTakeoverAutoRun(`执行步骤 ${step}`))) {
+    const nodeId = String(btn.dataset.nodeId || getNodeIdByStepForCurrentMode(step) || '').trim();
+    if (!(await maybeTakeoverAutoRun(`执行节点 ${nodeId || step}`))) {
       return;
     }
     await persistCurrentSettingsForAction();
+    const gpcCreateStep = getStepIdByKeyForCurrentMode('plus-checkout-create') || 6;
+    if (step === gpcCreateStep && !(await ensureGpcApiKeyReadyForStart())) {
+      return;
+    }
     if (step === 3) {
       if (inputPassword.value !== (latestState?.customPassword || '')) {
         await chrome.runtime.sendMessage({
@@ -10645,12 +12653,12 @@ stepsList?.addEventListener('click', async (event) => {
         syncLatestState({ customPassword: inputPassword.value });
       }
       if (shouldExecuteStep3WithSignupPhoneIdentity(latestState)) {
-        const response = await chrome.runtime.sendMessage({ type: 'EXECUTE_STEP', source: 'sidepanel', payload: { step } });
+        const response = await sendSidepanelMessage({ type: 'EXECUTE_NODE', source: 'sidepanel', payload: { nodeId } });
         if (response?.error) {
           throw new Error(response.error);
         }
       } else if (selectMailProvider.value === 'hotmail-api' || isLuckmailProvider()) {
-        const response = await chrome.runtime.sendMessage({ type: 'EXECUTE_STEP', source: 'sidepanel', payload: { step } });
+        const response = await sendSidepanelMessage({ type: 'EXECUTE_NODE', source: 'sidepanel', payload: { nodeId } });
         if (response?.error) {
           throw new Error(response.error);
         }
@@ -10660,7 +12668,7 @@ stepsList?.addEventListener('click', async (event) => {
           showToast(selectMailProvider.value === GMAIL_PROVIDER ? '请先填写 Gmail 原邮箱。' : '请先填写 2925 邮箱前缀。', 'warn');
           return;
         }
-        const response = await chrome.runtime.sendMessage({ type: 'EXECUTE_STEP', source: 'sidepanel', payload: { step, emailPrefix } });
+        const response = await sendSidepanelMessage({ type: 'EXECUTE_NODE', source: 'sidepanel', payload: { nodeId, emailPrefix } });
         if (response?.error) {
           throw new Error(response.error);
         }
@@ -10681,13 +12689,13 @@ stepsList?.addEventListener('click', async (event) => {
         if (!validateCurrentRegistrationEmail(email, { showToastOnFailure: true })) {
           return;
         }
-        const response = await chrome.runtime.sendMessage({ type: 'EXECUTE_STEP', source: 'sidepanel', payload: { step, email } });
+        const response = await sendSidepanelMessage({ type: 'EXECUTE_NODE', source: 'sidepanel', payload: { nodeId, email } });
         if (response?.error) {
           throw new Error(response.error);
         }
       }
     } else {
-      const response = await chrome.runtime.sendMessage({ type: 'EXECUTE_STEP', source: 'sidepanel', payload: { step } });
+      const response = await sendSidepanelMessage({ type: 'EXECUTE_NODE', source: 'sidepanel', payload: { nodeId } });
       if (response?.error) {
         throw new Error(response.error);
       }
@@ -10871,6 +12879,12 @@ autoStartModal?.addEventListener('click', (event) => {
     resolveModalChoice(null);
   }
 });
+autoStartMessage?.addEventListener('click', (event) => {
+  const link = event.target?.closest?.('a[data-external-url]');
+  if (!link) return;
+  event.preventDefault();
+  openExternalUrl(link.dataset.externalUrl || link.href);
+});
 btnAutoStartClose?.addEventListener('click', () => resolveModalChoice(null));
 
 async function startAutoRunFromCurrentSettings() {
@@ -10891,6 +12905,41 @@ async function startAutoRunFromCurrentSettings() {
   if (typeof persistCurrentSettingsForAction === 'function') {
     await persistCurrentSettingsForAction();
   }
+  const autoRunStartValidation = (() => {
+    const rootScope = typeof window !== 'undefined' ? window : globalThis;
+    const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+      defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+    }) || null;
+    if (!registry?.validateAutoRunStart) {
+      return { ok: true, errors: [] };
+    }
+    const validationState = {
+      ...(latestState || {}),
+      panelMode: typeof getSelectedPanelMode === 'function' ? getSelectedPanelMode() : latestState?.panelMode,
+      signupMethod: typeof getSelectedSignupMethod === 'function' ? getSelectedSignupMethod() : latestState?.signupMethod,
+      phoneVerificationEnabled: typeof inputPhoneVerificationEnabled !== 'undefined' && inputPhoneVerificationEnabled
+        ? Boolean(inputPhoneVerificationEnabled.checked)
+        : Boolean(latestState?.phoneVerificationEnabled),
+      plusModeEnabled: typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+        ? Boolean(inputPlusModeEnabled.checked)
+        : Boolean(latestState?.plusModeEnabled),
+      contributionMode: Boolean(latestState?.contributionMode),
+    };
+    return registry.validateAutoRunStart({
+      activeFlowId: validationState.activeFlowId,
+      panelMode: validationState.panelMode,
+      signupMethod: validationState.signupMethod,
+      state: validationState,
+    });
+  })();
+  if (autoRunStartValidation?.ok === false) {
+    clearPendingAutoRunStartRunCount();
+    throw new Error(autoRunStartValidation.errors?.[0]?.message || '当前设置不支持启动自动流程。');
+  }
+  if (!(await ensureGpcApiKeyReadyForStart())) {
+    clearPendingAutoRunStartRunCount();
+    return false;
+  }
 
   const customEmailPoolEnabled = typeof usesCustomEmailPoolGenerator === 'function'
     && usesCustomEmailPoolGenerator();
@@ -10905,9 +12954,6 @@ async function startAutoRunFromCurrentSettings() {
   if (lockedRunCount > 0) {
     inputRunCount.value = String(lockedRunCount);
   }
-  const plusModeEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
-    ? Boolean(inputPlusModeEnabled.checked)
-    : Boolean(currentPlusModeEnabled || latestState?.plusModeEnabled);
   let mode = 'restart';
   const autoRunSkipFailures = inputAutoSkipFailures.checked;
   const contributionNickname = String(inputContributionNickname?.value || '').trim();
@@ -10928,12 +12974,6 @@ async function startAutoRunFromCurrentSettings() {
     mode = choice;
   }
 
-  const confirmedPlusContributionPrompt = await maybeShowPlusContributionPromptBeforeAutoRun(plusModeEnabled);
-  if (!confirmedPlusContributionPrompt) {
-    clearPendingAutoRunStartRunCount();
-    return false;
-  }
-
   if (shouldWarnAutoRunFallbackRisk(totalRuns, autoRunSkipFailures)
     && !isAutoRunFallbackRiskPromptDismissed()) {
     const result = await openAutoRunFallbackRiskConfirmModal(totalRuns);
@@ -10946,27 +12986,15 @@ async function startAutoRunFromCurrentSettings() {
     }
   }
 
-  if (shouldWarnPlusAutoRunRisk(totalRuns, plusModeEnabled)
-    && !isAutoRunPlusRiskPromptDismissed()) {
-    const result = await openPlusAutoRunRiskConfirmModal(totalRuns);
-    if (!result.confirmed) {
-      clearPendingAutoRunStartRunCount();
-      return false;
-    }
-    if (result.dismissPrompt) {
-      setAutoRunPlusRiskPromptDismissed(true);
-    }
-  }
-
   btnAutoRun.disabled = true;
   inputRunCount.disabled = true;
   const delayEnabled = inputAutoDelayEnabled.checked;
   const delayMinutes = normalizeAutoDelayMinutes(inputAutoDelayMinutes.value);
   inputAutoDelayMinutes.value = String(delayMinutes);
   btnAutoRun.innerHTML = delayEnabled
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> 璁″垝涓?..'
-    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> 杩愯涓?..';
-  const response = await chrome.runtime.sendMessage({
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> 计划中...'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> 运行中...';
+  const response = await sendSidepanelMessage({
     type: delayEnabled ? 'SCHEDULE_AUTO_RUN' : 'AUTO_RUN',
     source: 'sidepanel',
     payload: {
@@ -11008,14 +13036,14 @@ btnAutoContinue.addEventListener('click', async () => {
     return;
   }
   autoContinueBar.style.display = 'none';
-  await chrome.runtime.sendMessage({ type: 'RESUME_AUTO_RUN', source: 'sidepanel', payload: { email } });
+  await sendSidepanelMessage({ type: 'RESUME_AUTO_RUN', source: 'sidepanel', payload: { email } });
 });
 
 btnAutoRunNow?.addEventListener('click', async () => {
   try {
     btnAutoRunNow.disabled = true;
     const waitingInterval = currentAutoRun.phase === 'waiting_interval';
-    await chrome.runtime.sendMessage({
+    await sendSidepanelMessage({
       type: waitingInterval ? 'SKIP_AUTO_RUN_COUNTDOWN' : 'START_SCHEDULED_AUTO_RUN_NOW',
       source: 'sidepanel',
       payload: {},
@@ -11056,7 +13084,7 @@ btnReset.addEventListener('click', async () => {
 
   await chrome.runtime.sendMessage({ type: 'RESET', source: 'sidepanel' });
   syncLatestState({
-    stepStatuses: STEP_DEFAULT_STATUSES,
+    nodeStatuses: NODE_DEFAULT_STATUSES,
     currentHotmailAccountId: null,
     currentLuckmailPurchase: null,
     currentLuckmailMailCursor: null,
@@ -11215,21 +13243,59 @@ inputPassword.addEventListener('blur', () => {
 inputPlusModeEnabled?.addEventListener('change', () => {
   updatePlusModeUI();
   updateSignupMethodUI({ notify: true });
-  syncStepDefinitionsForMode(Boolean(inputPlusModeEnabled.checked), getSelectedPlusPaymentMethod(), { render: true });
+  const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+    ? resolveStepDefinitionCapabilityState({
+      ...(latestState || {}),
+      plusModeEnabled: Boolean(inputPlusModeEnabled.checked),
+      signupMethod: getSelectedSignupMethod(),
+    }, {
+      signupMethod: getSelectedSignupMethod(),
+    })
+    : {
+      plusModeEnabled: Boolean(inputPlusModeEnabled.checked),
+      signupMethod: getSelectedSignupMethod(),
+    };
+  syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, getSelectedPlusPaymentMethod(), {
+    render: true,
+    signupMethod: stepDefinitionState.signupMethod,
+  });
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
+});
+
+inputOperationDelayEnabled?.addEventListener('change', () => {
+  persistOperationDelayToggle().catch(() => { });
 });
 
 selectPlusPaymentMethod?.addEventListener('change', () => {
   selectPlusPaymentMethod.value = normalizePlusPaymentMethod(selectPlusPaymentMethod.value);
   updatePlusModeUI();
-  syncStepDefinitionsForMode(Boolean(inputPlusModeEnabled?.checked), selectPlusPaymentMethod.value, { render: true });
+  const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+    ? resolveStepDefinitionCapabilityState({
+      ...(latestState || {}),
+      plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
+      signupMethod: getSelectedSignupMethod(),
+    }, {
+      signupMethod: getSelectedSignupMethod(),
+    })
+    : {
+      plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
+      signupMethod: getSelectedSignupMethod(),
+    };
+  syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, selectPlusPaymentMethod.value, {
+    render: true,
+    signupMethod: stepDefinitionState.signupMethod,
+  });
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
 });
 
 btnGpcCardKeyPurchase?.addEventListener('click', () => {
   openExternalUrl('https://pay.ldxp.cn/shop/gpc');
+});
+
+btnGpcHelperConvertApiKey?.addEventListener('click', () => {
+  openExternalUrl(GPC_HELPER_PORTAL_URL);
 });
 
 btnGpcHelperBalance?.addEventListener('click', async () => {
@@ -11239,7 +13305,7 @@ btnGpcHelperBalance?.addEventListener('click', async () => {
       source: 'sidepanel',
       payload: {
         gopayHelperApiUrl: inputGpcHelperApi?.value || DEFAULT_GPC_HELPER_API_URL,
-        gopayHelperCardKey: inputGpcHelperCardKey?.value || '',
+        gopayHelperApiKey: inputGpcHelperCardKey?.value || '',
         gopayHelperCountryCode: selectGpcHelperCountryCode?.value || '+86',
         reason: 'manual',
       },
@@ -11250,7 +13316,30 @@ btnGpcHelperBalance?.addEventListener('click', async () => {
     if (displayGpcHelperBalance) {
       displayGpcHelperBalance.textContent = response?.balance || '余额已更新';
     }
-    showToast('GPC 余额已更新。', 'success');
+    const nextState = {
+      gopayHelperBalance: response?.balance || latestState?.gopayHelperBalance || '',
+      gopayHelperBalancePayload: response?.data || response?.payload?.data || response?.payload || latestState?.gopayHelperBalancePayload || null,
+      gopayHelperBalanceUpdatedAt: response?.updatedAt || Date.now(),
+      gopayHelperBalanceError: '',
+      gopayHelperRemainingUses: getGpcBalanceRemainingUsesFromResponse(response) ?? 0,
+      gopayHelperAutoModeEnabled: getGpcAutoModeEnabledFromResponse(response),
+      gopayHelperApiKeyStatus: response?.apiKeyStatus || response?.data?.status || response?.payload?.data?.status || response?.payload?.status || '',
+    };
+    const nextAutoModePermission = getGpcAutoModePermissionFromPayload(nextState.gopayHelperBalancePayload);
+    const nextAutoModeDenied = nextAutoModePermission === false;
+    const nextAutoModeConfirmed = nextAutoModePermission === true || nextState.gopayHelperAutoModeEnabled;
+    const selectedModeBeforeBalanceState = getSelectedGpcHelperPhoneMode();
+    syncLatestState(nextState);
+    if (nextAutoModeDenied && selectedModeBeforeBalanceState === GPC_HELPER_PHONE_MODE_AUTO) {
+      showToast('当前 API Key 未开通自动模式，已保留当前选择；如需继续请手动切换到手动模式。', 'warn');
+    } else if (nextAutoModeDenied) {
+      showToast('GPC 余额已更新，当前 API Key 只能使用手动模式。', 'success');
+    } else if (nextAutoModeConfirmed) {
+      showToast('GPC 余额已更新，自动模式可用。', 'success');
+    } else {
+      showToast('GPC 余额已更新，当前接口未返回自动模式权限，已保留所选模式。', 'success');
+    }
+    updatePlusModeUI();
   } catch (error) {
     showToast(error?.message || '查询 GPC 余额失败。', 'error');
   }
@@ -11258,9 +13347,22 @@ btnGpcHelperBalance?.addEventListener('click', async () => {
 
 selectPlusPaymentMethod?.addEventListener('change', () => {
   updatePlusModeUI();
-  syncStepDefinitionsForMode(Boolean(inputPlusModeEnabled?.checked), {
+  const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+    ? resolveStepDefinitionCapabilityState({
+      ...(latestState || {}),
+      plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
+      signupMethod: getSelectedSignupMethod(),
+    }, {
+      signupMethod: getSelectedSignupMethod(),
+    })
+    : {
+      plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
+      signupMethod: getSelectedSignupMethod(),
+    };
+  syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
     render: true,
     plusPaymentMethod: selectPlusPaymentMethod.value,
+    signupMethod: stepDefinitionState.signupMethod,
   });
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
@@ -11269,8 +13371,12 @@ selectPlusPaymentMethod?.addEventListener('change', () => {
 [
   inputGpcHelperApi,
   inputGpcHelperCardKey,
+  selectGpcHelperPhoneMode,
   selectGpcHelperCountryCode,
   inputGpcHelperPhone,
+  selectGpcHelperOtpChannel,
+  inputGpcHelperLocalSmsEnabled,
+  inputGpcHelperLocalSmsUrl,
   inputGpcHelperPin,
   selectGoPayCountryCode,
   inputGoPayPhone,
@@ -11280,6 +13386,13 @@ selectPlusPaymentMethod?.addEventListener('change', () => {
   input?.addEventListener('input', () => {
     markSettingsDirty(true);
     scheduleSettingsAutoSave();
+  });
+  input?.addEventListener('change', () => {
+    if (input === selectGpcHelperPhoneMode || input === selectGpcHelperOtpChannel || input === inputGpcHelperLocalSmsEnabled) {
+      updatePlusModeUI();
+    }
+    markSettingsDirty(true);
+    saveSettings({ silent: true }).catch(() => { });
   });
   input?.addEventListener('blur', () => {
     saveSettings({ silent: true }).catch(() => { });
@@ -11345,6 +13458,30 @@ mail2925ModeButtons.forEach((button) => {
   });
 });
 
+tempEmailLookupModeButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    const nextMode = normalizeCloudflareTempEmailLookupMode(button.dataset.tempEmailLookupMode);
+    const previousMode = getSelectedCloudflareTempEmailLookupMode();
+    if (nextMode === previousMode) {
+      return;
+    }
+
+    if (nextMode === CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL) {
+      const confirmed = await confirmCloudflareTempEmailRegistrationLookupIfNeeded();
+      if (!confirmed) {
+        setCloudflareTempEmailLookupMode(previousMode);
+        updateMailProviderUI();
+        return;
+      }
+    }
+
+    setCloudflareTempEmailLookupMode(nextMode);
+    updateMailProviderUI();
+    markSettingsDirty(true);
+    saveSettings({ silent: true }).catch(() => { });
+  });
+});
+
 selectEmailGenerator.addEventListener('change', () => {
   updateMailProviderUI();
   clearRegistrationEmail({ silent: true }).catch(() => { });
@@ -11383,7 +13520,22 @@ checkboxAutoDeleteIcloud?.addEventListener('change', () => {
   saveSettings({ silent: true }).catch(() => { });
 });
 
-selectPanelMode.addEventListener('change', () => {
+selectPanelMode.addEventListener('change', async () => {
+  const previousPanelMode = normalizePanelMode(latestState?.panelMode || 'cpa');
+  const rawNextPanelMode = normalizePanelMode(selectPanelMode.value);
+  selectPanelMode.value = rawNextPanelMode;
+  const nextPanelMode = getSelectedPanelMode();
+  selectPanelMode.value = nextPanelMode;
+  const confirmed = await confirmCpaPhoneSignupIfNeeded({
+    signupMethod: getSelectedSignupMethod(),
+    panelMode: nextPanelMode,
+  });
+  if (!confirmed) {
+    selectPanelMode.value = previousPanelMode;
+    updatePanelModeUI();
+    return;
+  }
+  syncLatestState({ panelMode: nextPanelMode });
   updatePanelModeUI();
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
@@ -11665,20 +13817,7 @@ btnCfDomainMode.addEventListener('click', async () => {
 
 btnTempEmailDomainMode.addEventListener('click', async () => {
   try {
-    if (!cloudflareTempEmailDomainEditMode) {
-      setCloudflareTempEmailDomainEditMode(true, { clearInput: true });
-      return;
-    }
-
-    const newDomain = normalizeCloudflareTempEmailDomainValue(inputTempEmailDomain.value);
-    if (!newDomain) {
-      showToast('请输入有效的 Cloudflare Temp Email 域名。', 'warn');
-      inputTempEmailDomain.focus();
-      return;
-    }
-
-    const { domains } = getCloudflareTempEmailDomainsFromState();
-    await saveCloudflareTempEmailDomainSettings([...domains, newDomain], newDomain);
+    await syncCloudflareTempEmailDomainsFromService();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -11723,19 +13862,41 @@ inputSub2ApiPassword.addEventListener('blur', () => {
 });
 
 inputSub2ApiGroup.addEventListener('change', () => {
+  const selectedNames = getSelectedSub2ApiGroupNames();
   syncLatestState({
-    sub2apiGroupName: getSelectedSub2ApiGroupName(),
+    sub2apiGroupName: selectedNames[0] || DEFAULT_SUB2API_GROUP_OPTIONS[0],
     sub2apiGroupNames: normalizeSub2ApiGroupOptions(
       getSub2ApiGroupOptionsState(latestState),
-      getSelectedSub2ApiGroupName()
+      selectedNames
     ),
+    sub2apiSelectedGroupNames: selectedNames,
   });
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
 });
+
+inputSub2ApiAccountPriority.addEventListener('input', () => {
+  markSettingsDirty(true);
+  scheduleSettingsAutoSave();
+});
+inputSub2ApiAccountPriority.addEventListener('blur', () => {
+  inputSub2ApiAccountPriority.value = String(normalizeSub2ApiAccountPriorityValue(inputSub2ApiAccountPriority.value));
+  saveSettings({ silent: true }).catch(() => { });
+});
+
 btnAddSub2ApiGroup?.addEventListener('click', () => {
   handleAddSub2ApiGroup().catch((error) => {
     showToast(error?.message || '添加 SUB2API 分组失败。', 'error');
+  });
+});
+
+[inputPayPalSmsPhone, inputPayPalSmsApi, inputBindCardNumber].forEach((input) => {
+  input?.addEventListener('input', () => {
+    markSettingsDirty(true);
+    scheduleSettingsAutoSave();
+  });
+  input?.addEventListener('blur', () => {
+    saveSettings({ silent: true }).catch(() => { });
   });
 });
 
@@ -12140,6 +14301,11 @@ inputAutoDelayEnabled.addEventListener('change', () => {
   saveSettings({ silent: true }).catch(() => { });
 });
 
+inputStep6CookieCleanupEnabled?.addEventListener('change', () => {
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+});
+
 inputAutoDelayMinutes.addEventListener('input', () => {
   markSettingsDirty(true);
   scheduleSettingsAutoSave();
@@ -12210,6 +14376,7 @@ async function switchPhoneSmsProvider(nextProvider) {
 
   const currentApiKey = String(inputHeroSmsApiKey?.value || '');
   const currentMaxPrice = normalizePhoneSmsMaxPriceValue(inputHeroSmsMaxPrice?.value || '', previousProvider);
+  const currentMinPrice = normalizePhoneSmsMinPriceValue(inputHeroSmsMinPrice?.value || '', previousProvider);
   const currentSelection = typeof getPhoneSmsCountrySelectionForProvider === 'function'
     ? getPhoneSmsCountrySelectionForProvider(previousProvider, { ensureDefault: true })
     : [];
@@ -12222,6 +14389,7 @@ async function switchPhoneSmsProvider(nextProvider) {
   if (previousProvider === PHONE_SMS_PROVIDER_FIVE_SIM) {
     patch.fiveSimApiKey = currentApiKey;
     patch.fiveSimMaxPrice = currentMaxPrice;
+    patch.fiveSimMinPrice = currentMinPrice;
     patch.fiveSimCountryId = currentPrimary.id;
     patch.fiveSimCountryLabel = currentPrimary.label;
     patch.fiveSimCountryFallback = currentFallback;
@@ -12232,6 +14400,7 @@ async function switchPhoneSmsProvider(nextProvider) {
   } else {
     patch.heroSmsApiKey = currentApiKey;
     patch.heroSmsMaxPrice = currentMaxPrice;
+    patch.heroSmsMinPrice = currentMinPrice;
     patch.heroSmsCountryId = currentPrimary.id;
     patch.heroSmsCountryLabel = currentPrimary.label;
     patch.heroSmsCountryFallback = currentFallback;
@@ -12249,6 +14418,11 @@ async function switchPhoneSmsProvider(nextProvider) {
     inputHeroSmsMaxPrice.value = normalizedNextProvider === PHONE_SMS_PROVIDER_FIVE_SIM
       ? normalizeFiveSimMaxPriceValue(latestState?.fiveSimMaxPrice || '')
       : normalizeHeroSmsMaxPriceValue(latestState?.heroSmsMaxPrice || '');
+  }
+  if (typeof inputHeroSmsMinPrice !== 'undefined' && inputHeroSmsMinPrice) {
+    inputHeroSmsMinPrice.value = normalizedNextProvider === PHONE_SMS_PROVIDER_FIVE_SIM
+      ? normalizePhoneSmsMinPriceValue(latestState?.fiveSimMinPrice || '', PHONE_SMS_PROVIDER_FIVE_SIM)
+      : normalizePhoneSmsMinPriceValue(latestState?.heroSmsMinPrice || '', normalizedNextProvider);
   }
   if (inputFiveSimOperator) {
     inputFiveSimOperator.value = normalizeFiveSimOperator(latestState?.fiveSimOperator);
@@ -12295,15 +14469,52 @@ inputPhoneVerificationEnabled?.addEventListener('change', () => {
 });
 
 signupMethodButtons.forEach((button) => {
-  button.addEventListener('click', () => {
+  button.addEventListener('click', async () => {
     if (button.disabled) {
       return;
     }
-    setSignupMethod(button.dataset.signupMethod);
+    const nextSignupMethod = normalizeSignupMethod(button.dataset.signupMethod);
+    const confirmed = await confirmCpaPhoneSignupIfNeeded({
+      signupMethod: nextSignupMethod,
+      panelMode: getSelectedPanelMode(),
+    });
+    if (!confirmed) {
+      updateSignupMethodUI();
+      return;
+    }
+    setSignupMethod(nextSignupMethod);
     updateSignupMethodUI();
     markSettingsDirty(true);
     saveSettings({ silent: true }).catch(() => { });
   });
+});
+
+inputPhoneSignupReloginAfterBindEmail?.addEventListener('change', () => {
+  const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+    ? resolveStepDefinitionCapabilityState({
+      ...(latestState || {}),
+      plusModeEnabled: typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+        ? Boolean(inputPlusModeEnabled.checked)
+        : Boolean(latestState?.plusModeEnabled),
+      signupMethod: getSelectedSignupMethod(),
+      phoneSignupReloginAfterBindEmailEnabled: Boolean(inputPhoneSignupReloginAfterBindEmail.checked),
+    }, {
+      signupMethod: getSelectedSignupMethod(),
+    })
+    : {
+      plusModeEnabled: typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
+        ? Boolean(inputPlusModeEnabled.checked)
+        : Boolean(latestState?.plusModeEnabled),
+      signupMethod: getSelectedSignupMethod(),
+    };
+  syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
+    plusPaymentMethod: getSelectedPlusPaymentMethod(latestState),
+    signupMethod: stepDefinitionState.signupMethod,
+    phoneSignupReloginAfterBindEmailEnabled: Boolean(inputPhoneSignupReloginAfterBindEmail.checked),
+  });
+  updatePhoneVerificationSettingsUI();
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
 });
 
 selectPhoneSmsProvider?.addEventListener('change', async () => {
@@ -12439,8 +14650,84 @@ inputNexSmsServiceCode?.addEventListener('blur', () => {
 });
 
 inputHeroSmsReuseEnabled?.addEventListener('change', () => {
+  if (isPhoneSignupReuseLocked(latestState)) {
+    inputHeroSmsReuseEnabled.checked = false;
+    updatePhoneVerificationSettingsUI();
+    return;
+  }
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
+});
+
+inputFreePhoneReuseEnabled?.addEventListener('change', () => {
+  if (isPhoneSignupReuseLocked(latestState)) {
+    inputFreePhoneReuseEnabled.checked = false;
+    if (inputFreePhoneReuseAutoEnabled) {
+      inputFreePhoneReuseAutoEnabled.checked = false;
+    }
+    updatePhoneVerificationSettingsUI();
+    return;
+  }
+  if (!inputFreePhoneReuseEnabled.checked && inputFreePhoneReuseAutoEnabled) {
+    inputFreePhoneReuseAutoEnabled.checked = false;
+  }
+  updatePhoneVerificationSettingsUI();
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+});
+
+inputFreePhoneReuseAutoEnabled?.addEventListener('change', () => {
+  if (isPhoneSignupReuseLocked(latestState)) {
+    inputFreePhoneReuseAutoEnabled.checked = false;
+    updatePhoneVerificationSettingsUI();
+    return;
+  }
+  updatePhoneVerificationSettingsUI();
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+});
+
+btnSaveFreeReusablePhone?.addEventListener('click', async () => {
+  if (isPhoneSignupReuseLocked(latestState)) {
+    showToast?.('手机号注册流程不能记录白嫖复用号码，请切回邮箱注册后再使用。', 'warn', 2600);
+    updatePhoneVerificationSettingsUI();
+    return;
+  }
+  const phoneNumber = String(inputFreeReusablePhone?.value || '').trim();
+  if (!phoneNumber) {
+    showToast?.('请先填写白嫖复用手机号。', 'warn', 2200);
+    inputFreeReusablePhone?.focus?.();
+    return;
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_FREE_REUSABLE_PHONE', payload: { phoneNumber },
+    });
+    if (response?.error) {
+      throw new Error(response.error);
+    }
+    await refreshFreeReusablePhoneStateFallback(response || {});
+    showToast?.('已记录白嫖复用手机号。', 'success', 1800);
+  } catch (error) {
+    console.error('Failed to save free reusable phone:', error);
+    showToast?.(`记录白嫖复用手机号失败：${error?.message || error}`, 'error', 4000);
+  }
+});
+
+btnClearFreeReusablePhone?.addEventListener('click', async () => {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'CLEAR_FREE_REUSABLE_PHONE',
+    });
+    if (response?.error) {
+      throw new Error(response.error);
+    }
+    await refreshFreeReusablePhoneStateFallback(response || {}, { clear: true });
+    showToast?.('已清除白嫖复用手机号。', 'info', 1800);
+  } catch (error) {
+    console.error('Failed to clear free reusable phone:', error);
+    showToast?.(`清除白嫖复用手机号失败：${error?.message || error}`, 'error', 4000);
+  }
 });
 
 selectHeroSmsAcquirePriority?.addEventListener('change', () => {
@@ -12449,6 +14736,11 @@ selectHeroSmsAcquirePriority?.addEventListener('change', () => {
   saveSettings({ silent: true }).catch(() => { });
 });
 selectHeroSmsPreferredActivation?.addEventListener('change', () => {
+  if (isPhoneSignupReuseLocked(latestState)) {
+    renderPhonePreferredActivationOptions(latestState);
+    updatePhoneVerificationSettingsUI();
+    return;
+  }
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
 });
@@ -12457,6 +14749,13 @@ inputHeroSmsMaxPrice?.addEventListener('input', () => {
 });
 inputHeroSmsMaxPrice?.addEventListener('blur', () => {
   inputHeroSmsMaxPrice.value = normalizePhoneSmsMaxPriceValue(inputHeroSmsMaxPrice.value, getSelectedPhoneSmsProvider());
+  saveSettings({ silent: true }).catch(() => { });
+});
+inputHeroSmsMinPrice?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputHeroSmsMinPrice?.addEventListener('blur', () => {
+  inputHeroSmsMinPrice.value = normalizePhoneSmsMinPriceValue(inputHeroSmsMinPrice.value, getSelectedPhoneSmsProvider());
   saveSettings({ silent: true }).catch(() => { });
 });
 
@@ -12772,12 +15071,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       appendLog(message.payload);
       if (message.payload.level === 'error') {
         showToast(message.payload.message, 'error');
+        scheduleAccountRunHistoryRefresh();
       }
       break;
 
-    case 'STEP_STATUS_CHANGED': {
-      const { step, status } = message.payload;
-      updateStepUI(step, status);
+    case 'NODE_STATUS_CHANGED': {
+      const { nodeId, status } = message.payload;
+      updateNodeUI(nodeId, status);
       chrome.runtime.sendMessage({ type: 'GET_STATE', source: 'sidepanel' }).then(state => {
         syncLatestState(state);
         syncAutoRunState(state);
@@ -12806,7 +15106,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         localhostUrl: null,
         email: null,
         password: null,
-        stepStatuses: STEP_DEFAULT_STATUSES,
+        nodeStatuses: NODE_DEFAULT_STATUSES,
         logs: [],
         scheduledAutoRunAt: null,
         autoRunCountdownAt: null,
@@ -12862,6 +15162,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case 'DATA_UPDATED': {
       syncLatestState(message.payload);
+      if (message.payload.operationDelayEnabled !== undefined && typeof applyOperationDelayState === 'function') {
+        applyOperationDelayState(message.payload);
+      }
       if (message.payload.email !== undefined) {
         inputEmail.value = message.payload.email || '';
         queueCustomEmailPoolRefresh();
@@ -12886,14 +15189,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         setLocalCpaStep9Mode(message.payload.localCpaStep9Mode);
       }
       if (message.payload.panelMode !== undefined) {
-        selectPanelMode.value = message.payload.panelMode || 'cpa';
+        selectPanelMode.value = normalizePanelMode(message.payload.panelMode || 'cpa');
         updatePanelModeUI();
       }
       if (
         message.payload.sub2apiGroupName !== undefined
         || message.payload.sub2apiGroupNames !== undefined
+        || message.payload.sub2apiSelectedGroupNames !== undefined
       ) {
-        renderSub2ApiGroupOptions(latestState, latestState?.sub2apiGroupName || '');
+        renderSub2ApiGroupOptions(latestState);
       }
       if (
         message.payload.ipProxyEnabled !== undefined
@@ -13059,6 +15363,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.payload.cloudflareTempEmailCustomAuth !== undefined) {
         inputTempEmailCustomAuth.value = message.payload.cloudflareTempEmailCustomAuth || '';
       }
+      if (message.payload.cloudflareTempEmailLookupMode !== undefined) {
+        setCloudflareTempEmailLookupMode(message.payload.cloudflareTempEmailLookupMode);
+      }
       if (message.payload.cloudflareTempEmailReceiveMailbox !== undefined) {
         inputTempEmailReceiveMailbox.value = message.payload.cloudflareTempEmailReceiveMailbox || '';
       }
@@ -13070,10 +15377,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       if (
         message.payload.cloudflareTempEmailUseRandomSubdomain !== undefined
+        || message.payload.cloudflareTempEmailLookupMode !== undefined
         || message.payload.cloudflareTempEmailDomain !== undefined
         || message.payload.cloudflareTempEmailDomains !== undefined
       ) {
         updateMailProviderUI();
+      }
+      if (message.payload.cloudMailBaseUrl !== undefined && inputCloudMailBaseUrl) {
+        inputCloudMailBaseUrl.value = message.payload.cloudMailBaseUrl || '';
+      }
+      if (message.payload.cloudMailAdminEmail !== undefined && inputCloudMailAdminEmail) {
+        inputCloudMailAdminEmail.value = message.payload.cloudMailAdminEmail || '';
+      }
+      if (message.payload.cloudMailAdminPassword !== undefined && inputCloudMailAdminPassword) {
+        inputCloudMailAdminPassword.value = message.payload.cloudMailAdminPassword || '';
+      }
+      if (message.payload.cloudMailReceiveMailbox !== undefined && inputCloudMailReceiveMailbox) {
+        inputCloudMailReceiveMailbox.value = message.payload.cloudMailReceiveMailbox || '';
+      }
+      if (message.payload.cloudMailDomain !== undefined && inputCloudMailDomain) {
+        inputCloudMailDomain.value = message.payload.cloudMailDomain || '';
       }
       if (message.payload.plusModeEnabled !== undefined && inputPlusModeEnabled) {
         inputPlusModeEnabled.checked = Boolean(message.payload.plusModeEnabled);
@@ -13081,11 +15404,50 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.payload.plusPaymentMethod !== undefined && selectPlusPaymentMethod) {
         selectPlusPaymentMethod.value = normalizePlusPaymentMethod(message.payload.plusPaymentMethod);
       }
-      if (message.payload.plusModeEnabled !== undefined || message.payload.plusPaymentMethod !== undefined) {
+      if (message.payload.gopayHelperPhoneMode !== undefined && selectGpcHelperPhoneMode) {
+        selectGpcHelperPhoneMode.value = normalizeGpcHelperPhoneModeValue(message.payload.gopayHelperPhoneMode);
+      }
+      if (message.payload.gopayHelperOtpChannel !== undefined && selectGpcHelperOtpChannel) {
+        selectGpcHelperOtpChannel.value = normalizeGpcOtpChannelValue(message.payload.gopayHelperOtpChannel);
+      }
+      if (message.payload.gopayHelperLocalSmsHelperEnabled !== undefined && inputGpcHelperLocalSmsEnabled) {
+        inputGpcHelperLocalSmsEnabled.checked = Boolean(message.payload.gopayHelperLocalSmsHelperEnabled);
+      }
+      if (message.payload.gopayHelperLocalSmsHelperUrl !== undefined && inputGpcHelperLocalSmsUrl) {
+        inputGpcHelperLocalSmsUrl.value = normalizeGpcLocalSmsHelperBaseUrlValue(message.payload.gopayHelperLocalSmsHelperUrl);
+      }
+      if (message.payload.gopayHelperBalance !== undefined || message.payload.gopayHelperBalanceError !== undefined) {
+        if (typeof displayGpcHelperBalance !== 'undefined' && displayGpcHelperBalance) {
+          const balanceText = String(message.payload.gopayHelperBalance ?? latestState?.gopayHelperBalance ?? '').trim();
+          const balanceError = String(message.payload.gopayHelperBalanceError ?? latestState?.gopayHelperBalanceError ?? '').trim();
+          displayGpcHelperBalance.textContent = balanceError
+            ? `余额查询失败：${balanceError}`
+            : (balanceText || '余额已更新');
+        }
+      }
+      if (
+        message.payload.plusModeEnabled !== undefined
+        || message.payload.plusPaymentMethod !== undefined
+        || message.payload.gopayHelperPhoneMode !== undefined
+        || message.payload.gopayHelperAutoModeEnabled !== undefined
+        || message.payload.gopayHelperOtpChannel !== undefined
+        || message.payload.gopayHelperLocalSmsHelperEnabled !== undefined
+      ) {
+        const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+          ? resolveStepDefinitionCapabilityState(latestState, {
+            signupMethod: latestState?.signupMethod,
+          })
+          : {
+            plusModeEnabled: Boolean(latestState?.plusModeEnabled),
+            signupMethod: normalizeSignupMethod(latestState?.signupMethod || DEFAULT_SIGNUP_METHOD),
+          };
         syncStepDefinitionsForMode(
-          Boolean(latestState?.plusModeEnabled),
+          stepDefinitionState.plusModeEnabled,
           latestState?.plusPaymentMethod,
-          { render: true }
+          {
+            render: true,
+            signupMethod: stepDefinitionState.signupMethod,
+          }
         );
         updatePlusModeUI();
         updateSignupMethodUI({ notify: true });
@@ -13175,6 +15537,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         inputAutoDelayEnabled.checked = Boolean(message.payload.autoRunDelayEnabled);
         updateAutoDelayInputState();
       }
+      if (
+        message.payload.step6CookieCleanupEnabled !== undefined
+        && typeof inputStep6CookieCleanupEnabled !== 'undefined'
+        && inputStep6CookieCleanupEnabled
+      ) {
+        inputStep6CookieCleanupEnabled.checked = Boolean(message.payload.step6CookieCleanupEnabled);
+      }
       if (message.payload.autoRunDelayMinutes !== undefined) {
         inputAutoDelayMinutes.value = String(normalizeAutoDelayMinutes(message.payload.autoRunDelayMinutes));
       }
@@ -13241,8 +15610,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.payload.nexSmsServiceCode !== undefined && inputNexSmsServiceCode) {
         inputNexSmsServiceCode.value = normalizeNexSmsServiceCodeValue(message.payload.nexSmsServiceCode);
       }
-      if (message.payload.heroSmsReuseEnabled !== undefined && inputHeroSmsReuseEnabled) {
-        inputHeroSmsReuseEnabled.checked = normalizeHeroSmsReuseEnabledValue(message.payload.heroSmsReuseEnabled);
+      if (
+        (message.payload.phoneSmsReuseEnabled !== undefined
+          || message.payload.heroSmsReuseEnabled !== undefined)
+        && inputHeroSmsReuseEnabled
+      ) {
+        inputHeroSmsReuseEnabled.checked = normalizeHeroSmsReuseEnabledValue(
+          message.payload.phoneSmsReuseEnabled,
+          message.payload.heroSmsReuseEnabled
+        );
+        updatePhoneVerificationSettingsUI();
+      }
+      if (message.payload.freePhoneReuseEnabled !== undefined && inputFreePhoneReuseEnabled) {
+        inputFreePhoneReuseEnabled.checked = Boolean(message.payload.freePhoneReuseEnabled);
+        updatePhoneVerificationSettingsUI();
+      }
+      if (message.payload.freePhoneReuseAutoEnabled !== undefined && inputFreePhoneReuseAutoEnabled) {
+        inputFreePhoneReuseAutoEnabled.checked = Boolean(message.payload.freePhoneReuseAutoEnabled);
+        updatePhoneVerificationSettingsUI();
       }
       if (message.payload.heroSmsAcquirePriority !== undefined && selectHeroSmsAcquirePriority) {
         selectHeroSmsAcquirePriority.value = normalizeHeroSmsAcquirePriority(message.payload.heroSmsAcquirePriority);
@@ -13251,6 +15636,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         inputHeroSmsMaxPrice.value = getSelectedPhoneSmsProvider() === PHONE_SMS_PROVIDER_FIVE_SIM
           ? normalizeFiveSimMaxPriceValue(message.payload.fiveSimMaxPrice !== undefined ? message.payload.fiveSimMaxPrice : latestState?.fiveSimMaxPrice)
           : normalizeHeroSmsMaxPriceValue(message.payload.heroSmsMaxPrice !== undefined ? message.payload.heroSmsMaxPrice : latestState?.heroSmsMaxPrice);
+      }
+      if ((message.payload.heroSmsMinPrice !== undefined || message.payload.fiveSimMinPrice !== undefined) && typeof inputHeroSmsMinPrice !== 'undefined' && inputHeroSmsMinPrice) {
+        inputHeroSmsMinPrice.value = getSelectedPhoneSmsProvider() === PHONE_SMS_PROVIDER_FIVE_SIM
+          ? normalizePhoneSmsMinPriceValue(message.payload.fiveSimMinPrice !== undefined ? message.payload.fiveSimMinPrice : latestState?.fiveSimMinPrice, PHONE_SMS_PROVIDER_FIVE_SIM)
+          : normalizePhoneSmsMinPriceValue(message.payload.heroSmsMinPrice !== undefined ? message.payload.heroSmsMinPrice : latestState?.heroSmsMinPrice, getSelectedPhoneSmsProvider());
       }
       if (message.payload.fiveSimOperator !== undefined && inputFiveSimOperator) {
         inputFiveSimOperator.value = normalizeFiveSimOperator(message.payload.fiveSimOperator);
@@ -13398,7 +15788,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               : latestState?.heroSmsCountryFallback
           );
         applyHeroSmsFallbackSelection(
-          [...nextPrimaryCountries, ...nextFallback],
+          [nextPrimary, ...nextFallback],
           { includePrimary: true }
         );
         updateHeroSmsPlatformDisplay();
@@ -13412,6 +15802,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         || message.payload.currentPhoneVerificationCountdownEndsAt !== undefined
         || message.payload.currentPhoneVerificationCountdownWindowIndex !== undefined
         || message.payload.currentPhoneVerificationCountdownWindowTotal !== undefined
+        || message.payload.freeReusablePhoneActivation !== undefined
         || message.payload.heroSmsLastPriceTiers !== undefined
         || message.payload.heroSmsLastPriceCountryId !== undefined
         || message.payload.heroSmsLastPriceCountryLabel !== undefined
@@ -13460,6 +15851,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       applyAutoRunStatus(message.payload);
       updateStatusDisplay(latestState);
       updateButtonStates();
+      if (!['scheduled', 'running', 'waiting_step', 'waiting_email', 'retrying', 'waiting_interval'].includes(message.payload.phase)) {
+        scheduleAccountRunHistoryRefresh();
+      }
       break;
     }
   }
@@ -13496,7 +15890,9 @@ document.addEventListener('click', (event) => {
   const clickedInsideFiveSimCountryMenu = Boolean(fiveSimCountryMenuShell?.contains(event.target));
   const clickedInsideNexSmsCountryMenu = Boolean(nexSmsCountryMenuShell?.contains(event.target));
   const clickedInsideProviderOrderMenu = Boolean(phoneSmsProviderOrderMenuShell?.contains(event.target));
-  const clickedInsideEditableListPicker = isClickInsideEditableListPicker(event.target);
+  const clickedInsideEditableListPicker = isClickInsideEditableListPicker(event.target)
+    || Boolean(sub2ApiGroupPicker?.root?.contains?.(event.target));
+  const clickedInsideSub2ApiGroupPicker = Boolean(sub2ApiGroupPicker?.root?.contains?.(event.target));
 
   if (configMenuOpen && !clickedInsideConfigMenu) {
     closeConfigMenu();
@@ -13521,6 +15917,9 @@ document.addEventListener('click', (event) => {
   if (!clickedInsideEditableListPicker) {
     closeEditableListPickers();
   }
+  if (!clickedInsideSub2ApiGroupPicker && sub2ApiGroupPicker?.open) {
+    sub2ApiGroupPicker.close();
+  }
 });
 
 document.addEventListener('keydown', (event) => {
@@ -13543,6 +15942,9 @@ document.addEventListener('keydown', (event) => {
     setPhoneSmsProviderOrderMenuOpen(false);
   }
   closeEditableListPickers();
+  if (sub2ApiGroupPicker?.open) {
+    sub2ApiGroupPicker.close();
+  }
 });
 
 window.addEventListener('resize', () => {
@@ -13573,6 +15975,7 @@ updateSaveButtonState();
 updateConfigMenuControls();
 setLocalCpaStep9Mode(DEFAULT_LOCAL_CPA_STEP9_MODE);
 setMail2925Mode(DEFAULT_MAIL_2925_MODE);
+setCloudflareTempEmailLookupMode(DEFAULT_CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE);
 initializeReleaseInfo().catch((err) => {
   console.error('Failed to initialize release info:', err);
 });
@@ -13585,13 +15988,13 @@ Promise.allSettled([
   const fiveSimResult = results[1];
   const nexSmsResult = results[2];
   if (heroResult?.status === 'rejected') {
-    console.error('Failed to load HeroSMS countries:', heroResult.reason);
+    console.error('加载 HeroSMS 国家列表失败：', heroResult.reason);
   }
   if (fiveSimResult?.status === 'rejected') {
-    console.error('Failed to load 5sim countries:', fiveSimResult.reason);
+    console.error('加载 5sim 国家列表失败：', fiveSimResult.reason);
   }
   if (nexSmsResult?.status === 'rejected') {
-    console.error('Failed to load NexSMS countries:', nexSmsResult.reason);
+    console.error('加载 NexSMS 国家列表失败：', nexSmsResult.reason);
   }
   return restoreState().then(() => {
     syncPasswordToggleLabel();

@@ -16,6 +16,76 @@ test('tab runtime module exposes a factory', () => {
   assert.equal(typeof api?.createTabRuntime, 'function');
 });
 
+test('tab runtime accepts canonical openai-auth readiness for queued signup-page commands', async () => {
+  const runtimeSource = fs.readFileSync('background/tab-runtime.js', 'utf8');
+  const registrySource = fs.readFileSync('shared/source-registry.js', 'utf8');
+  const runtimeApi = new Function('self', `${runtimeSource}; return self.MultiPageBackgroundTabRuntime;`)({});
+  const registryApi = new Function('self', `${registrySource}; return self.MultiPageSourceRegistry;`)({});
+  const sourceRegistry = registryApi.createSourceRegistry();
+
+  const sentMessages = [];
+  let currentState = {
+    tabRegistry: {
+      'signup-page': { tabId: 91, ready: true },
+    },
+    sourceLastUrls: {
+      'signup-page': 'https://auth.openai.com/authorize',
+    },
+  };
+
+  const runtime = runtimeApi.createTabRuntime({
+    LOG_PREFIX: '[test]',
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        get: async (tabId) => ({
+          id: tabId,
+          windowId: 1,
+          url: 'https://auth.openai.com/authorize',
+          status: 'complete',
+        }),
+        query: async () => [],
+        sendMessage: async (tabId, message) => {
+          if (message.type === 'PING') {
+            return { ok: true, source: 'openai-auth' };
+          }
+          sentMessages.push({ tabId, message });
+          return { ok: true };
+        },
+      },
+    },
+    getSourceLabel: (source) => source || 'unknown',
+    getState: async () => currentState,
+    matchesSourceUrlFamily: (source, candidateUrl, referenceUrl) => (
+      sourceRegistry.matchesSourceUrlFamily(source, candidateUrl, referenceUrl)
+    ),
+    setState: async (updates) => {
+      currentState = { ...currentState, ...updates };
+    },
+    sourceRegistry,
+    throwIfStopped: () => {},
+  });
+
+  assert.equal(await runtime.getTabId('openai-auth'), 91);
+
+  currentState = {
+    tabRegistry: {},
+    sourceLastUrls: {},
+  };
+
+  const queued = runtime.queueCommand('signup-page', { type: 'STEP2_TEST' }, 1000);
+  runtime.flushCommand('openai-auth', 55);
+  await assert.doesNotReject(queued);
+  assert.deepEqual(sentMessages, [{ tabId: 55, message: { type: 'STEP2_TEST' } }]);
+
+  await runtime.ensureContentScriptReadyOnTab('signup-page', 77, {
+    timeoutMs: 100,
+  });
+
+  assert.deepEqual(currentState.tabRegistry['openai-auth'], { tabId: 77, ready: true, windowId: 1 });
+  assert.equal(Object.prototype.hasOwnProperty.call(currentState.tabRegistry, 'signup-page'), false);
+});
+
 test('tab runtime caps per-attempt response timeout to the remaining resilient timeout budget', () => {
   const source = fs.readFileSync('background/tab-runtime.js', 'utf8');
   const globalScope = {};
@@ -48,6 +118,37 @@ test('tab runtime caps per-attempt response timeout to the remaining resilient t
   assert.equal(
     runtime.resolveResponseTimeoutMs({ type: 'PREPARE_SIGNUP_VERIFICATION' }, 12000, 5000),
     5000
+  );
+});
+
+test('tab runtime gives step 5 profile submit enough response time for slow page transitions', () => {
+  const source = fs.readFileSync('background/tab-runtime.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundTabRuntime;`)(globalScope);
+
+  const runtime = api.createTabRuntime({
+    LOG_PREFIX: '[test]',
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        get: async () => ({ id: 1, url: 'https://example.com', status: 'complete' }),
+        query: async () => [],
+      },
+    },
+    getSourceLabel: (sourceName) => sourceName || 'unknown',
+    getState: async () => ({ tabRegistry: {}, sourceLastUrls: {} }),
+    matchesSourceUrlFamily: () => false,
+    setState: async () => {},
+    throwIfStopped: () => {},
+  });
+
+  assert.equal(
+    runtime.getContentScriptResponseTimeoutMs({ type: 'EXECUTE_NODE', nodeId: 'fill-profile' }),
+    150000
+  );
+  assert.equal(
+    runtime.getContentScriptResponseTimeoutMs({ type: 'EXECUTE_NODE', payload: { nodeId: 'fill-profile' } }),
+    150000
   );
 });
 
@@ -187,4 +288,155 @@ test('tab runtime waitForTabStableComplete waits through a late navigation after
   assert.equal(result?.url, 'https://chatgpt.com/');
   assert.equal(result?.status, 'complete');
   assert.ok(getCalls >= 4);
+});
+
+test('tab runtime opens new automation tabs in the locked window', async () => {
+  const source = fs.readFileSync('background/tab-runtime.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundTabRuntime;`)(globalScope);
+  const created = [];
+  const runtime = api.createTabRuntime({
+    LOG_PREFIX: '[test]',
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        create: async (payload) => {
+          created.push(payload);
+          return { id: 17, windowId: payload.windowId, url: payload.url };
+        },
+        get: async () => ({ id: 17, windowId: 100, url: 'https://example.com' }),
+        query: async () => [],
+        onUpdated: {
+          addListener: () => {},
+          removeListener: () => {},
+        },
+      },
+    },
+    getSourceLabel: (sourceName) => sourceName || 'unknown',
+    getState: async () => ({
+      automationWindowId: 100,
+      tabRegistry: {},
+      sourceLastUrls: {},
+    }),
+    matchesSourceUrlFamily: () => false,
+    setState: async () => {},
+    throwIfStopped: () => {},
+  });
+
+  await runtime.reuseOrCreateTab('signup-page', 'https://example.com');
+
+  assert.equal(created.length, 1);
+  assert.equal(created[0].windowId, 100);
+});
+
+test('tab runtime scopes tab queries to the locked automation window', async () => {
+  const source = fs.readFileSync('background/tab-runtime.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundTabRuntime;`)(globalScope);
+  const queries = [];
+  const runtime = api.createTabRuntime({
+    LOG_PREFIX: '[test]',
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        get: async () => ({ id: 1, windowId: 22, url: 'https://example.com' }),
+        query: async (queryInfo) => {
+          queries.push(queryInfo);
+          return [];
+        },
+      },
+    },
+    getSourceLabel: (sourceName) => sourceName || 'unknown',
+    getState: async () => ({
+      automationWindowId: 22,
+      tabRegistry: {},
+      sourceLastUrls: {},
+    }),
+    matchesSourceUrlFamily: () => false,
+    setState: async () => {},
+    throwIfStopped: () => {},
+  });
+
+  await runtime.queryTabsInAutomationWindow({ active: true, currentWindow: true });
+
+  assert.deepEqual(queries[0], { active: true, windowId: 22 });
+});
+
+test('tab runtime does not create tabs outside an unavailable locked window', async () => {
+  const source = fs.readFileSync('background/tab-runtime.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundTabRuntime;`)(globalScope);
+  const created = [];
+  const runtime = api.createTabRuntime({
+    LOG_PREFIX: '[test]',
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        create: async (payload) => {
+          created.push(payload);
+          if (payload.windowId === 44) {
+            throw new Error('No window with id: 44');
+          }
+          return { id: 99, windowId: payload.windowId, url: payload.url };
+        },
+        get: async () => ({ id: 1, windowId: 44, url: 'https://example.com' }),
+        query: async () => [],
+      },
+    },
+    getSourceLabel: (sourceName) => sourceName || 'unknown',
+    getState: async () => ({
+      automationWindowId: 44,
+      tabRegistry: {},
+      sourceLastUrls: {},
+    }),
+    matchesSourceUrlFamily: () => false,
+    setState: async () => {},
+    throwIfStopped: () => {},
+  });
+
+  await assert.rejects(
+    () => runtime.createAutomationTab({ url: 'https://example.com', active: true }),
+    /自动任务窗口已不可用/
+  );
+
+  assert.deepEqual(created, [{ url: 'https://example.com', active: true, windowId: 44 }]);
+});
+
+test('tab runtime does not query all windows when the locked window is unavailable', async () => {
+  const source = fs.readFileSync('background/tab-runtime.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundTabRuntime;`)(globalScope);
+  const queries = [];
+  const runtime = api.createTabRuntime({
+    LOG_PREFIX: '[test]',
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        get: async () => ({ id: 1, windowId: 55, url: 'https://example.com' }),
+        query: async (queryInfo) => {
+          queries.push(queryInfo);
+          if (queryInfo.windowId === 55) {
+            throw new Error('No window with id: 55');
+          }
+          return [{ id: 7, windowId: 1, url: 'https://other.example/' }];
+        },
+      },
+    },
+    getSourceLabel: (sourceName) => sourceName || 'unknown',
+    getState: async () => ({
+      automationWindowId: 55,
+      tabRegistry: {},
+      sourceLastUrls: {},
+    }),
+    matchesSourceUrlFamily: () => false,
+    setState: async () => {},
+    throwIfStopped: () => {},
+  });
+
+  await assert.rejects(
+    () => runtime.queryTabsInAutomationWindow({ active: true }),
+    /自动任务窗口已不可用/
+  );
+
+  assert.deepEqual(queries, [{ active: true, windowId: 55 }]);
 });

@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
@@ -20,7 +20,7 @@ test('step 2 completes with password step skipped when landing on email verifica
   const executor = step2Api.createStep2Executor({
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completedPayloads.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -40,7 +40,7 @@ test('step 2 completes with password step skipped when landing on email verifica
 
   assert.deepStrictEqual(completedPayloads, [
     {
-      step: 2,
+      step: 'submit-signup-email',
       payload: {
         email: 'user@example.com',
         accountIdentifierType: 'email',
@@ -59,7 +59,7 @@ test('step 2 keeps password flow when landing on password page', async () => {
   const executor = step2Api.createStep2Executor({
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completedPayloads.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -79,7 +79,7 @@ test('step 2 keeps password flow when landing on password page', async () => {
 
   assert.deepStrictEqual(completedPayloads, [
     {
-      step: 2,
+      step: 'submit-signup-email',
       payload: {
         email: 'user@example.com',
         accountIdentifierType: 'email',
@@ -110,7 +110,7 @@ test('step 2 uses phone activation when resolved signup method is phone', async 
   const executor = step2Api.createStep2Executor({
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completedPayloads.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -170,7 +170,7 @@ test('step 2 uses phone activation when resolved signup method is phone', async 
   ]);
   assert.deepStrictEqual(completedPayloads, [
     {
-      step: 2,
+      step: 'submit-signup-email',
       payload: {
         accountIdentifierType: 'phone',
         accountIdentifier: '66959916439',
@@ -200,7 +200,7 @@ test('step 2 reuses existing signup phone activation without acquiring a new num
   const executor = step2Api.createStep2Executor({
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completedPayloads.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -263,7 +263,7 @@ test('step 2 submits manual signup phone without acquiring a number', async () =
   const executor = step2Api.createStep2Executor({
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completedPayloads.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -310,7 +310,7 @@ test('step 2 submits manual signup phone without acquiring a number', async () =
   ]);
   assert.deepStrictEqual(completedPayloads, [
     {
-      step: 2,
+      step: 'submit-signup-email',
       payload: {
         accountIdentifierType: 'phone',
         accountIdentifier: '+446700000002',
@@ -322,70 +322,6 @@ test('step 2 submits manual signup phone without acquiring a number', async () =
       },
     },
   ]);
-});
-
-test('step 2 rejects registered signup phone when landing on login password page and cancels activation', async () => {
-  const completedPayloads = [];
-  const sequence = [];
-  const activation = {
-    activationId: 'signup-activation-registered',
-    phoneNumber: '447529768909',
-    provider: 'hero-sms',
-    serviceCode: 'dr',
-    countryId: 16,
-    countryLabel: 'United Kingdom',
-  };
-
-  const executor = step2Api.createStep2Executor({
-    addLog: async () => {},
-    chrome: { tabs: { update: async () => {} } },
-    completeStepFromBackground: async (step, payload) => {
-      completedPayloads.push({ step, payload });
-    },
-    ensureContentScriptReadyOnTab: async () => {},
-    ensureSignupEntryPageReady: async () => ({ tabId: 17 }),
-    ensureSignupPostIdentityPageReadyInTab: async () => ({
-      state: 'password_page',
-      url: 'https://auth.openai.com/log-in/password',
-    }),
-    getTabId: async () => 17,
-    isTabAlive: async () => true,
-    phoneVerificationHelpers: {
-      prepareSignupPhoneActivation: async () => {
-        sequence.push('prepareSignupPhoneActivation');
-        return activation;
-      },
-      cancelSignupPhoneActivation: async (_state, cancelledActivation) => {
-        sequence.push(`cancelSignupPhoneActivation:${cancelledActivation?.activationId || ''}`);
-      },
-    },
-    resolveSignupMethod: () => 'phone',
-    resolveSignupEmailForFlow: async () => {
-      throw new Error('email resolver should not run for phone signup');
-    },
-    sendToContentScriptResilient: async (_source, message) => {
-      if (message.type === 'ENSURE_SIGNUP_PHONE_ENTRY_READY') {
-        sequence.push('ensureSignupPhoneEntryReady');
-        return { ready: true, state: 'phone_entry' };
-      }
-      sequence.push('submitSignupPhone');
-      return { submitted: true };
-    },
-    SIGNUP_PAGE_INJECT_FILES: [],
-  });
-
-  await assert.rejects(
-    () => executor.executeStep2({ signupMethod: 'phone' }),
-    /STEP2_PHONE_ALREADY_REGISTERED::步骤 2：提交手机号后进入登录密码页/
-  );
-
-  assert.deepStrictEqual(sequence, [
-    'ensureSignupPhoneEntryReady',
-    'prepareSignupPhoneActivation',
-    'submitSignupPhone',
-    'cancelSignupPhoneActivation:signup-activation-registered',
-  ]);
-  assert.deepStrictEqual(completedPayloads, []);
 });
 
 test('step 2 stops with an explicit error instead of silently skipping 3/4/5 on chatgpt home', async () => {
@@ -402,7 +338,7 @@ test('step 2 stops with an explicit error instead of silently skipping 3/4/5 on 
         get: async () => ({ url: 'https://chatgpt.com/' }),
       },
     },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completedPayloads.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -446,7 +382,7 @@ test('step 2 does not force auth-entry retry on logged-out chatgpt home when con
         get: async () => ({ url: 'https://chatgpt.com/' }),
       },
     },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completedPayloads.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -478,7 +414,7 @@ test('step 2 does not force auth-entry retry on logged-out chatgpt home when con
   assert.deepStrictEqual(sentPayloads, [{ email: 'user@example.com' }]);
   assert.deepStrictEqual(completedPayloads, [
     {
-      step: 2,
+      step: 'submit-signup-email',
       payload: {
         email: 'user@example.com',
         accountIdentifierType: 'email',
@@ -490,6 +426,90 @@ test('step 2 does not force auth-entry retry on logged-out chatgpt home when con
     },
   ]);
   assert.equal(logs.some((item) => /已登录 ChatGPT 首页/.test(item.message)), false);
+});
+
+test('step 2 waits for the existing signup tab to settle before probing the entry state', async () => {
+  const completedPayloads = [];
+  const logs = [];
+  const events = [];
+
+  const executor = step2Api.createStep2Executor({
+    addLog: async (message, level = 'info', meta = {}) => {
+      logs.push({ message, level, meta });
+    },
+    chrome: {
+      tabs: {
+        update: async () => {
+          events.push('tab-update');
+        },
+        get: async () => ({ id: 17, windowId: 91, url: 'https://chatgpt.com/' }),
+      },
+      windows: {
+        update: async () => {
+          throw new Error('step 2 must not focus or raise the automation window');
+        },
+      },
+    },
+    completeNodeFromBackground: async (step, payload) => {
+      completedPayloads.push({ step, payload });
+    },
+    ensureContentScriptReadyOnTab: async () => {
+      events.push('content-ready');
+    },
+    ensureSignupAuthEntryPageReady: async () => ({ tabId: 17 }),
+    ensureSignupEntryPageReady: async () => ({ tabId: 17 }),
+    ensureSignupPostEmailPageReadyInTab: async () => ({
+      state: 'password_page',
+      url: 'https://auth.openai.com/create-account/password',
+    }),
+    getTabId: async () => 17,
+    isTabAlive: async () => true,
+    resolveSignupEmailForFlow: async () => 'user@example.com',
+    sendToContentScriptResilient: async (_source, message) => {
+      events.push(message.type);
+      if (message.type === 'ENSURE_SIGNUP_ENTRY_READY') {
+        return { ready: true, state: 'entry_home', url: 'https://chatgpt.com/' };
+      }
+      return { submitted: true };
+    },
+    SIGNUP_PAGE_INJECT_FILES: [],
+    waitForTabStableComplete: async (_tabId, options) => {
+      events.push({ type: 'wait-stable', options });
+      return { id: 17, url: 'https://chatgpt.com/', status: 'complete' };
+    },
+  });
+
+  await executor.executeStep2({ email: 'user@example.com' });
+
+  assert.deepStrictEqual(events.slice(0, 4), [
+    'tab-update',
+    {
+      type: 'wait-stable',
+      options: {
+        timeoutMs: 45000,
+        retryDelayMs: 300,
+        stableMs: 3000,
+        initialDelayMs: 300,
+      },
+    },
+    'content-ready',
+    'ENSURE_SIGNUP_ENTRY_READY',
+  ]);
+  assert.equal(logs.some((item) => /额外稳定 3 秒/.test(item.message)), true);
+  assert.equal(logs.some((item) => item.meta.step === 2 && item.meta.stepKey === 'signup-entry'), true);
+  assert.deepStrictEqual(completedPayloads, [
+    {
+      step: 'submit-signup-email',
+      payload: {
+        email: 'user@example.com',
+        accountIdentifierType: 'email',
+        accountIdentifier: 'user@example.com',
+        nextSignupState: 'password_page',
+        nextSignupUrl: 'https://auth.openai.com/create-account/password',
+        skippedPasswordStep: false,
+      },
+    },
+  ]);
 });
 
 test('signup flow helper recognizes email verification page as post-email landing page', async () => {
@@ -539,6 +559,81 @@ test('signup flow helper recognizes email verification page as post-email landin
   });
   assert.equal(ensureCalls, 1);
   assert.equal(passwordReadyChecks, 0);
+});
+
+test('signup flow helper waits for the signup entry tab to settle for step 2 before probing the entry page', async () => {
+  const logs = [];
+  const events = [];
+
+  const helpers = signupFlowApi.createSignupFlowHelpers({
+    addLog: async (message, level = 'info', meta = {}) => {
+      logs.push({ message, level, meta });
+    },
+    buildGeneratedAliasEmail: () => '',
+    chrome: {
+      tabs: {
+        get: async () => ({ id: 23, windowId: 92, url: 'https://chatgpt.com/' }),
+      },
+      windows: {
+        update: async () => {
+          throw new Error('signup entry helper must not focus or raise the automation window');
+        },
+      },
+    },
+    ensureContentScriptReadyOnTab: async () => {
+      events.push('content-ready');
+    },
+    ensureHotmailAccountForFlow: async () => ({}),
+    ensureLuckmailPurchaseForFlow: async () => ({}),
+    isGeneratedAliasProvider: () => false,
+    isHotmailProvider: () => false,
+    isLuckmailProvider: () => false,
+    isSignupEmailVerificationPageUrl: () => false,
+    isSignupPasswordPageUrl: () => false,
+    reuseOrCreateTab: async () => {
+      events.push('reuse-or-create');
+      return 23;
+    },
+    sendToContentScriptResilient: async () => {
+      events.push('probe-entry');
+      return { ready: true, state: 'entry_home', url: 'https://chatgpt.com/' };
+    },
+    setEmailState: async () => {},
+    SIGNUP_ENTRY_URL: 'https://chatgpt.com/',
+    SIGNUP_PAGE_INJECT_FILES: [],
+    waitForTabStableComplete: async (_tabId, options) => {
+      events.push({ type: 'wait-stable', options });
+      return { id: 23, url: 'https://chatgpt.com/', status: 'complete' };
+    },
+    waitForTabUrlMatch: async () => null,
+  });
+
+  const result = await helpers.ensureSignupEntryPageReady(2);
+
+  assert.deepStrictEqual(events, [
+    'reuse-or-create',
+    {
+      type: 'wait-stable',
+      options: {
+        timeoutMs: 45000,
+        retryDelayMs: 300,
+        stableMs: 3000,
+        initialDelayMs: 300,
+      },
+    },
+    'content-ready',
+    'probe-entry',
+  ]);
+  assert.equal(logs.some((item) => /额外稳定 3 秒/.test(item.message)), true);
+  assert.equal(logs.some((item) => item.meta.step === 2 && item.meta.stepKey === 'signup-entry'), true);
+  assert.deepStrictEqual(result, {
+    tabId: 23,
+    result: {
+      ready: true,
+      state: 'entry_home',
+      url: 'https://chatgpt.com/',
+    },
+  });
 });
 
 test('signup flow helper accepts phone signup landing on login password page', async () => {
@@ -695,7 +790,6 @@ test('signup flow helper can generate an email on demand when add-email starts f
   assert.equal(fetchedStates[0].options.preserveAccountIdentity, true);
   assert.deepStrictEqual(setStateCalls, [
     {
-      email: 'duck.generated@example.com',
       accountIdentifierType: 'phone',
       accountIdentifier: '+447780579093',
       signupPhoneNumber: '+447780579093',
@@ -706,6 +800,72 @@ test('signup flow helper can generate an email on demand when add-email starts f
       },
       signupPhoneVerificationRequestedAt: null,
       signupPhoneVerificationPurpose: '',
+    },
+  ]);
+});
+
+test('signup flow helper delegates preserved phone identity email sync to the shared persistence helper when reusing an existing email', async () => {
+  const persistCalls = [];
+  let setEmailCalls = 0;
+  let setStateCalls = 0;
+
+  const helpers = signupFlowApi.createSignupFlowHelpers({
+    buildGeneratedAliasEmail: () => 'demo+saved@gmail.com',
+    chrome: { tabs: { get: async () => ({ id: 21, url: 'https://auth.openai.com/create-account/password' }) } },
+    ensureContentScriptReadyOnTab: async () => {},
+    ensureHotmailAccountForFlow: async () => ({}),
+    ensureLuckmailPurchaseForFlow: async () => ({}),
+    fetchGeneratedEmail: async () => {
+      throw new Error('should not generate a new email');
+    },
+    isGeneratedAliasProvider: () => true,
+    isReusableGeneratedAliasEmail: (_state, email) => email === 'demo+saved@gmail.com',
+    isHotmailProvider: () => false,
+    isLuckmailProvider: () => false,
+    isSignupEmailVerificationPageUrl: () => false,
+    isSignupPasswordPageUrl: () => true,
+    persistRegistrationEmailState: async (state, email, options) => {
+      persistCalls.push({ state, email, options });
+    },
+    reuseOrCreateTab: async () => 21,
+    sendToContentScriptResilient: async () => ({}),
+    setEmailState: async () => {
+      setEmailCalls += 1;
+    },
+    setState: async () => {
+      setStateCalls += 1;
+    },
+    SIGNUP_ENTRY_URL: 'https://chatgpt.com/',
+    SIGNUP_PAGE_INJECT_FILES: [],
+    waitForTabUrlMatch: async () => null,
+  });
+
+  const state = {
+    mailProvider: 'gmail',
+    email: 'demo+saved@gmail.com',
+    accountIdentifierType: 'phone',
+    accountIdentifier: '+447780579093',
+    signupPhoneNumber: '+447780579093',
+    signupPhoneCompletedActivation: {
+      activationId: 'signup-completed',
+      phoneNumber: '+447780579093',
+    },
+  };
+  const email = await helpers.resolveSignupEmailForFlow(state, {
+    preserveAccountIdentity: true,
+  });
+
+  assert.equal(email, 'demo+saved@gmail.com');
+  assert.equal(setEmailCalls, 0);
+  assert.equal(setStateCalls, 0);
+  assert.deepStrictEqual(persistCalls, [
+    {
+      state,
+      email: 'demo+saved@gmail.com',
+      options: {
+        source: 'flow',
+        preserveAccountIdentity: true,
+      },
     },
   ]);
 });

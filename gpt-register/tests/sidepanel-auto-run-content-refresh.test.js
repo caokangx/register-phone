@@ -51,11 +51,6 @@ function extractFunction(name) {
 function createApi({
   refreshImpl,
   runCount = 3,
-  plusModeEnabled = false,
-  plusRiskEnabled = false,
-  plusRiskConfirmed = true,
-  plusRiskDismissPrompt = false,
-  plusContributionImpl,
   persistImpl,
 } = {}) {
   const bundle = [
@@ -68,8 +63,6 @@ function createApi({
   return new Function(`
 const events = [];
 const latestState = { contributionMode: false };
-const currentPlusModeEnabled = ${JSON.stringify(Boolean(plusModeEnabled))};
-const inputPlusModeEnabled = { checked: ${JSON.stringify(Boolean(plusModeEnabled))} };
 const inputAutoSkipFailures = { checked: false };
 const inputContributionNickname = { value: 'tester' };
 const inputContributionQq = { value: '123456' };
@@ -94,6 +87,9 @@ const console = {
     events.push({ type: 'warn', args });
   },
 };
+async function sendSidepanelMessage(message) {
+  return chrome.runtime.sendMessage(message);
+}
 async function persistCurrentSettingsForAction() {
   events.push({ type: 'sync-settings' });
   ${persistImpl ? `return (${persistImpl})(events, {
@@ -115,27 +111,13 @@ function shouldWarnAutoRunFallbackRisk() { return false; }
 function isAutoRunFallbackRiskPromptDismissed() { return false; }
 async function openAutoRunFallbackRiskConfirmModal() { throw new Error('should not be called'); }
 function setAutoRunFallbackRiskPromptDismissed() {}
-function shouldWarnPlusAutoRunRisk(totalRuns, plusModeEnabled) {
-  return ${JSON.stringify(Boolean(plusRiskEnabled))} && Boolean(plusModeEnabled) && Number(totalRuns) > 3;
-}
-function isAutoRunPlusRiskPromptDismissed() { return false; }
-async function openPlusAutoRunRiskConfirmModal(totalRuns) {
-  events.push({ type: 'plus-risk-modal', totalRuns });
-  return {
-    confirmed: ${JSON.stringify(Boolean(plusRiskConfirmed))},
-    dismissPrompt: ${JSON.stringify(Boolean(plusRiskDismissPrompt))},
-  };
-}
-function setAutoRunPlusRiskPromptDismissed(dismissed) {
-  events.push({ type: 'plus-risk-dismiss', dismissed });
-}
-async function maybeShowPlusContributionPromptBeforeAutoRun(plusModeEnabled) {
-  ${plusContributionImpl ? 'return (' + plusContributionImpl + ')(plusModeEnabled, events);' : 'return true;'}
-}
 function normalizeAutoDelayMinutes(value) { return Number(value) || 30; }
 async function refreshContributionContentHint() {
   events.push({ type: 'refresh' });
   ${refreshImpl ? 'return (' + refreshImpl + ')();' : 'return null;'}
+}
+async function ensureGpcApiKeyReadyForStart() {
+  return true;
 }
 ${bundle}
 return {
@@ -214,59 +196,105 @@ test('startAutoRunFromCurrentSettings freezes run count before async settings sy
   assert.equal(events[3].message.payload.totalRuns, 20);
 });
 
-test('startAutoRunFromCurrentSettings shows Plus risk warning before starting more than 3 runs', async () => {
-  const api = createApi({
-    runCount: 4,
-    plusModeEnabled: true,
-    plusRiskEnabled: true,
-  });
+test('startAutoRunFromCurrentSettings blocks when shared flow capability validation fails', async () => {
+  const bundle = [
+    extractFunction('normalizePendingAutoRunStartRunCount'),
+    extractFunction('registerPendingAutoRunStartRunCount'),
+    extractFunction('clearPendingAutoRunStartRunCount'),
+    extractFunction('startAutoRunFromCurrentSettings'),
+  ].join('\n');
 
-  const result = await api.startAutoRunFromCurrentSettings();
-  const events = api.getEvents();
+  const api = new Function(`
+const events = [];
+const latestState = {
+  activeFlowId: 'site-a',
+  panelMode: 'cpa',
+  signupMethod: 'phone',
+  contributionMode: false,
+  phoneVerificationEnabled: true,
+};
+const inputAutoSkipFailures = { checked: false };
+const inputContributionNickname = { value: 'tester' };
+const inputContributionQq = { value: '123456' };
+const inputAutoSkipFailuresThreadIntervalMinutes = { value: '5' };
+const inputAutoDelayEnabled = { checked: false };
+const inputAutoDelayMinutes = { value: '30' };
+const btnAutoRun = { disabled: false, innerHTML: '' };
+const inputRunCount = { disabled: false, value: '1' };
+const inputPhoneVerificationEnabled = { checked: true };
+const inputPlusModeEnabled = { checked: false };
+let runCountValue = 1;
+let pendingAutoRunStartTotalRuns = 0;
+let pendingAutoRunStartExpiresAt = 0;
+const chrome = {
+  runtime: {
+    async sendMessage(message) {
+      events.push({ type: 'send', message });
+      return { ok: true };
+    },
+  },
+};
+const console = {
+  warn(...args) {
+    events.push({ type: 'warn', args });
+  },
+};
+const window = {
+  MultiPageFlowCapabilities: {
+    createFlowCapabilityRegistry() {
+      return {
+        validateAutoRunStart() {
+          return {
+            ok: false,
+            errors: [{ message: '当前 flow 不支持手机号注册。' }],
+          };
+        },
+      };
+    },
+  },
+};
+async function sendSidepanelMessage(message) {
+  return chrome.runtime.sendMessage(message);
+}
+async function persistCurrentSettingsForAction() {
+  events.push({ type: 'sync-settings' });
+}
+function getRunCountValue() { return Math.max(1, Number(runCountValue) || 1); }
+function normalizeAutoRunThreadIntervalMinutes(value) { return Number(value) || 0; }
+function shouldOfferAutoModeChoice() { return false; }
+async function openAutoStartChoiceDialog() { throw new Error('should not be called'); }
+function getFirstUnfinishedStep() { return 1; }
+function getRunningSteps() { return []; }
+function shouldWarnAutoRunFallbackRisk() { return false; }
+function isAutoRunFallbackRiskPromptDismissed() { return false; }
+async function openAutoRunFallbackRiskConfirmModal() { throw new Error('should not be called'); }
+function setAutoRunFallbackRiskPromptDismissed() {}
+function normalizeAutoDelayMinutes(value) { return Number(value) || 30; }
+async function refreshContributionContentHint() {
+  events.push({ type: 'refresh' });
+  return null;
+}
+async function ensureGpcApiKeyReadyForStart() {
+  return true;
+}
+${bundle}
+return {
+  startAutoRunFromCurrentSettings,
+  getEvents() {
+    return events;
+  },
+};
+`)();
 
-  assert.equal(result, true);
-  assert.deepEqual(
-    events.map((entry) => entry.type),
-    ['refresh', 'sync-settings', 'plus-risk-modal', 'send']
+  await assert.rejects(
+    () => api.startAutoRunFromCurrentSettings(),
+    /当前 flow 不支持手机号注册。/
   );
-  assert.equal(events[2].totalRuns, 4);
-  assert.equal(events[3].message.payload.totalRuns, 4);
-});
 
-test('startAutoRunFromCurrentSettings aborts when Plus risk warning is declined', async () => {
-  const api = createApi({
-    runCount: 4,
-    plusModeEnabled: true,
-    plusRiskEnabled: true,
-    plusRiskConfirmed: false,
-  });
-
-  const result = await api.startAutoRunFromCurrentSettings();
-
-  assert.equal(result, false);
   assert.deepEqual(
     api.getEvents().map((entry) => entry.type),
-    ['refresh', 'sync-settings', 'plus-risk-modal']
+    ['refresh', 'sync-settings']
   );
-});
-
-test('startAutoRunFromCurrentSettings aborts when Plus contribution prompt opens contribution page', async () => {
-  const api = createApi({
-    plusModeEnabled: true,
-    plusContributionImpl: `async (plusModeEnabled, events) => {
-      events.push({ type: 'plus-contribution-modal', plusModeEnabled });
-      return false;
-    }`,
-  });
-
-  const result = await api.startAutoRunFromCurrentSettings();
-
-  assert.equal(result, false);
-  assert.deepEqual(
-    api.getEvents().map((entry) => entry.type),
-    ['refresh', 'sync-settings', 'plus-contribution-modal']
-  );
-  assert.equal(api.getEvents()[2].plusModeEnabled, true);
 });
 
 test('persistCurrentSettingsForAction forces a silent save even when settings are not marked dirty', async () => {

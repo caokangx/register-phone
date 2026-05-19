@@ -57,9 +57,24 @@ test('fillVerificationCode submits after split inputs are stably filled', async 
 const logs = [];
 const clicks = [];
 const filledValues = [];
+const splitCodeEvents = [];
+let activeOperationLabel = '';
 let submitClicked = false;
 const VERIFICATION_CODE_INPUT_SELECTOR = 'input[data-verification-code]';
 const location = { href: 'https://auth.openai.com/email-verification' };
+const window = {
+  CodexOperationDelay: {
+    async performOperationWithDelay(metadata, operation) {
+      splitCodeEvents.push(\`operation:\${metadata.label}:start\`);
+      activeOperationLabel = metadata.label;
+      const result = await operation();
+      activeOperationLabel = '';
+      splitCodeEvents.push(\`operation:\${metadata.label}:end\`);
+      splitCodeEvents.push(\`delay:\${metadata.label}:2000\`);
+      return result;
+    },
+  },
+};
 function KeyboardEvent(type, init = {}) {
   this.type = type;
   Object.assign(this, init);
@@ -113,8 +128,16 @@ async function handle405ResendError() {}
 function fillInput(el, value) {
   el.value = value;
   filledValues.push(value);
+  const splitIndex = inputs.indexOf(el);
+  if (splitIndex >= 0) {
+    splitCodeEvents.push(\`fill-code:\${splitIndex}\`);
+  }
 }
-async function sleep() {}
+async function sleep(ms) {
+  if (activeOperationLabel) {
+    splitCodeEvents.push(\`sleep:\${activeOperationLabel}:\${ms}\`);
+  }
+}
 async function waitForDocumentLoadComplete() {}
 function isStep5Ready() { return false; }
 function isStep8Ready() { return false; }
@@ -125,7 +148,7 @@ function isVisibleElement() { return true; }
 function isActionEnabled(el) { return Boolean(el) && !el.disabled; }
 function getActionText(el) { return el.textContent || ''; }
 async function humanPause() {}
-function simulateClick(el) { el.click(); clicks.push(el.textContent); }
+function simulateClick(el) { el.click(); clicks.push(el.textContent); splitCodeEvents.push('click:submit-code'); }
 async function waitForVerificationSubmitOutcome() { return { success: true }; }
 
 ${extractFunction('getVisibleSplitVerificationInputs')}
@@ -150,6 +173,7 @@ return {
       logs,
       clicks,
       filledValues,
+      splitCodeEvents,
       submitClicked,
       currentValue: inputs.map((input) => input.value).join(''),
     };
@@ -164,6 +188,210 @@ return {
   assert.equal(snapshot.currentValue, '123456');
   assert.equal(snapshot.submitClicked, true);
   assert.deepStrictEqual(snapshot.clicks, ['Continue']);
+  assert.deepStrictEqual(snapshot.splitCodeEvents, [
+    'operation:split-code:start',
+    'fill-code:0',
+    'fill-code:1',
+    'fill-code:2',
+    'fill-code:3',
+    'fill-code:4',
+    'fill-code:5',
+    'operation:split-code:end',
+    'delay:split-code:2000',
+    'operation:submit-code:start',
+    'click:submit-code',
+    'operation:submit-code:end',
+    'delay:submit-code:2000',
+  ]);
+  assert.equal(snapshot.splitCodeEvents.filter((event) => event.startsWith('delay:split-code')).length, 1);
+});
+
+test('fillVerificationCode treats phone signup SMS landing on email verification as handoff success', async () => {
+  const api = new Function(`
+let now = 0;
+const logs = [];
+const clicks = [];
+const VERIFICATION_CODE_INPUT_SELECTOR = 'input[name="code"]';
+const VERIFICATION_PAGE_PATTERN = /verification code/i;
+const location = {
+  href: 'https://auth.openai.com/phone-verification',
+  pathname: '/phone-verification',
+};
+function KeyboardEvent(type, init = {}) {
+  this.type = type;
+  Object.assign(this, init);
+}
+
+const codeInput = {
+  value: '',
+  disabled: false,
+  form: null,
+  getAttribute(name) {
+    if (name === 'maxlength') return '6';
+    if (name === 'aria-disabled') return 'false';
+    if (name === 'name') return 'code';
+    return '';
+  },
+  closest() { return null; },
+  focus() {},
+  dispatchEvent() {},
+};
+const submitBtn = {
+  tagName: 'BUTTON',
+  textContent: 'Continue',
+  disabled: false,
+  getAttribute(name) {
+    if (name === 'type') return 'submit';
+    if (name === 'aria-disabled') return 'false';
+    return '';
+  },
+  click() {
+    location.href = 'https://auth.openai.com/email-verification';
+    location.pathname = '/email-verification';
+  },
+};
+
+const document = {
+  readyState: 'complete',
+  body: {
+    textContent: 'Enter the verification code we just sent to your email',
+    innerText: 'Enter the verification code we just sent to your email',
+  },
+  querySelector(selector) {
+    if (selector === VERIFICATION_CODE_INPUT_SELECTOR && location.pathname === '/phone-verification') return codeInput;
+    if (selector === 'button[type="submit"]' && location.pathname === '/phone-verification') return submitBtn;
+    if (selector === 'form[action*="email-verification" i]' && location.pathname === '/email-verification') return {};
+    return null;
+  },
+  querySelectorAll(selector) {
+    if (selector === 'input[maxlength="1"]') return [];
+    if (location.pathname === '/phone-verification' && selector === 'button[type="submit"], input[type="submit"]') return [submitBtn];
+    if (location.pathname === '/phone-verification' && selector === 'button, [role="button"], input[type="button"], input[type="submit"]') return [submitBtn];
+    if (location.pathname === '/email-verification' && selector === 'button, a, [role="button"], [role="link"], input[type="button"], input[type="submit"]') {
+      return [{ textContent: 'Resend code', disabled: false, getAttribute() { return ''; } }];
+    }
+    return [];
+  },
+};
+
+const Date = { now: () => now };
+function throwIfStopped() {}
+function log(message, level = 'info') { logs.push({ message, level }); }
+async function waitForLoginVerificationPageReady() {}
+function is405MethodNotAllowedPage() { return false; }
+async function handle405ResendError() {}
+function fillInput(el, value) { el.value = value; }
+async function sleep(ms = 0) { now += ms || 15000; }
+async function waitForDocumentLoadComplete() {}
+function isStep5Ready() { return false; }
+function isStep8Ready() { return false; }
+function isAddPhonePageReady() { return false; }
+function isVisibleElement() { return true; }
+function isActionEnabled(el) { return Boolean(el) && !el.disabled; }
+function getActionText(el) { return el?.textContent || ''; }
+async function humanPause() {}
+function simulateClick(el) { el.click(); clicks.push(el.textContent); }
+function getVerificationErrorText() { return ''; }
+function getCurrentAuthRetryPageState() { return null; }
+async function recoverCurrentAuthRetryPage() { throw new Error('should not recover retry page'); }
+function createSignupUserAlreadyExistsError() { return new Error('user already exists'); }
+function isPhoneVerificationPageReady() { return location.pathname === '/phone-verification'; }
+function getPageTextSnapshot() { return document.body.textContent; }
+function findResendVerificationCodeTrigger() {
+  return location.pathname === '/email-verification'
+    ? { textContent: 'Resend code', disabled: false, getAttribute() { return ''; } }
+    : null;
+}
+
+${extractFunction('getVisibleSplitVerificationInputs')}
+${extractFunction('getVerificationCodeTarget')}
+${extractFunction('isEmailVerificationPage')}
+${extractFunction('isVerificationPageStillVisible')}
+${extractFunction('isSignupProfilePageUrl')}
+${extractFunction('isLikelyLoggedInChatgptHomeUrl')}
+${extractFunction('getStep4PostVerificationState')}
+${extractFunction('getVerificationSubmitButtonForTarget')}
+${extractFunction('waitForVerificationSubmitButton')}
+${extractFunction('waitForVerificationCodeTarget')}
+${extractFunction('waitForSplitVerificationInputsFilled')}
+${extractFunction('isCombinedSignupVerificationProfilePage')}
+${extractFunction('waitForCombinedSignupVerificationProfilePage')}
+${extractFunction('waitForVerificationSubmitOutcome')}
+${extractFunction('fillVerificationCode')}
+
+return {
+  run() {
+    return fillVerificationCode(4, { code: '123456', purpose: 'signup' });
+  },
+  snapshot() {
+    return { clicks, logs, href: location.href };
+  },
+};
+`)();
+
+  const result = await api.run();
+  const snapshot = api.snapshot();
+
+  assert.equal(snapshot.href, 'https://auth.openai.com/email-verification');
+  assert.deepStrictEqual(snapshot.clicks, ['Continue']);
+  assert.equal(result.success, true);
+  assert.equal(result.emailVerificationRequired, true);
+  assert.equal(result.emailVerificationPage, true);
+  assert.equal(result.url, 'https://auth.openai.com/email-verification');
+  assert.equal(Object.prototype.hasOwnProperty.call(result, 'invalidCode'), false);
+});
+
+test('resendVerificationCode reports contact-verification HTTP 500 after resend click', async () => {
+  const api = new Function(`
+const PHONE_RESEND_SERVER_ERROR_PREFIX = 'PHONE_RESEND_SERVER_ERROR::';
+const CONTACT_VERIFICATION_SERVER_ERROR_PATTERN = /this\\s+page\\s+isn['’]?t\\s+working|currently\\s+unable\\s+to\\s+handle\\s+this\\s+request|http\\s+error\\s+500|500\\s+internal\\s+server\\s+error/i;
+const logs = [];
+const location = {
+  href: 'https://auth.openai.com/email-verification',
+  pathname: '/email-verification',
+};
+const document = {
+  title: 'Verify your email',
+  body: { textContent: 'Enter the verification code.' },
+};
+function throwIfStopped() {}
+function log(message, level = 'info') { logs.push({ message, level }); }
+function findResendVerificationCodeTrigger() { return { textContent: 'Resend code' }; }
+function isActionEnabled() { return true; }
+async function humanPause() {}
+function simulateClick() {
+  location.href = 'https://auth.openai.com/contact-verification';
+  location.pathname = '/contact-verification';
+  document.title = "This page isn't working";
+  document.body.textContent = 'auth.openai.com is currently unable to handle this request. HTTP ERROR 500';
+}
+async function sleep() {}
+function is405MethodNotAllowedPage() { return false; }
+async function handle405ResendError() {}
+function getActionText(element) { return element?.textContent || ''; }
+function getPageTextSnapshot() { return document.body.textContent; }
+
+${extractFunction('getContactVerificationServerErrorText')}
+${extractFunction('throwIfContactVerificationServerError')}
+${extractFunction('resendVerificationCode')}
+
+return {
+  async run() {
+    try {
+      await resendVerificationCode(4, 1000);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: String(error?.message || error), logs };
+    }
+  },
+};
+`)();
+
+  const result = await api.run();
+
+  assert.equal(result.ok, false);
+  assert.match(result.message, /^PHONE_RESEND_SERVER_ERROR::This page isn't working/);
+  assert.equal(result.message.includes('PHONE_RESEND_SERVER_ERROR::PHONE_RESEND_SERVER_ERROR::'), false);
 });
 
 test('fillVerificationCode does not short-circuit on mixed email-verification profile page before verification exits', async () => {
@@ -229,156 +457,6 @@ return {
     ok: false,
     message: '未找到验证码输入框。URL: https://auth.openai.com/email-verification/register',
   });
-});
-
-test('resendVerificationCode fails fast on step 4 contact-verification 405 route error after resend', async () => {
-  const api = new Function(`
-const logs = [];
-const location = {
-  href: 'https://auth.openai.com/contact-verification',
-  pathname: '/contact-verification',
-};
-
-const resendButton = {
-  disabled: false,
-  textContent: '重新发送文本消息',
-  getAttribute(name) {
-    if (name === 'aria-disabled') return 'false';
-    if (name === 'value') return '重新发送文本消息';
-    return '';
-  },
-};
-
-const document = {
-  body: {
-    textContent: 'Route Error (405 Method Not Allowed): "Error: You made a POST request to \\"/contact-verification\\" but did not provide an \`action\` for route \\"CONTACT_VERIFICATION\\", so there is no way to handle the request."',
-  },
-  querySelectorAll(selector) {
-    if (selector === 'button, a, [role="button"], [role="link"], input[type="button"], input[type="submit"]') {
-      return [resendButton];
-    }
-    return [];
-  },
-};
-
-function throwIfStopped() {}
-async function waitForLoginVerificationPageReady() {}
-function isVisibleElement() { return true; }
-function isActionEnabled(el) { return Boolean(el) && !el.disabled; }
-function getActionText(el) { return el?.textContent || ''; }
-async function humanPause() {}
-function simulateClick() {}
-async function sleep() {}
-function log(message, level = 'info') { logs.push({ message, level }); }
-function getVerificationErrorText() { return ''; }
-const AUTH_ROUTE_ERROR_PATTERN = /405\\s+method\\s+not\\s+allowed|route\\s+error.*405|did\\s+not\\s+provide\\s+an?\\s+[\`'"]?action|post\\s+request\\s+to\\s+["']?\\/email-verification|post\\s+request\\s+to\\s+["']?\\/contact-verification/i;
-const STEP4_405_RECOVERY_ERROR_PREFIX = 'STEP4_405_RECOVERY_LIMIT::';
-const STEP4_405_RECOVERY_LIMIT = 3;
-
-${extractFunction('findResendVerificationCodeTrigger')}
-${extractFunction('resendVerificationCode')}
-${extractFunction('is405MethodNotAllowedPage')}
-${extractFunction('isStep4ContactVerificationRoute405ErrorPage')}
-${extractFunction('createStep4ContactVerificationRoute405Error')}
-${extractFunction('getStep405RecoveryStateKey')}
-${extractFunction('getStep405StorageScope')}
-${extractFunction('getStep405RecoveryLimit')}
-${extractFunction('getStep405RecoveryErrorPrefix')}
-${extractFunction('getStep405RecoveryCount')}
-${extractFunction('setStep405RecoveryCount')}
-${extractFunction('clearStep405RecoveryCount')}
-${extractFunction('createStep405RecoveryLimitError')}
-${extractFunction('handle405ResendError')}
-
-return {
-  async run() {
-    try {
-      await resendVerificationCode(4, 4000);
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, message: String(error?.message || error), logs };
-    }
-  },
-};
-`)();
-
-  const result = await api.run();
-
-  assert.deepStrictEqual(result.ok, false);
-  assert.match(result.message, /STEP4_CONTACT_VERIFICATION_ROUTE_405::/);
-  assert.ok(result.logs.some(({ message }) => /contact-verification.*405.*回到步骤 1/i.test(message)));
-});
-
-test('resendVerificationCode fails fast when step 4 resend reports phone cannot receive texts', async () => {
-  const api = new Function(`
-const logs = [];
-const location = {
-  href: 'https://auth.openai.com/phone-verification',
-  pathname: '/phone-verification',
-};
-
-const resendButton = {
-  disabled: false,
-  textContent: '重新发送文本消息',
-  getAttribute(name) {
-    if (name === 'aria-disabled') return 'false';
-    if (name === 'value') return '重新发送文本消息';
-    return '';
-  },
-};
-
-const document = {
-  body: {
-    textContent: '输入验证码 无法向此电话号码发送文本消息 请尝试其他号码',
-  },
-  querySelectorAll(selector) {
-    if (selector === 'button, a, [role="button"], [role="link"], input[type="button"], input[type="submit"]') {
-      return [resendButton];
-    }
-    return [];
-  },
-};
-
-function throwIfStopped() {}
-async function waitForLoginVerificationPageReady() {}
-function isVisibleElement() { return true; }
-function isActionEnabled(el) { return Boolean(el) && !el.disabled; }
-function getActionText(el) { return el?.textContent || ''; }
-async function humanPause() {}
-function simulateClick() {}
-async function sleep() {}
-function log(message, level = 'info') { logs.push({ message, level }); }
-function getVerificationErrorText() { return ''; }
-function getVisibleFieldErrorText() { return ''; }
-const RESEND_VERIFICATION_CODE_PATTERN = /重新发送(?:验证码)?|再次发送(?:验证码)?|重发(?:验证码)?|未收到(?:验证码|邮件)|resend(?:\\s+code)?|send\\s+(?:a\\s+)?new\\s+code|send\\s+(?:it\\s+)?again|request\\s+(?:a\\s+)?new\\s+code|didn'?t\\s+receive/i;
-const AUTH_ROUTE_ERROR_PATTERN = /405\\s+method\\s+not\\s+allowed|route\\s+error.*405|did\\s+not\\s+provide\\s+an?\\s+[\`'"]?action|post\\s+request\\s+to\\s+["']?\\/email-verification|post\\s+request\\s+to\\s+["']?\\/contact-verification/i;
-const STEP4_PHONE_NUMBER_UNUSABLE_ERROR_PREFIX = 'STEP4_PHONE_NUMBER_UNUSABLE::';
-const STEP4_PHONE_NUMBER_UNUSABLE_PATTERN = /unable\\s+to\\s+send\\s+(?:a\\s+)?(?:text\\s+messages?|sms|verification\\s+code)s?\\s+to\\s+this\\s+phone\\s+number|can(?:not|'t)\\s+send\\s+(?:a\\s+)?(?:text\\s+messages?|sms|verification\\s+code)s?\\s+to\\s+this\\s+phone\\s+number|couldn'?t\\s+send\\s+(?:a\\s+)?(?:text\\s+messages?|sms|verification\\s+code)s?\\s+to\\s+this\\s+phone\\s+number|无法向此电话(?:号|号码)发送(?:文本消息|短信|验证码)|无法向此手机号发送(?:文本消息|短信|验证码)|无法向此电话号码发送(?:文本消息|短信|验证码)|不能向此电话(?:号|号码)发送(?:文本消息|短信|验证码)|不能向此手机号发送(?:文本消息|短信|验证码)|不能向此电话号码发送(?:文本消息|短信|验证码)/i;
-
-${extractFunction('findResendVerificationCodeTrigger')}
-${extractFunction('resendVerificationCode')}
-${extractFunction('is405MethodNotAllowedPage')}
-${extractFunction('getStep4PhoneNumberUnusableText')}
-${extractFunction('createStep4PhoneNumberUnusableError')}
-
-return {
-  async run() {
-    try {
-      await resendVerificationCode(4, 4000);
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, message: String(error?.message || error), logs };
-    }
-  },
-};
-`)();
-
-  const result = await api.run();
-
-  assert.deepStrictEqual(result.ok, false);
-  assert.match(result.message, /STEP4_PHONE_NUMBER_UNUSABLE::/);
-  assert.match(result.message, /无法向此电话号码发送文本消息/);
-  assert.ok(result.logs.some(({ message }) => /当前手机号不可用/.test(message)));
 });
 
 test('fillVerificationCode prefills profile on combined verification/register page and skips step 5 after success', async () => {
@@ -866,4 +944,634 @@ return {
   assert.equal(snapshot.readyState, 'complete');
   assert.equal(snapshot.sleepCalls >= 3, true);
   assert.equal(snapshot.targetChecks >= 1, true);
+});
+
+test('prepareSignupVerificationFlow stops immediately when password page shows phone/password mismatch', async () => {
+  const api = new Function(`
+const logs = [];
+const clicks = [];
+let now = 0;
+
+Date.now = () => now;
+
+function throwIfStopped() {}
+function log(message, level = 'info') { logs.push({ message, level }); }
+async function sleep(ms = 0) { now += ms || 200; }
+function isVisibleElement() { return true; }
+function isActionEnabled() { return true; }
+function getActionText(el) { return el?.textContent || ''; }
+function getCurrentAuthRetryPageState() { return null; }
+function isPhoneVerificationPageReady() { return false; }
+function findResendVerificationCodeTrigger() { return null; }
+function isEmailVerificationPage() { return false; }
+function getPageTextSnapshot() { return 'Incorrect phone number or password'; }
+function getVerificationCodeTarget() { return null; }
+function is405MethodNotAllowedPage() { return false; }
+async function recoverCurrentAuthRetryPage() {}
+function createSignupUserAlreadyExistsError() { return new Error('user already exists'); }
+function getSignupPasswordInput() { return { value: 'Secret123!' }; }
+function getSignupPasswordSubmitButton() { return { textContent: 'Continue' }; }
+function isSignupEmailAlreadyExistsPage() { return false; }
+function isSignupPasswordErrorPage() { return false; }
+function getSignupPasswordTimeoutErrorPageState() { return null; }
+function isStep5Ready() { return false; }
+function getSignupPasswordFieldErrorText() { return 'Incorrect phone number or password'; }
+function simulateClick(target) { clicks.push(target?.textContent || 'clicked'); }
+async function humanPause() {}
+function fillInput() {}
+function logSignupPasswordDiagnostics() {}
+function createSignupPhonePasswordMismatchError(detailText = '') {
+  return new Error('SIGNUP_PHONE_PASSWORD_MISMATCH::' + detailText);
+}
+
+const location = {
+  href: 'https://auth.openai.com/log-in/password',
+  pathname: '/log-in/password',
+};
+const document = {
+  readyState: 'complete',
+  title: '',
+  body: {
+    textContent: 'Incorrect phone number or password',
+    innerText: 'Incorrect phone number or password',
+  },
+  querySelector() {
+    return null;
+  },
+  querySelectorAll() {
+    return [];
+  },
+};
+
+${extractFunction('isSignupVerificationPageInteractiveReady')}
+${extractFunction('isVerificationPageStillVisible')}
+${extractFunction('isSignupProfilePageUrl')}
+${extractFunction('isLikelyLoggedInChatgptHomeUrl')}
+${extractFunction('getStep4PostVerificationState')}
+${extractFunction('inspectSignupVerificationState')}
+${extractFunction('waitForSignupVerificationTransition')}
+${extractFunction('prepareSignupVerificationFlow')}
+
+return {
+  async run() {
+    try {
+      await prepareSignupVerificationFlow({
+        password: 'Secret123!',
+        prepareLogLabel: '步骤 3 收尾',
+      }, 10000);
+      return { threw: false, logs, clicks };
+    } catch (error) {
+      return { threw: true, error: error.message, logs, clicks };
+    }
+  },
+};
+`)();
+
+  const result = await api.run();
+
+  assert.equal(result.threw, true);
+  assert.match(result.error, /SIGNUP_PHONE_PASSWORD_MISMATCH::Incorrect phone number or password/);
+  assert.equal(result.clicks.length, 0);
+  assert.equal(result.logs.some(({ message }) => /检测到密码页报错/.test(message)), true);
+});
+
+test('prepareSignupVerificationFlow stops immediately when password page shows phone already exists error', async () => {
+  const api = new Function(`
+const logs = [];
+const clicks = [];
+let now = 0;
+
+Date.now = () => now;
+
+function throwIfStopped() {}
+function log(message, level = 'info') { logs.push({ message, level }); }
+async function sleep(ms = 0) { now += ms || 200; }
+function isVisibleElement() { return true; }
+function isActionEnabled() { return true; }
+function getActionText(el) { return el?.textContent || ''; }
+function getCurrentAuthRetryPageState() { return null; }
+function isPhoneVerificationPageReady() { return false; }
+function findResendVerificationCodeTrigger() { return null; }
+function isEmailVerificationPage() { return false; }
+function getPageTextSnapshot() { return '与此电话号码相关联的帐户已存在'; }
+function getVerificationCodeTarget() { return null; }
+function is405MethodNotAllowedPage() { return false; }
+async function recoverCurrentAuthRetryPage() {}
+function createSignupUserAlreadyExistsError() { return new Error('user already exists'); }
+function getSignupPasswordInput() { return { value: 'Secret123!' }; }
+function getSignupPasswordSubmitButton() { return { textContent: 'Continue' }; }
+function isSignupEmailAlreadyExistsPage() { return false; }
+function isSignupPasswordErrorPage() { return false; }
+function getSignupPasswordTimeoutErrorPageState() { return null; }
+function isStep5Ready() { return false; }
+function getSignupPasswordFieldErrorText() { return '与此电话号码相关联的帐户已存在'; }
+function simulateClick(target) { clicks.push(target?.textContent || 'clicked'); }
+async function humanPause() {}
+function fillInput() {}
+function logSignupPasswordDiagnostics() {}
+function createSignupPhonePasswordMismatchError(detailText = '') {
+  return new Error('SIGNUP_PHONE_PASSWORD_MISMATCH::' + detailText);
+}
+
+const location = {
+  href: 'https://auth.openai.com/log-in/password',
+  pathname: '/log-in/password',
+};
+const document = {
+  readyState: 'complete',
+  title: '',
+  body: {
+    textContent: '与此电话号码相关联的帐户已存在',
+    innerText: '与此电话号码相关联的帐户已存在',
+  },
+  querySelector() {
+    return null;
+  },
+  querySelectorAll() {
+    return [];
+  },
+};
+
+${extractFunction('isSignupVerificationPageInteractiveReady')}
+${extractFunction('isVerificationPageStillVisible')}
+${extractFunction('isSignupProfilePageUrl')}
+${extractFunction('isLikelyLoggedInChatgptHomeUrl')}
+${extractFunction('getStep4PostVerificationState')}
+${extractFunction('inspectSignupVerificationState')}
+${extractFunction('waitForSignupVerificationTransition')}
+${extractFunction('prepareSignupVerificationFlow')}
+
+return {
+  async run() {
+    try {
+      await prepareSignupVerificationFlow({
+        password: 'Secret123!',
+        prepareLogLabel: '步骤 3 收尾',
+      }, 10000);
+      return { threw: false, logs, clicks };
+    } catch (error) {
+      return { threw: true, error: error.message, logs, clicks };
+    }
+  },
+};
+`)();
+
+  const result = await api.run();
+
+  assert.equal(result.threw, true);
+  assert.match(result.error, /SIGNUP_PHONE_PASSWORD_MISMATCH::与此电话号码相关联的帐户已存在/);
+  assert.equal(result.clicks.length, 0);
+  assert.equal(result.logs.some(({ message }) => /检测到密码页报错/.test(message)), true);
+});
+
+test('prepareSignupVerificationFlow waits instead of retrying while matched password submit is pending', async () => {
+  const api = new Function(`
+const logs = [];
+const clicks = [];
+let now = 0;
+
+Date.now = () => now;
+
+const passwordInput = { value: 'Secret123!' };
+const submitButton = {
+  textContent: 'Continue',
+  disabled: false,
+  getAttribute(name) {
+    if (name === 'aria-disabled') return 'false';
+    return '';
+  },
+};
+
+const window = {
+  getComputedStyle() {
+    return {
+      opacity: '0.5',
+      pointerEvents: 'auto',
+    };
+  },
+};
+
+const location = {
+  href: 'https://auth.openai.com/create-account/password',
+  pathname: '/create-account/password',
+};
+const document = {
+  readyState: 'interactive',
+  title: '',
+  body: {
+    textContent: 'Create password Continue',
+    innerText: 'Create password Continue',
+  },
+  querySelector() {
+    return null;
+  },
+  querySelectorAll() {
+    return [];
+  },
+};
+
+function throwIfStopped() {}
+function log(message, level = 'info') { logs.push({ message, level }); }
+async function sleep(ms = 0) { now += ms || 200; }
+function isVisibleElement() { return true; }
+function isActionEnabled(el) { return Boolean(el) && !el.disabled && el.getAttribute?.('aria-disabled') !== 'true'; }
+function getActionText(el) { return el?.textContent || ''; }
+function getCurrentAuthRetryPageState() { return null; }
+function isPhoneVerificationPageReady() { return false; }
+function findResendVerificationCodeTrigger() { return null; }
+function isEmailVerificationPage() { return false; }
+function getPageTextSnapshot() { return document.body.textContent; }
+function getVerificationCodeTarget() { return null; }
+function is405MethodNotAllowedPage() { return false; }
+async function recoverCurrentAuthRetryPage() {}
+function createSignupUserAlreadyExistsError() { return new Error('user already exists'); }
+function getSignupPasswordInput() { return passwordInput; }
+function getSignupPasswordSubmitButton() { return submitButton; }
+function isSignupEmailAlreadyExistsPage() { return false; }
+function isSignupPasswordErrorPage() { return false; }
+function getSignupPasswordTimeoutErrorPageState() { return null; }
+function isStep5Ready() { return false; }
+function getSignupPasswordFieldErrorText() { return ''; }
+function simulateClick(target) { clicks.push(target?.textContent || 'clicked'); }
+async function humanPause() {}
+function fillInput(input, value) { input.value = value; }
+function logSignupPasswordDiagnostics(message) { logs.push({ message, level: 'warn' }); }
+function createSignupPhonePasswordMismatchError(detailText = '') {
+  return new Error('SIGNUP_PHONE_PASSWORD_MISMATCH::' + detailText);
+}
+
+const VERIFICATION_PAGE_PATTERN = /verification code/i;
+
+${extractFunction('isSignupVerificationPageInteractiveReady')}
+${extractFunction('isVerificationPageStillVisible')}
+${extractFunction('isSignupProfilePageUrl')}
+${extractFunction('isLikelyLoggedInChatgptHomeUrl')}
+${extractFunction('getStep4PostVerificationState')}
+${extractFunction('inspectSignupVerificationState')}
+${extractFunction('waitForSignupVerificationTransition')}
+${extractFunction('prepareSignupVerificationFlow')}
+
+return {
+  async run() {
+    try {
+      await prepareSignupVerificationFlow({
+        password: 'Secret123!',
+        prepareLogLabel: 'step 3 finalize',
+      }, 11000);
+      return { threw: false, logs, clicks, now };
+    } catch (error) {
+      return { threw: true, error: error.message, logs, clicks, now };
+    }
+  },
+};
+`)();
+
+  const result = await api.run();
+
+  assert.equal(result.threw, true);
+  assert.equal(result.clicks.length, 0);
+  assert.equal(result.error.includes('0/3'), true);
+  assert.equal(result.now >= 11000, true);
+});
+
+test('fillSignupEmailAndContinue reports before deferred submit while submit still waits for operation delay', async () => {
+  const api = new Function(`
+const events = [];
+const scheduled = [];
+let releaseSubmitDelay;
+const submitDelay = new Promise((resolve) => { releaseSubmitDelay = resolve; });
+const emailInput = { value: '' };
+const continueButton = { textContent: 'Continue' };
+const location = { href: 'https://auth.openai.com/u/signup' };
+const window = {
+  setTimeout(callback, ms) {
+    events.push(\`timer:\${ms}\`);
+    scheduled.push(callback);
+    return scheduled.length;
+  },
+  CodexOperationDelay: {
+    async performOperationWithDelay(metadata, operation) {
+      events.push(\`operation:\${metadata.label}:start\`);
+      const result = await operation();
+      events.push(\`operation:\${metadata.label}:end\`);
+      if (metadata.kind === 'submit') {
+        events.push(\`delay:\${metadata.label}:pending\`);
+        await submitDelay;
+      }
+      events.push(\`delay:\${metadata.label}:2000\`);
+      return result;
+    },
+  },
+};
+
+function getOperationDelayRunner() { return window.CodexOperationDelay.performOperationWithDelay; }
+function throwIfStopped() {}
+function isStopError() { return false; }
+function log() {}
+async function humanPause() {}
+async function sleep(ms) { events.push(\`sleep:\${ms}\`); }
+function fillInput(input, value) { input.value = value; events.push(\`fill:\${value}\`); }
+function simulateClick(el) { events.push(\`click:\${el.textContent}\`); }
+async function waitForSignupEntryState() {
+  return { state: 'email_entry', emailInput, continueButton, url: location.href };
+}
+function getSignupEmailContinueButton() { return continueButton; }
+function isActionEnabled() { return true; }
+
+${extractFunction('fillSignupEmailAndContinue')}
+
+return {
+  events,
+  scheduledCount() { return scheduled.length; },
+  async flushDeferredSubmit() {
+    if (!scheduled.length) throw new Error('missing deferred submit');
+    await scheduled[0]();
+  },
+  releaseSubmitDelay() { releaseSubmitDelay(); },
+  run() { return fillSignupEmailAndContinue('ada@example.com', 2); },
+};
+`)();
+
+  let settled = false;
+  const tracked = api.run().then((result) => {
+    settled = true;
+    api.events.push('run:resolved');
+    return result;
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, true, 'email submit must return before deferred submit can navigate');
+  const result = await tracked;
+  assert.equal(result.submitted, true);
+  assert.equal(api.scheduledCount(), 1);
+  assert.deepStrictEqual(api.events, [
+    'operation:signup-email:start',
+    'fill:ada@example.com',
+    'operation:signup-email:end',
+    'delay:signup-email:2000',
+    'timer:120',
+    'run:resolved',
+  ]);
+
+  let flushed = false;
+  const flush = api.flushDeferredSubmit().then(() => {
+    flushed = true;
+    api.events.push('flush:resolved');
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(api.events.includes('operation:submit-signup-email:start'), true);
+  assert.equal(api.events.includes('delay:submit-signup-email:pending'), true);
+  assert.equal(flushed, false, 'deferred email submit callback must wait for submit delay before resolving');
+  api.releaseSubmitDelay();
+  await flush;
+  assert.deepStrictEqual(api.events, [
+    'operation:signup-email:start',
+    'fill:ada@example.com',
+    'operation:signup-email:end',
+    'delay:signup-email:2000',
+    'timer:120',
+    'run:resolved',
+    'operation:submit-signup-email:start',
+    'click:Continue',
+    'operation:submit-signup-email:end',
+    'delay:submit-signup-email:pending',
+    'delay:submit-signup-email:2000',
+    'flush:resolved',
+  ]);
+});
+
+test('submitSignupPhoneNumberAndContinue reports before deferred submit while submit still waits for operation delay', async () => {
+  const api = new Function(`
+const events = [];
+const scheduled = [];
+let releaseSubmitDelay;
+const submitDelay = new Promise((resolve) => { releaseSubmitDelay = resolve; });
+const phoneInput = { value: '' };
+const continueButton = { textContent: 'Continue' };
+const location = { href: 'https://auth.openai.com/u/signup/phone' };
+const window = {
+  setTimeout(callback, ms) {
+    events.push(\`timer:\${ms}\`);
+    scheduled.push(callback);
+    return scheduled.length;
+  },
+  CodexOperationDelay: {
+    async performOperationWithDelay(metadata, operation) {
+      events.push(\`operation:\${metadata.label}:start\`);
+      const result = await operation();
+      events.push(\`operation:\${metadata.label}:end\`);
+      if (metadata.kind === 'submit') {
+        events.push(\`delay:\${metadata.label}:pending\`);
+        await submitDelay;
+      }
+      events.push(\`delay:\${metadata.label}:2000\`);
+      return result;
+    },
+  },
+};
+
+function getOperationDelayRunner() { return window.CodexOperationDelay.performOperationWithDelay; }
+function throwIfStopped() {}
+function isStopError() { return false; }
+function log() {}
+async function humanPause() {}
+async function sleep(ms) { events.push(\`sleep:\${ms}\`); }
+function fillInput(input, value) { input.value = value; events.push(\`fill:\${value}\`); }
+function simulateClick(el) { events.push(\`click:\${el.textContent}\`); }
+async function waitForSignupPhoneEntryState() {
+  return { state: 'phone_entry', phoneInput, url: location.href };
+}
+async function ensureSignupPhoneCountrySelected() {
+  return { hasCountryControl: false, matched: true, selectedOption: null };
+}
+function resolveSignupPhoneDialCode() { return '1'; }
+function toNationalPhoneNumber() { return '5551234567'; }
+function getSignupPhoneHiddenNumberInput() { return null; }
+function toE164PhoneNumber() { return '+15551234567'; }
+function getSignupEmailContinueButton() { return continueButton; }
+function isActionEnabled() { return true; }
+
+${extractFunction('submitSignupPhoneNumberAndContinue')}
+
+return {
+  events,
+  scheduledCount() { return scheduled.length; },
+  async flushDeferredSubmit() {
+    if (!scheduled.length) throw new Error('missing deferred submit');
+    await scheduled[0]();
+  },
+  releaseSubmitDelay() { releaseSubmitDelay(); },
+  run() { return submitSignupPhoneNumberAndContinue({ phoneNumber: '+15551234567' }); },
+};
+`)();
+
+  let settled = false;
+  const tracked = api.run().then((result) => {
+    settled = true;
+    api.events.push('run:resolved');
+    return result;
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, true, 'phone submit must return before deferred submit can navigate');
+  const result = await tracked;
+  assert.equal(result.submitted, true);
+  assert.equal(api.scheduledCount(), 1);
+  assert.deepStrictEqual(api.events, [
+    'operation:signup-phone-number:start',
+    'fill:5551234567',
+    'operation:signup-phone-number:end',
+    'delay:signup-phone-number:2000',
+    'timer:120',
+    'run:resolved',
+  ]);
+
+  let flushed = false;
+  const flush = api.flushDeferredSubmit().then(() => {
+    flushed = true;
+    api.events.push('flush:resolved');
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(api.events.includes('operation:submit-signup-phone:start'), true);
+  assert.equal(api.events.includes('delay:submit-signup-phone:pending'), true);
+  assert.equal(flushed, false, 'deferred phone submit callback must wait for submit delay before resolving');
+  api.releaseSubmitDelay();
+  await flush;
+  assert.deepStrictEqual(api.events, [
+    'operation:signup-phone-number:start',
+    'fill:5551234567',
+    'operation:signup-phone-number:end',
+    'delay:signup-phone-number:2000',
+    'timer:120',
+    'run:resolved',
+    'operation:submit-signup-phone:start',
+    'click:Continue',
+    'operation:submit-signup-phone:end',
+    'delay:submit-signup-phone:pending',
+    'delay:submit-signup-phone:2000',
+    'flush:resolved',
+  ]);
+});
+
+test('step3_fillEmailPassword reports complete before deferred submit while submit still waits for operation delay', async () => {
+  const api = new Function(`
+const events = [];
+const reports = [];
+const scheduled = [];
+let releaseSubmitDelay;
+const submitDelay = new Promise((resolve) => { releaseSubmitDelay = resolve; });
+const Date = { now: () => 12345 };
+const passwordInput = { value: '' };
+const submitButton = { textContent: 'Continue' };
+const location = { href: 'https://auth.openai.com/u/signup/password' };
+const window = {
+  setTimeout(callback, ms) {
+    events.push(\`timer:\${ms}\`);
+    scheduled.push(callback);
+    return scheduled.length;
+  },
+  CodexOperationDelay: {
+    async performOperationWithDelay(metadata, operation) {
+      events.push(\`operation:\${metadata.label}:start\`);
+      const result = await operation();
+      events.push(\`operation:\${metadata.label}:end\`);
+      if (metadata.kind === 'submit') {
+        events.push(\`delay:\${metadata.label}:pending\`);
+        await submitDelay;
+      }
+      events.push(\`delay:\${metadata.label}:2000\`);
+      return result;
+    },
+  },
+};
+
+function getOperationDelayRunner() { return window.CodexOperationDelay.performOperationWithDelay; }
+function throwIfStopped() {}
+function isStopError() { return false; }
+function log(message) { events.push(\`log:\${message}\`); }
+async function humanPause() {}
+async function sleep(ms) { events.push(\`sleep:\${ms}\`); }
+function fillInput(input, value) { input.value = value; events.push(\`fill-password:\${value}\`); }
+function simulateClick(el) { events.push(\`click:\${el.textContent}\`); }
+function inspectSignupEntryState() {
+  return { state: 'password_page', passwordInput, submitButton, displayedEmail: 'ada@example.com' };
+}
+function getSignupPasswordSubmitButton() { return submitButton; }
+async function waitForElementByText() { return null; }
+function logSignupPasswordDiagnostics() {}
+function reportComplete(step, payload) {
+  reports.push({ step, payload });
+  events.push(\`report:\${payload.deferredSubmit}\`);
+}
+
+${extractFunction('step3_fillEmailPassword')}
+
+return {
+  events,
+  reports,
+  scheduledCount() { return scheduled.length; },
+  async flushDeferredSubmit() {
+    if (!scheduled.length) throw new Error('missing deferred submit');
+    await scheduled[0]();
+  },
+  releaseSubmitDelay() { releaseSubmitDelay(); },
+  run() { return step3_fillEmailPassword({ email: 'ada@example.com', password: 'Secret123!' }); },
+};
+`)();
+
+  let settled = false;
+  const tracked = api.run().then((result) => {
+    settled = true;
+    api.events.push('run:resolved');
+    return result;
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, true, 'step 3 must report and return before deferred submit can navigate');
+  const result = await tracked;
+  assert.equal(result.deferredSubmit, true);
+  assert.equal(api.reports.length, 1);
+  assert.equal(api.scheduledCount(), 1);
+  assert.equal(api.events.includes('operation:submit-signup-password:start'), false);
+  assert.deepStrictEqual(api.events, [
+    'operation:signup-password:start',
+    'fill-password:Secret123!',
+    'operation:signup-password:end',
+    'delay:signup-password:2000',
+    'log:步骤 3：密码已填写',
+    'report:true',
+    'timer:120',
+    'run:resolved',
+  ]);
+
+  let flushed = false;
+  const flush = api.flushDeferredSubmit().then(() => {
+    flushed = true;
+    api.events.push('flush:resolved');
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(api.events.includes('operation:submit-signup-password:start'), true);
+  assert.equal(api.events.includes('delay:submit-signup-password:pending'), true);
+  assert.equal(flushed, false, 'deferred submit callback must wait for submit delay before resolving');
+
+  api.releaseSubmitDelay();
+  await flush;
+  assert.deepStrictEqual(api.events, [
+    'operation:signup-password:start',
+    'fill-password:Secret123!',
+    'operation:signup-password:end',
+    'delay:signup-password:2000',
+    'log:步骤 3：密码已填写',
+    'report:true',
+    'timer:120',
+    'run:resolved',
+    'sleep:500',
+    'operation:submit-signup-password:start',
+    'click:Continue',
+    'operation:submit-signup-password:end',
+    'delay:submit-signup-password:pending',
+    'delay:submit-signup-password:2000',
+    'log:步骤 3：表单已提交',
+    'flush:resolved',
+  ]);
 });

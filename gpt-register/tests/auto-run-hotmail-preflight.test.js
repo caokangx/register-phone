@@ -5,6 +5,90 @@ const fs = require('node:fs');
 const source = fs.readFileSync('background/auto-run-controller.js', 'utf8');
 const globalScope = {};
 const api = new Function('self', `${source}; return self.MultiPageBackgroundAutoRunController;`)(globalScope);
+const rawCreateAutoRunController = api.createAutoRunController.bind(api);
+
+const TEST_STEP_NODE_IDS = Object.freeze({
+  1: 'open-chatgpt',
+  2: 'submit-signup-email',
+  3: 'fill-password',
+  4: 'fetch-signup-code',
+  5: 'fill-profile',
+  6: 'wait-registration-success',
+  7: 'oauth-login',
+  8: 'fetch-login-code',
+  9: 'confirm-oauth',
+  10: 'platform-verify',
+});
+
+const TEST_NODE_STEP_IDS = Object.fromEntries(
+  Object.entries(TEST_STEP_NODE_IDS).map(([step, nodeId]) => [nodeId, Number(step)])
+);
+
+function getTestNodeIdByStep(step) {
+  return TEST_STEP_NODE_IDS[Number(step)] || '';
+}
+
+function getTestStepIdByNodeId(nodeId) {
+  return TEST_NODE_STEP_IDS[String(nodeId || '').trim()] || null;
+}
+
+function projectStepStatusesToNodeStatuses(stepStatuses = {}) {
+  const nodeStatuses = {};
+  for (const [step, status] of Object.entries(stepStatuses || {})) {
+    const nodeId = getTestNodeIdByStep(step);
+    if (nodeId) {
+      nodeStatuses[nodeId] = status;
+    }
+  }
+  return nodeStatuses;
+}
+
+api.createAutoRunController = (deps = {}) => {
+  const normalized = { ...deps };
+  if (typeof normalized.getState === 'function') {
+    const getState = normalized.getState;
+    normalized.getState = async () => {
+      const state = await getState();
+      return {
+        ...state,
+        nodeStatuses: {
+          ...projectStepStatusesToNodeStatuses(state?.stepStatuses || {}),
+          ...(state?.nodeStatuses || {}),
+        },
+      };
+    };
+  }
+  if (typeof normalized.runAutoSequenceFromNode !== 'function' && typeof normalized.runAutoSequenceFromStep === 'function') {
+    const runAutoSequenceFromStep = normalized.runAutoSequenceFromStep;
+    normalized.runAutoSequenceFromNode = (nodeId, context = {}) => (
+      runAutoSequenceFromStep(getTestStepIdByNodeId(nodeId) || 1, context)
+    );
+  }
+  if (typeof normalized.getFirstUnfinishedNodeId !== 'function' && typeof normalized.getFirstUnfinishedStep === 'function') {
+    const getFirstUnfinishedStep = normalized.getFirstUnfinishedStep;
+    normalized.getFirstUnfinishedNodeId = (statuses = {}, state = {}) => (
+      getTestNodeIdByStep(getFirstUnfinishedStep(statuses, state))
+    );
+  }
+  if (typeof normalized.getRunningNodeIds !== 'function' && typeof normalized.getRunningSteps === 'function') {
+    const getRunningSteps = normalized.getRunningSteps;
+    normalized.getRunningNodeIds = (statuses = {}, state = {}) => (
+      getRunningSteps(statuses, state).map(getTestNodeIdByStep).filter(Boolean)
+    );
+  }
+  if (typeof normalized.hasSavedNodeProgress !== 'function' && typeof normalized.hasSavedProgress === 'function') {
+    normalized.hasSavedNodeProgress = normalized.hasSavedProgress;
+  }
+  if (typeof normalized.waitForRunningNodesToFinish !== 'function' && typeof normalized.waitForRunningStepsToFinish === 'function') {
+    normalized.waitForRunningNodesToFinish = normalized.waitForRunningStepsToFinish;
+  }
+  delete normalized.runAutoSequenceFromStep;
+  delete normalized.getFirstUnfinishedStep;
+  delete normalized.getRunningSteps;
+  delete normalized.hasSavedProgress;
+  delete normalized.waitForRunningStepsToFinish;
+  return rawCreateAutoRunController(normalized);
+};
 
 test('auto-run controller verifies hotmail mailbox before each fresh attempt starts', async () => {
   const events = {

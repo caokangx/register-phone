@@ -1,17 +1,139 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
 const source = fs.readFileSync('background/verification-flow.js', 'utf8');
 const globalScope = {};
 const api = new Function('self', `${source}; return self.MultiPageBackgroundVerificationFlow;`)(globalScope);
+const rawCreateVerificationFlowHelpers = api.createVerificationFlowHelpers.bind(api);
+
+const TEST_STEP_NODE_IDS = Object.freeze({
+  4: 'fetch-signup-code',
+  7: 'oauth-login',
+  8: 'fetch-login-code',
+  11: 'fetch-login-code',
+});
+
+const TEST_NODE_STEP_IDS = Object.fromEntries(
+  Object.entries(TEST_STEP_NODE_IDS).map(([step, nodeId]) => [nodeId, Number(step)])
+);
+
+function getTestNodeIdByStepForState(step) {
+  return TEST_STEP_NODE_IDS[Number(step)] || '';
+}
+
+function getTestStepIdByNodeId(nodeId) {
+  return TEST_NODE_STEP_IDS[String(nodeId || '').trim()] || null;
+}
+
+function normalizeVerificationFlowTestOverrides(overrides = {}) {
+  const normalized = { ...overrides };
+  if (
+    typeof normalized.completeNodeFromBackground !== 'function'
+    && typeof normalized.completeStepFromBackground === 'function'
+  ) {
+    const completeStepFromBackground = normalized.completeStepFromBackground;
+    normalized.completeNodeFromBackground = async (nodeId, payload) => (
+      completeStepFromBackground(getTestStepIdByNodeId(nodeId), payload)
+    );
+  }
+  if (
+    typeof normalized.setNodeStatus !== 'function'
+    && typeof normalized.setStepStatus === 'function'
+  ) {
+    const setStepStatus = normalized.setStepStatus;
+    normalized.setNodeStatus = async (nodeId, status) => (
+      setStepStatus(getTestStepIdByNodeId(nodeId), status)
+    );
+  }
+  delete normalized.completeStepFromBackground;
+  delete normalized.setStepStatus;
+  return normalized;
+}
+
+function createVerificationFlowTestHelpers(overrides = {}) {
+  return rawCreateVerificationFlowHelpers({
+    addLog: async () => {},
+    buildVerificationPollPayload: null,
+    chrome: {
+      tabs: {
+        update: async () => {},
+        remove: async () => {},
+      },
+    },
+    CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
+    CLOUD_MAIL_PROVIDER: 'cloudmail',
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
+    getNodeIdByStepForState: getTestNodeIdByStepForState,
+    getHotmailVerificationPollConfig: () => ({}),
+    getHotmailVerificationRequestTimestamp: () => 0,
+    getState: async () => ({}),
+    getTabId: async () => 1,
+    HOTMAIL_PROVIDER: 'hotmail-api',
+    isStopError: () => false,
+    LUCKMAIL_PROVIDER: 'luckmail-api',
+    MAIL_2925_VERIFICATION_INTERVAL_MS: 15000,
+    MAIL_2925_VERIFICATION_MAX_ATTEMPTS: 15,
+    pollCloudflareTempEmailVerificationCode: async () => ({}),
+    pollCloudMailVerificationCode: async () => ({}),
+    pollHotmailVerificationCode: async () => ({}),
+    pollLuckmailVerificationCode: async () => ({}),
+    sendToContentScript: async () => ({}),
+    sendToMailContentScriptResilient: async () => ({}),
+    setState: async () => {},
+    setNodeStatus: async () => {},
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    VERIFICATION_POLL_MAX_ROUNDS: 5,
+    ...normalizeVerificationFlowTestOverrides(overrides),
+  });
+}
+
+api.createVerificationFlowHelpers = createVerificationFlowTestHelpers;
+
+test('verification flow prefers injected verification poll payload builder when provided', () => {
+  const helpers = createVerificationFlowTestHelpers({
+    buildVerificationPollPayload: (step, state, overrides = {}) => ({
+      flowId: state.activeFlowId || 'openai',
+      ruleId: 'custom-rule',
+      step,
+      senderFilters: ['custom-sender'],
+      subjectFilters: ['custom-subject'],
+      targetEmail: state.email,
+      maxAttempts: 9,
+      intervalMs: 4321,
+      ...overrides,
+    }),
+  });
+
+  assert.deepStrictEqual(
+    helpers.getVerificationPollPayload(4, {
+      activeFlowId: 'openai',
+      email: 'user@example.com',
+    }, {
+      excludeCodes: ['111111'],
+    }),
+    {
+      flowId: 'openai',
+      ruleId: 'custom-rule',
+      step: 4,
+      senderFilters: ['custom-sender'],
+      subjectFilters: ['custom-subject'],
+      targetEmail: 'user@example.com',
+      maxAttempts: 9,
+      intervalMs: 4321,
+      excludeCodes: ['111111'],
+    }
+  );
+});
 
 test('verification flow keeps 2925 polling cadence in the default payload', () => {
   const helpers = api.createVerificationFlowHelpers({
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -43,12 +165,74 @@ test('verification flow keeps 2925 polling cadence in the default payload', () =
   assert.equal(step8Payload.intervalMs, 15000);
 });
 
+test('verification flow keeps iCloud step 4 polling at least five attempts under a short remaining budget', async () => {
+  const pollRequests = [];
+  const helpers = createVerificationFlowTestHelpers({
+    sendToMailContentScriptResilient: async (_mail, message, options = {}) => {
+      pollRequests.push({ payload: message.payload, options });
+      return {};
+    },
+  });
+
+  await assert.rejects(
+    helpers.pollFreshVerificationCode(
+      4,
+      { email: 'user@example.com', mailProvider: 'icloud', lastSignupCode: null },
+      { source: 'icloud-mail', provider: 'icloud', label: 'iCloud 邮箱' },
+      {
+        filterAfterTimestamp: 123456,
+        getRemainingTimeMs: async () => 3000,
+        maxResendRequests: 0,
+      }
+    ),
+    /邮箱轮询结束|无法获取/
+  );
+
+  assert.equal(pollRequests.length, 1);
+  const [{ payload, options }] = pollRequests;
+  assert.equal(payload.maxAttempts >= 5, true);
+  assert.equal(payload.intervalMs >= 3000, true);
+  assert.equal(options.responseTimeoutMs >= (payload.maxAttempts * payload.intervalMs) + 10000, true);
+});
+
+test('verification flow keeps iCloud step 8 polling at least five attempts before no-code failure', async () => {
+  const pollRequests = [];
+  const helpers = createVerificationFlowTestHelpers({
+    sendToMailContentScriptResilient: async (_mail, message, options = {}) => {
+      pollRequests.push({ payload: message.payload, options });
+      return {};
+    },
+  });
+
+  await assert.rejects(
+    helpers.pollFreshVerificationCodeWithResendInterval(
+      8,
+      { email: 'user@example.com', mailProvider: 'icloud', lastLoginCode: null },
+      { source: 'icloud-mail', provider: 'icloud', label: 'iCloud 邮箱' },
+      {
+        filterAfterTimestamp: 123456,
+        getRemainingTimeMs: async () => 3000,
+        maxResendRequests: 0,
+        resendIntervalMs: 25000,
+      }
+    ),
+    /空轮询循环|停止当前链路/
+  );
+
+  assert.equal(pollRequests.length >= 1, true);
+  assert.equal(pollRequests.every(({ payload }) => payload.maxAttempts >= 5), true);
+  assert.equal(
+    pollRequests.every(({ payload, options }) => options.responseTimeoutMs >= (payload.maxAttempts * payload.intervalMs) + 10000),
+    true
+  );
+});
+
 test('verification flow only enables 2925 target email matching in receive mode', () => {
   const helpers = api.createVerificationFlowHelpers({
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -97,7 +281,7 @@ test('verification flow runs beforeSubmit hook before filling the code', async (
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async (_step, payload) => {
+    completeNodeFromBackground: async (_step, payload) => {
       events.push(['complete', payload.code]);
     },
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
@@ -163,7 +347,7 @@ test('verification flow skips 2925 mailbox preclear when using a fixed login mai
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -224,7 +408,7 @@ test('verification flow skips 2925 mailbox preclear when using a fixed signup ma
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -300,7 +484,7 @@ test('verification flow closes the tracked iCloud mail tab after a successful ve
       throw new Error('should not use family cleanup when tracked tab exists');
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -362,7 +546,7 @@ test('verification flow completes step 8 and flags phone verification when add-p
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async (_step, payload) => {
+    completeNodeFromBackground: async (_step, payload) => {
       events.push(['complete', payload.code]);
     },
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
@@ -432,7 +616,7 @@ test('verification flow keeps step 8 successful when code submit transport fails
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async (_step, payload) => {
+    completeNodeFromBackground: async (_step, payload) => {
       events.push(['complete', payload.code]);
     },
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
@@ -448,7 +632,12 @@ test('verification flow keeps step 8 successful when code submit transport fails
     pollCloudflareTempEmailVerificationCode: async () => ({}),
     pollHotmailVerificationCode: async () => ({}),
     pollLuckmailVerificationCode: async () => ({}),
-    sendToContentScript: async () => ({}),
+    sendToContentScript: async (_source, message) => {
+      if (message.type === 'FILL_CODE') {
+        throw new Error('message channel is closed before a response was received');
+      }
+      return {};
+    },
     sendToContentScriptResilient: async (_source, message) => {
       if (message.type === 'FILL_CODE') {
         throw new Error('message channel is closed before a response was received');
@@ -501,7 +690,7 @@ test('verification flow treats manual step 8 add-phone confirmation as the same 
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {
+    completeNodeFromBackground: async () => {
       throw new Error('should not complete step 8');
     },
     confirmCustomVerificationStepBypassRequest: async () => ({
@@ -548,7 +737,7 @@ test('verification flow caps mail polling timeout to the remaining oauth budget'
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -612,7 +801,7 @@ test('verification flow keeps mail polling response timeout above minimum floor'
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -675,7 +864,7 @@ test('verification flow keeps 2925 mailbox polling at 15 refresh attempts even w
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -731,6 +920,153 @@ test('verification flow keeps 2925 mailbox polling at 15 refresh attempts even w
   assert.ok(pollCall.options.timeoutMs >= 250000);
 });
 
+test('verification flow can run a 2/3/15 2925 resend polling plan', async () => {
+  const events = [];
+  const pollMaxAttempts = [];
+  let pollCalls = 0;
+
+  const helpers = api.createVerificationFlowHelpers({
+    addLog: async () => {},
+    chrome: { tabs: { update: async () => {} } },
+    CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
+    getHotmailVerificationPollConfig: () => ({}),
+    getHotmailVerificationRequestTimestamp: () => 0,
+    getState: async () => ({}),
+    getTabId: async () => 1,
+    HOTMAIL_PROVIDER: 'hotmail-api',
+    isStopError: () => false,
+    LUCKMAIL_PROVIDER: 'luckmail-api',
+    MAIL_2925_VERIFICATION_INTERVAL_MS: 15000,
+    MAIL_2925_VERIFICATION_MAX_ATTEMPTS: 15,
+    pollCloudflareTempEmailVerificationCode: async () => ({}),
+    pollHotmailVerificationCode: async () => ({}),
+    pollLuckmailVerificationCode: async () => ({}),
+    sendToContentScript: async (_source, message) => {
+      if (message.type === 'RESEND_VERIFICATION_CODE') {
+        events.push('resend');
+        return { resent: true };
+      }
+      if (message.type === 'FILL_CODE') {
+        events.push('fill');
+      }
+      return {};
+    },
+    sendToContentScriptResilient: async () => ({}),
+    sendToMailContentScriptResilient: async (_mail, message) => {
+      events.push('poll');
+      pollMaxAttempts.push(message.payload.maxAttempts);
+      pollCalls += 1;
+      return pollCalls <= 2
+        ? { error: '步骤 8：邮箱轮询结束，但未获取到验证码。' }
+        : { code: '654321', emailTimestamp: 123 };
+    },
+    setState: async () => {},
+    setStepStatus: async () => {},
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    VERIFICATION_POLL_MAX_ROUNDS: 5,
+  });
+
+  await helpers.resolveVerificationStep(
+    8,
+    {
+      email: 'user@example.com',
+      mailProvider: '2925',
+      lastLoginCode: null,
+    },
+    { provider: '2925', label: '2925 邮箱' },
+    {
+      maxResendRequests: 2,
+      initialPollMaxAttempts: 5,
+      pollAttemptPlan: [2, 3, 15],
+      requestFreshCodeFirst: false,
+      filterAfterTimestamp: 123,
+      resendIntervalMs: 0,
+    }
+  );
+
+  assert.deepStrictEqual(events.slice(0, 5), ['poll', 'resend', 'poll', 'resend', 'poll']);
+  assert.deepStrictEqual(pollMaxAttempts.slice(0, 3), [2, 3, 15]);
+  assert.equal(events.filter((event) => event === 'resend').length, 2);
+});
+
+test('verification flow uses full 2925 polling window after a rejected login code', async () => {
+  const pollMaxAttempts = [];
+  const submittedCodes = [];
+  let pollCalls = 0;
+
+  const helpers = api.createVerificationFlowHelpers({
+    addLog: async () => {},
+    chrome: { tabs: { update: async () => {} } },
+    CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
+    getHotmailVerificationPollConfig: () => ({}),
+    getHotmailVerificationRequestTimestamp: () => 0,
+    getState: async () => ({}),
+    getTabId: async () => 1,
+    HOTMAIL_PROVIDER: 'hotmail-api',
+    isStopError: () => false,
+    LUCKMAIL_PROVIDER: 'luckmail-api',
+    MAIL_2925_VERIFICATION_INTERVAL_MS: 15000,
+    MAIL_2925_VERIFICATION_MAX_ATTEMPTS: 15,
+    pollCloudflareTempEmailVerificationCode: async () => ({}),
+    pollHotmailVerificationCode: async () => ({}),
+    pollLuckmailVerificationCode: async () => ({}),
+    sendToContentScript: async (_source, message) => {
+      if (message.type === 'RESEND_VERIFICATION_CODE') {
+        return { resent: true };
+      }
+      if (message.type === 'FILL_CODE') {
+        submittedCodes.push(message.payload.code);
+        return message.payload.code === '111111'
+          ? { invalidCode: true, errorText: 'Incorrect code' }
+          : { success: true };
+      }
+      return {};
+    },
+    sendToContentScriptResilient: async () => ({}),
+    sendToMailContentScriptResilient: async (_mail, message) => {
+      if (message.type !== 'POLL_EMAIL') {
+        return {};
+      }
+      pollCalls += 1;
+      pollMaxAttempts.push(message.payload.maxAttempts);
+      return pollCalls === 1
+        ? { code: '111111', emailTimestamp: 1 }
+        : { code: '222222', emailTimestamp: 2 };
+    },
+    setState: async () => {},
+    setStepStatus: async () => {},
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    VERIFICATION_POLL_MAX_ROUNDS: 5,
+  });
+
+  await helpers.resolveVerificationStep(
+    8,
+    {
+      email: 'user@example.com',
+      mailProvider: '2925',
+      lastLoginCode: null,
+    },
+    { provider: '2925', label: '2925 邮箱' },
+    {
+      maxResendRequests: 0,
+      initialPollMaxAttempts: 5,
+      pollAttemptPlan: [2, 3, 15],
+      requestFreshCodeFirst: false,
+      filterAfterTimestamp: 123,
+      resendIntervalMs: 0,
+    }
+  );
+
+  assert.deepStrictEqual(pollMaxAttempts, [2, 15]);
+  assert.deepStrictEqual(submittedCodes, ['111111', '222222']);
+});
+
 test('verification flow keeps Hotmail request timestamp filtering on the first poll', async () => {
   const pollPayloads = [];
 
@@ -738,7 +1074,7 @@ test('verification flow keeps Hotmail request timestamp filtering on the first p
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 87654,
@@ -793,7 +1129,7 @@ test('verification flow keeps fixed filter timestamp after step 4 resend', async
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: (_step, state) => Math.max(0, Number(state.signupVerificationRequestedAt || 0) - 15000),
@@ -859,7 +1195,7 @@ test('verification flow uses configured signup resend count for step 4', async (
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -918,7 +1254,7 @@ test('verification flow uses configured login resend count for step 8', async ()
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -977,8 +1313,8 @@ test('verification flow can complete Plus visible login-code step with shared st
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async (step, payload) => {
-      completed.push({ step, payload });
+    completeNodeFromBackground: async (nodeId, payload) => {
+      completed.push({ nodeId, payload });
     },
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
@@ -1022,7 +1358,7 @@ test('verification flow can complete Plus visible login-code step with shared st
   assert.deepStrictEqual(fillMessages.map((message) => message.step), [8]);
   assert.deepStrictEqual(completed, [
     {
-      step: 11,
+      nodeId: 'fetch-login-code',
       payload: {
         emailTimestamp: 456,
         code: '654321',
@@ -1040,7 +1376,7 @@ test('verification flow waits during resend cooldown instead of tight-looping', 
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1101,7 +1437,7 @@ test('verification flow clicks resend before waiting for the next LuckMail /code
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1171,7 +1507,7 @@ test('verification flow notifies onResendRequestedAt when resend is triggered', 
     addLog: async () => {},
     chrome: { tabs: { update: async () => {} } },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1244,7 +1580,7 @@ test('verification flow uses resilient signup-page transport when submitting ver
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1282,6 +1618,202 @@ test('verification flow uses resilient signup-page transport when submitting ver
   assert.ok(resilientCalls[0].options.timeoutMs >= 30000);
 });
 
+test('verification flow does not replay step 8 code submit after transient auth-page transport failure', async () => {
+  const directMessages = [];
+  const resilientMessages = [];
+
+  const helpers = api.createVerificationFlowHelpers({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        update: async () => {},
+      },
+    },
+    CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
+    getHotmailVerificationPollConfig: () => ({}),
+    getHotmailVerificationRequestTimestamp: () => 0,
+    getState: async () => ({}),
+    getTabId: async () => 1,
+    HOTMAIL_PROVIDER: 'hotmail-api',
+    isRetryableContentScriptTransportError: (error) => /did not respond/i.test(String(error?.message || error || '')),
+    isStopError: () => false,
+    LUCKMAIL_PROVIDER: 'luckmail-api',
+    MAIL_2925_VERIFICATION_INTERVAL_MS: 15000,
+    MAIL_2925_VERIFICATION_MAX_ATTEMPTS: 15,
+    pollCloudflareTempEmailVerificationCode: async () => ({}),
+    pollHotmailVerificationCode: async () => ({}),
+    pollLuckmailVerificationCode: async () => ({}),
+    sendToContentScript: async (_source, message) => {
+      directMessages.push(message.type);
+      if (message.type === 'FILL_CODE') {
+        throw new Error('步骤 8：页面通信异常 did not respond in 30s');
+      }
+      return {};
+    },
+    sendToContentScriptResilient: async (_source, message) => {
+      resilientMessages.push(message.type);
+      if (message.type === 'GET_LOGIN_AUTH_STATE') {
+        return {
+          state: 'verification_page',
+          verificationErrorText: '代码不正确',
+          url: 'https://auth.openai.com/email-verification',
+        };
+      }
+      throw new Error('FILL_CODE should not be replayed through resilient transport');
+    },
+    sendToMailContentScriptResilient: async () => ({}),
+    setState: async () => {},
+    setStepStatus: async () => {},
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    VERIFICATION_POLL_MAX_ROUNDS: 5,
+  });
+
+  const result = await helpers.submitVerificationCode(8, '510725', { completionStep: 11 });
+
+  assert.deepStrictEqual(result, {
+    invalidCode: true,
+    errorText: '代码不正确',
+    url: 'https://auth.openai.com/email-verification',
+  });
+  assert.deepStrictEqual(directMessages, ['FILL_CODE']);
+  assert.deepStrictEqual(resilientMessages, ['GET_LOGIN_AUTH_STATE']);
+});
+
+test('verification flow keeps step 8 code submit response timeout above local floor when flow budget is nearly exhausted', async () => {
+  const directCalls = [];
+
+  const helpers = api.createVerificationFlowHelpers({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        update: async () => {},
+      },
+    },
+    CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
+    getHotmailVerificationPollConfig: () => ({}),
+    getHotmailVerificationRequestTimestamp: () => 0,
+    getState: async () => ({}),
+    getTabId: async () => 1,
+    HOTMAIL_PROVIDER: 'hotmail-api',
+    isStopError: () => false,
+    LUCKMAIL_PROVIDER: 'luckmail-api',
+    MAIL_2925_VERIFICATION_INTERVAL_MS: 15000,
+    MAIL_2925_VERIFICATION_MAX_ATTEMPTS: 15,
+    pollCloudflareTempEmailVerificationCode: async () => ({}),
+    pollHotmailVerificationCode: async () => ({}),
+    pollLuckmailVerificationCode: async () => ({}),
+    sendToContentScript: async (_source, message, options) => {
+      directCalls.push({ message, options });
+      return { success: true };
+    },
+    sendToContentScriptResilient: async () => {
+      throw new Error('step 8 code submit should use the direct channel once');
+    },
+    sendToMailContentScriptResilient: async () => ({}),
+    setState: async () => {},
+    setStepStatus: async () => {},
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    VERIFICATION_POLL_MAX_ROUNDS: 5,
+  });
+
+  const result = await helpers.submitVerificationCode(8, '478910', {
+    completionStep: 11,
+    getRemainingTimeMs: async () => 1000,
+  });
+
+  assert.deepStrictEqual(result, { success: true });
+  assert.equal(directCalls.length, 1);
+  assert.equal(directCalls[0].message.type, 'FILL_CODE');
+  assert.equal(directCalls[0].options.responseTimeoutMs, 15000);
+});
+
+test('verification flow requests a new code immediately after Cloudflare Temp Email code is rejected', async () => {
+  const events = [];
+  const pollPayloads = [];
+  const completed = [];
+
+  const helpers = api.createVerificationFlowHelpers({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        update: async () => {},
+      },
+    },
+    CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
+    completeNodeFromBackground: async (_step, payload) => {
+      completed.push(payload);
+    },
+    confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
+    getHotmailVerificationPollConfig: () => ({}),
+    getHotmailVerificationRequestTimestamp: () => 0,
+    getState: async () => ({}),
+    getTabId: async () => 1,
+    HOTMAIL_PROVIDER: 'hotmail-api',
+    isStopError: () => false,
+    LUCKMAIL_PROVIDER: 'luckmail-api',
+    MAIL_2925_VERIFICATION_INTERVAL_MS: 15000,
+    MAIL_2925_VERIFICATION_MAX_ATTEMPTS: 15,
+    pollCloudflareTempEmailVerificationCode: async (_step, _state, payload) => {
+      pollPayloads.push(payload);
+      const code = pollPayloads.length === 1 ? '111111' : '222222';
+      events.push(['poll', code]);
+      return { code, emailTimestamp: pollPayloads.length };
+    },
+    pollHotmailVerificationCode: async () => ({}),
+    pollLuckmailVerificationCode: async () => ({}),
+    sendToContentScript: async (_source, message) => {
+      if (message.type === 'RESEND_VERIFICATION_CODE') {
+        events.push(['resend', message.step]);
+        return {};
+      }
+      if (message.type === 'FILL_CODE') {
+        events.push(['submit', message.payload.code]);
+        return message.payload.code === '111111'
+          ? { invalidCode: true, errorText: '代码不正确' }
+          : { success: true };
+      }
+      return {};
+    },
+    sendToMailContentScriptResilient: async () => ({}),
+    setState: async () => {},
+    setStepStatus: async () => {},
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    VERIFICATION_POLL_MAX_ROUNDS: 5,
+  });
+
+  await helpers.resolveVerificationStep(
+    8,
+    {
+      email: 'user@example.com',
+      loginVerificationRequestedAt: Date.now(),
+      verificationResendCount: 1,
+    },
+    { provider: 'cloudflare-temp-email', label: 'Cloudflare Temp Email' },
+    {
+      completionStep: 11,
+      lastResendAt: Date.now(),
+      resendIntervalMs: 25000,
+    }
+  );
+
+  assert.deepStrictEqual(events, [
+    ['poll', '111111'],
+    ['submit', '111111'],
+    ['resend', 8],
+    ['poll', '222222'],
+    ['submit', '222222'],
+  ]);
+  assert.deepStrictEqual(pollPayloads[1].excludeCodes, ['111111']);
+  assert.equal(completed[0].code, '222222');
+});
+
 test('verification flow forwards optional signup profile payload when submitting signup verification code', async () => {
   const resilientCalls = [];
 
@@ -1293,7 +1825,7 @@ test('verification flow forwards optional signup profile payload when submitting
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1354,8 +1886,8 @@ test('verification flow keeps combined signup profile skip reason when completin
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async (step, payload) => {
-      completed.push({ step, payload });
+    completeNodeFromBackground: async (nodeId, payload) => {
+      completed.push({ nodeId, payload });
     },
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
@@ -1410,7 +1942,7 @@ test('verification flow keeps combined signup profile skip reason when completin
   assert.equal(resilientCalls[0].payload.signupProfile.firstName, 'Ada');
   assert.deepStrictEqual(completed, [
     {
-      step: 4,
+      nodeId: 'fetch-signup-code',
       payload: {
         emailTimestamp: 123,
         code: '654321',
@@ -1436,7 +1968,7 @@ test('verification flow treats retryable submit transport failure as success whe
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1486,7 +2018,7 @@ test('verification flow avoids resend storms when iCloud polling keeps hitting t
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1549,7 +2081,7 @@ test('verification flow stops iCloud poll-only loop after repeated no-code round
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1599,8 +2131,8 @@ test('verification flow stops iCloud poll-only loop after repeated no-code round
   assert.equal(resendRequests, 0);
 });
 
-test('verification flow caps iCloud polling response timeout to avoid long silent stalls', async () => {
-  const pollTimeouts = [];
+test('verification flow derives iCloud polling response timeout from the configured polling window', async () => {
+  const pollRequests = [];
 
   const helpers = api.createVerificationFlowHelpers({
     addLog: async () => {},
@@ -1610,7 +2142,7 @@ test('verification flow caps iCloud polling response timeout to avoid long silen
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
     getHotmailVerificationPollConfig: () => ({}),
     getHotmailVerificationRequestTimestamp: () => 0,
@@ -1630,8 +2162,9 @@ test('verification flow caps iCloud polling response timeout to avoid long silen
       }
       return {};
     },
-    sendToMailContentScriptResilient: async (_mail, _message, options = {}) => {
-      pollTimeouts.push({
+    sendToMailContentScriptResilient: async (_mail, message, options = {}) => {
+      pollRequests.push({
+        payload: message.payload,
         timeoutMs: Number(options.timeoutMs) || 0,
         responseTimeoutMs: Number(options.responseTimeoutMs) || 0,
       });
@@ -1659,10 +2192,13 @@ test('verification flow caps iCloud polling response timeout to avoid long silen
     /空轮询循环|停止当前链路/
   );
 
-  assert.equal(pollTimeouts.length > 0, true);
-  assert.equal(pollTimeouts.every(({ timeoutMs }) => timeoutMs > 0 && timeoutMs <= 22000), true);
+  assert.equal(pollRequests.length > 0, true);
   assert.equal(
-    pollTimeouts.every(({ responseTimeoutMs }) => responseTimeoutMs > 0 && responseTimeoutMs <= 18000),
+    pollRequests.every(({ payload, responseTimeoutMs }) => responseTimeoutMs >= (payload.maxAttempts * payload.intervalMs) + 10000),
+    true
+  );
+  assert.equal(
+    pollRequests.every(({ timeoutMs, responseTimeoutMs }) => timeoutMs >= responseTimeoutMs),
     true
   );
 });

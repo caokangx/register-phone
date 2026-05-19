@@ -1,4 +1,4 @@
-const assert = require('assert');
+﻿const assert = require('assert');
 const fs = require('fs');
 
 const helperSource = fs.readFileSync('background.js', 'utf8');
@@ -78,7 +78,7 @@ let autoRunAttemptRun = 4;
 let autoRunSessionId = 99;
 const AUTO_RUN_TIMER_KIND_SCHEDULED_START = 'scheduled_start';
 const DEFAULT_STATE = {
-  stepStatuses: Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((step) => [step, 'pending'])),
+  nodeStatuses: {},
 };
 const STEP8_CLICK_RETRY_DELAY_MS = 500;
 const STEP8_MAX_ROUNDS = 5;
@@ -134,6 +134,7 @@ const chrome = {
   },
 };
 
+const nodeWaiters = new Map();
 const stepWaiters = new Map();
 let resumeWaiter = null;
 
@@ -141,6 +142,13 @@ function cancelPendingCommands() {}
 function abortActiveIcloudRequests() {}
 async function addLog() {}
 async function broadcastStopToContentScripts() {}
+function getRunningNodeIds() {
+  return [];
+}
+function inferStoppedRecordNode() {
+  return '';
+}
+async function markRunningNodesStopped() {}
 async function markRunningStepsStopped() {}
 async function broadcastAutoRunStatus() {}
 async function appendAndBroadcastAccountRunRecord() {}
@@ -156,7 +164,7 @@ function isAutoRunScheduledState() {
 function getStep8CallbackUrlFromNavigation() { return ''; }
 function getStep8CallbackUrlFromTabUpdate() { return ''; }
 function getStep8EffectLabel() { return 'no_effect'; }
-async function completeStepFromBackground() {}
+async function completeNodeFromBackground() {}
 async function getTabId() {
   return await new Promise((resolve) => {
     resolveTabId = resolve;
@@ -218,7 +226,7 @@ const executor = self.MultiPageBackgroundStep9.createStep9Executor({
   chrome,
   cleanupStep8NavigationListeners,
   clickWithDebugger,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureStep8SignupPageReady,
   getStep8CallbackUrlFromNavigation,
   getStep8CallbackUrlFromTabUpdate,

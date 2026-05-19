@@ -16,10 +16,17 @@
       await addLog(`步骤 5：已生成姓名 ${firstName} ${lastName}，生日 ${year}-${month}-${day}`);
 
       await sendToContentScript('signup-page', {
-        type: 'EXECUTE_STEP',
+        type: 'EXECUTE_NODE',
+        nodeId: 'fill-profile',
         step: 5,
         source: 'background',
-        payload: { firstName, lastName, year, month, day },
+        payload: {
+          firstName,
+          lastName,
+          year,
+          month,
+          day,
+        },
       });
     }
 

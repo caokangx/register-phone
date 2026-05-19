@@ -50,6 +50,7 @@ function extractFunction(name) {
 
 test('cloudflare temp email settings normalize and expose the random-subdomain toggle', () => {
   const bundle = [
+    extractFunction('normalizeCloudflareTempEmailLookupMode'),
     extractFunction('normalizeCloudflareTempEmailReceiveMailbox'),
     extractFunction('getCloudflareTempEmailConfig'),
     extractFunction('normalizePersistentSettingValue'),
@@ -58,6 +59,9 @@ test('cloudflare temp email settings normalize and expose the random-subdomain t
 
   const api = new Function(`
 const DEFAULT_VERIFICATION_RESEND_COUNT = 4;
+const CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_RECEIVE_MAILBOX = 'receive-mailbox';
+const CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL = 'registration-email';
+const DEFAULT_CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE = CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_RECEIVE_MAILBOX;
 const PERSISTED_SETTING_DEFAULTS = {
   panelMode: 'cpa',
   autoStepDelaySeconds: null,
@@ -67,12 +71,15 @@ const PERSISTED_SETTING_DEFAULTS = {
   emailGenerator: 'duck',
   autoDeleteUsedIcloudAlias: false,
   accountRunHistoryTextEnabled: false,
+  cloudflareTempEmailLookupMode: 'receive-mailbox',
   cloudflareTempEmailUseRandomSubdomain: false,
   cloudflareTempEmailDomain: '',
   cloudflareTempEmailDomains: [],
 };
 const PERSISTED_SETTING_KEYS = Object.keys(PERSISTED_SETTING_DEFAULTS);
 function normalizePanelMode(value) { return value === 'sub2api' ? 'sub2api' : 'cpa'; }
+function normalizeSignupMethod(value = '') { return String(value || '').trim().toLowerCase() === 'phone' ? 'phone' : 'email'; }
+function resolveSignupMethod(state = {}) { return normalizeSignupMethod(state?.signupMethod); }
 function normalizeLocalCpaStep9Mode(value) { return value === 'bypass' ? 'bypass' : 'submit'; }
 function normalizeAutoRunFallbackThreadIntervalMinutes(value) { return Number(value) || 0; }
 function normalizeAutoRunDelayMinutes(value) { return Number(value) || 30; }
@@ -114,12 +121,16 @@ return {
   `)();
 
   assert.equal(api.normalizePersistentSettingValue('cloudflareTempEmailUseRandomSubdomain', 1), true);
+  assert.equal(api.normalizePersistentSettingValue('cloudflareTempEmailLookupMode', 'registration-email'), 'registration-email');
+  assert.equal(api.normalizePersistentSettingValue('cloudflareTempEmailLookupMode', 'bad'), 'receive-mailbox');
 
   const payload = api.buildPersistentSettingsPayload({
+    cloudflareTempEmailLookupMode: 'registration-email',
     cloudflareTempEmailUseRandomSubdomain: true,
     cloudflareTempEmailDomain: 'mail.example.com',
     cloudflareTempEmailDomains: ['mail.example.com', 'alt.example.com'],
   });
+  assert.equal(payload.cloudflareTempEmailLookupMode, 'registration-email');
   assert.equal(payload.cloudflareTempEmailUseRandomSubdomain, true);
   assert.equal(payload.cloudflareTempEmailDomain, 'mail.example.com');
   assert.deepEqual(payload.cloudflareTempEmailDomains, ['mail.example.com', 'alt.example.com']);
@@ -128,6 +139,7 @@ return {
     cloudflareTempEmailBaseUrl: 'https://temp.example.com',
     cloudflareTempEmailAdminAuth: 'admin-secret',
     cloudflareTempEmailCustomAuth: 'custom-secret',
+    cloudflareTempEmailLookupMode: 'registration-email',
     cloudflareTempEmailReceiveMailbox: 'Forward@Example.com',
     cloudflareTempEmailUseRandomSubdomain: true,
     cloudflareTempEmailDomain: 'mail.example.com',
@@ -137,6 +149,7 @@ return {
     baseUrl: 'https://temp.example.com',
     adminAuth: 'admin-secret',
     customAuth: 'custom-secret',
+    lookupMode: 'registration-email',
     receiveMailbox: 'forward@example.com',
     useRandomSubdomain: true,
     domain: 'mail.example.com',
@@ -163,6 +176,8 @@ const PERSISTED_SETTING_DEFAULTS = {
 };
 const PERSISTED_SETTING_KEYS = Object.keys(PERSISTED_SETTING_DEFAULTS);
 function normalizePanelMode(value) { return value === 'sub2api' ? 'sub2api' : 'cpa'; }
+function normalizeSignupMethod(value = '') { return String(value || '').trim().toLowerCase() === 'phone' ? 'phone' : 'email'; }
+function resolveSignupMethod(state = {}) { return normalizeSignupMethod(state?.signupMethod); }
 function normalizeLocalCpaStep9Mode(value) { return value === 'bypass' ? 'bypass' : 'submit'; }
 function normalizeAutoRunFallbackThreadIntervalMinutes(value) { return Number(value) || 0; }
 function normalizeAutoRunDelayMinutes(value) { return Number(value) || 30; }

@@ -241,7 +241,7 @@ return {
   assert.match(String(result?.url || ''), /chatgpt\.com/);
 });
 
-test('step 8 ready check completes phone verification flow before waiting for OAuth consent', async () => {
+test('step 8 ready check rejects add-phone instead of completing phone verification', async () => {
   const api = new Function(`
 let pollCount = 0;
 const phoneVerificationCalls = [];
@@ -292,28 +292,13 @@ return {
 };
 `)();
 
-  const { result, phoneVerificationCalls } = await api.run();
-
-  assert.deepStrictEqual(phoneVerificationCalls, [
-    {
-      tabId: 88,
-      pageState: {
-        url: 'https://auth.openai.com/add-phone',
-        addPhonePage: true,
-        phoneVerificationPage: false,
-        consentReady: false,
-      },
-    },
-  ]);
-  assert.deepStrictEqual(result, {
-    url: 'https://auth.openai.com/authorize',
-    addPhonePage: false,
-    phoneVerificationPage: false,
-    consentReady: true,
-  });
+  await assert.rejects(
+    () => api.run(),
+    /自动确认 OAuth 只处理 OAuth 授权页/
+  );
 });
 
-test('step 8 ready check blocks phone verification flow when sms toggle is disabled', async () => {
+test('step 8 ready check rejects phone pages before OAuth confirmation', async () => {
   const api = new Function(`
 const phoneVerificationCalls = [];
 
@@ -358,6 +343,6 @@ return {
 
   const { error, phoneVerificationCalls } = await api.run();
 
-  assert.match(String(error?.message || ''), /未开启接码功能/);
+  assert.match(String(error?.message || ''), /自动确认 OAuth 只处理 OAuth 授权页/);
   assert.deepStrictEqual(phoneVerificationCalls, []);
 });

@@ -180,6 +180,112 @@ return { normalizeAccountRunHistoryHelperBaseUrlValue };
   );
 });
 
+test('account records manager shows current auto-run account as running', () => {
+  const source = fs.readFileSync('sidepanel/account-records-manager.js', 'utf8');
+  const windowObject = {};
+  const api = new Function('window', `${source}; return window.SidepanelAccountRecordsManager;`)(windowObject);
+
+  const latestState = {
+    autoRunning: true,
+    autoRunPhase: 'running',
+    accountIdentifierType: 'email',
+    accountIdentifier: 'running@example.com',
+    email: 'running@example.com',
+    accountRunHistory: [
+      {
+        recordId: 'running@example.com',
+        accountIdentifierType: 'email',
+        accountIdentifier: 'running@example.com',
+        email: 'running@example.com',
+        password: 'secret',
+        finalStatus: 'stopped',
+        finishedAt: '2026-04-17T04:32:00.000Z',
+        retryCount: 0,
+        failureLabel: '步骤 2 停止',
+      },
+    ],
+  };
+
+  const list = createNode();
+  const stats = createNode();
+  const meta = createNode();
+  const pageLabel = createNode();
+  const manager = api.createAccountRecordsManager({
+    state: {
+      getLatestState: () => latestState,
+      syncLatestState() {},
+    },
+    dom: {
+      accountRecordsList: list,
+      accountRecordsMeta: meta,
+      accountRecordsPageLabel: pageLabel,
+      accountRecordsStats: stats,
+    },
+    helpers: {
+      escapeHtml: (value) => String(value || ''),
+    },
+    runtime: {
+      sendMessage: async () => ({}),
+    },
+  });
+
+  manager.render();
+
+  assert.match(list.innerHTML, /is-running/);
+  assert.match(list.innerHTML, /正在运行/);
+  assert.doesNotMatch(list.innerHTML, /步骤 2 停止/);
+  assert.match(stats.innerHTML, /data-account-record-filter="running"/);
+  assert.match(stats.innerHTML, /<strong>1<\/strong>运行/);
+});
+
+test('account records manager shows full failure detail before short label', () => {
+  const source = fs.readFileSync('sidepanel/account-records-manager.js', 'utf8');
+  const windowObject = {};
+  const api = new Function('window', `${source}; return window.SidepanelAccountRecordsManager;`)(windowObject);
+
+  const latestState = {
+    accountRunHistory: [
+      {
+        recordId: 'failed-detail@example.com',
+        accountIdentifierType: 'email',
+        accountIdentifier: 'failed-detail@example.com',
+        email: 'failed-detail@example.com',
+        finalStatus: 'failed',
+        finishedAt: '2026-04-17T04:32:00.000Z',
+        retryCount: 0,
+        failureLabel: '步骤 2 失败',
+        failureDetail: 'Duck 邮箱自动获取失败：未找到生成新 Duck 地址按钮。',
+      },
+    ],
+  };
+
+  const list = createNode();
+  const manager = api.createAccountRecordsManager({
+    state: {
+      getLatestState: () => latestState,
+      syncLatestState() {},
+    },
+    dom: {
+      accountRecordsList: list,
+      accountRecordsMeta: createNode(),
+      accountRecordsPageLabel: createNode(),
+      accountRecordsStats: createNode(),
+    },
+    helpers: {
+      escapeHtml: (value) => String(value || ''),
+    },
+    runtime: {
+      sendMessage: async () => ({}),
+    },
+  });
+
+  manager.render();
+
+  assert.match(list.innerHTML, /Duck 邮箱自动获取失败/);
+  assert.match(list.innerHTML, /title="failed-detail@example\.com\nDuck 邮箱自动获取失败/);
+  assert.doesNotMatch(list.innerHTML, /account-record-item-summary">步骤 2 失败/);
+});
+
 test('account records manager supports filter chips and partial multi-select delete', async () => {
   const source = fs.readFileSync('sidepanel/account-records-manager.js', 'utf8');
   const windowObject = {};

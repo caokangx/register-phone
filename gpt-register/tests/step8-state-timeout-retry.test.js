@@ -46,6 +46,12 @@ assert.strictEqual(
 );
 
 assert.strictEqual(
+  api.isRetryableContentScriptTransportError(new Error('认证页 内容脚本 1 秒内未响应，请刷新页面后重试。')),
+  true,
+  '中文内容脚本超时也应沿用可重试分支'
+);
+
+assert.strictEqual(
   api.isRetryableContentScriptTransportError(new Error('按钮不存在')),
   false,
   '真实业务错误不应被误判为可重试传输错误'

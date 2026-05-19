@@ -166,6 +166,8 @@ test('readOpenedMailText prefers opened body content that contains the verificat
     extractFunction('collectOpenedMailTextCandidates'),
     extractFunction('selectOpenedMailTextCandidate'),
     extractFunction('readOpenedMailText'),
+    extractFunction('normalizeRulePatternList'),
+    extractFunction('extractCodeByRulePatterns'),
     extractFunction('extractVerificationCode'),
   ].join('\n');
 
@@ -216,6 +218,8 @@ test('openMailAndGetMessageText reads opened body text and returns to inbox', as
     extractFunction('readOpenedMailText'),
     extractFunction('returnToInbox'),
     extractFunction('openMailAndGetMessageText'),
+    extractFunction('normalizeRulePatternList'),
+    extractFunction('extractCodeByRulePatterns'),
     extractFunction('extractVerificationCode'),
   ].join('\n');
 
@@ -289,6 +293,8 @@ test('openMailAndGetMessageText ignores stale pre-open text that contains an old
     extractFunction('readOpenedMailText'),
     extractFunction('returnToInbox'),
     extractFunction('openMailAndGetMessageText'),
+    extractFunction('normalizeRulePatternList'),
+    extractFunction('extractCodeByRulePatterns'),
     extractFunction('extractVerificationCode'),
   ].join('\n');
 
@@ -359,6 +365,8 @@ return { openMailAndGetMessageText, mailItem };
 
 test('extractVerificationCode matches the new suspicious log-in mail body', () => {
   const bundle = [
+    extractFunction('normalizeRulePatternList'),
+    extractFunction('extractCodeByRulePatterns'),
     extractFunction('extractVerificationCode'),
   ].join('\n');
 
@@ -369,6 +377,27 @@ return { extractVerificationCode };
 
   const bodyText = 'ChatGPT Log-in Code\nWe noticed a suspicious log-in on your account. If that was you, enter this code:\n\n982219';
   assert.equal(api.extractVerificationCode(bodyText), '982219');
+});
+
+test('extractVerificationCode supports runtime mail rule patterns', () => {
+  const bundle = [
+    extractFunction('normalizeRulePatternList'),
+    extractFunction('extractCodeByRulePatterns'),
+    extractFunction('extractVerificationCode'),
+  ].join('\n');
+
+  const api = new Function(`
+${bundle}
+return { extractVerificationCode };
+`)();
+
+  const bodyText = 'Security Center\nUse verification pin A-778899 to continue.';
+  assert.equal(
+    api.extractVerificationCode(bodyText, {
+      codePatterns: [{ source: 'pin\\s+A-(\\d{6})', flags: 'i' }],
+    }),
+    '778899'
+  );
 });
 
 test('handlePollEmail ignores same-minute old snapshot mail before fallback', async () => {

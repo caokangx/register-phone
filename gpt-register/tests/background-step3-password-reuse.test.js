@@ -39,7 +39,8 @@ test('step 3 reuses existing generated password when rerunning the same email fl
   assert.deepStrictEqual(events.passwordStates, ['Secret123!']);
   assert.deepStrictEqual(events.messages, [
     {
-      type: 'EXECUTE_STEP',
+      type: 'EXECUTE_NODE',
+      nodeId: 'fill-password',
       step: 3,
       source: 'background',
       payload: {
@@ -109,7 +110,8 @@ test('step 3 supports phone-only signup identity when password page is present',
   ]);
   assert.deepStrictEqual(events.messages, [
     {
-      type: 'EXECUTE_STEP',
+      type: 'EXECUTE_NODE',
+      nodeId: 'fill-password',
       step: 3,
       source: 'background',
       payload: {

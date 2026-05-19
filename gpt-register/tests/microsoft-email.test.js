@@ -64,6 +64,36 @@ test('extractVerificationCodeFromMessages 支持显式过滤条件并跳过排�
   });
 });
 
+test('extractVerificationCodeFromMessages supports keyword hints and runtime code patterns without OpenAI-specific fallback', () => {
+  const result = extractVerificationCodeFromMessages([
+    {
+      From: { EmailAddress: { Address: 'alerts@example.com' } },
+      Subject: 'Security center',
+      BodyPreview: 'Use pin A-551199 to continue',
+      ReceivedDateTime: '2026-04-14T10:07:00.000Z',
+      Id: 'mail-1',
+    },
+    {
+      From: { EmailAddress: { Address: 'news@example.com' } },
+      Subject: 'Newsletter',
+      BodyPreview: 'pin A-000000',
+      ReceivedDateTime: '2026-04-14T10:06:00.000Z',
+      Id: 'mail-2',
+    },
+  ], {
+    filterAfterTimestamp: 0,
+    senderFilters: [],
+    subjectFilters: [],
+    requiredKeywords: ['security'],
+    codePatterns: [{ source: 'pin\\s+A-(\\d{6})', flags: 'i' }],
+    excludeCodes: [],
+  });
+
+  assert.equal(result.code, '551199');
+  assert.equal(result.messageId, 'mail-1');
+  assert.equal(result.sender, 'alerts@example.com');
+});
+
 test('normalizeMailboxId 将 Junk 归一为微软邮箱夹 ID', () => {
   assert.equal(normalizeMailboxId('INBOX'), 'inbox');
   assert.equal(normalizeMailboxId('junk'), 'junkemail');

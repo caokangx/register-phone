@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
@@ -52,13 +52,120 @@ function extractFunction(name) {
   return source.slice(start, end);
 }
 
+const NODE_COMPAT_HELPERS = `
+const STEP_NODE_IDS = {
+  1: 'open-chatgpt',
+  2: 'submit-signup-email',
+  3: 'fill-password',
+  4: 'fetch-signup-code',
+  5: 'fill-profile',
+  6: 'wait-registration-success',
+  7: 'oauth-login',
+  8: 'fetch-login-code',
+  9: 'confirm-oauth',
+  10: 'platform-verify',
+};
+const NODE_STEP_IDS = Object.fromEntries(Object.entries(STEP_NODE_IDS).map(([step, nodeId]) => [nodeId, Number(step)]));
+function getNodeIdByStepForState(step) {
+  return STEP_NODE_IDS[Number(step)] || '';
+}
+function getStepIdByNodeIdForState(nodeId) {
+  return NODE_STEP_IDS[String(nodeId || '').trim()] || null;
+}
+function getNodeIdsForState() {
+  return Object.keys(STEP_NODE_IDS)
+    .map(Number)
+    .sort((left, right) => left - right)
+    .map((step) => STEP_NODE_IDS[step])
+    .filter(Boolean);
+}
+function getNodeDefinitionForState(nodeId) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  return normalizedNodeId ? { nodeId: normalizedNodeId, executeKey: normalizedNodeId } : null;
+}
+function getNodeTitleForState(nodeId) {
+  return String(nodeId || '').trim();
+}
+function projectStepStatusesToNodeStatuses(stepStatuses = {}) {
+  const nodeStatuses = {};
+  for (const [step, status] of Object.entries(stepStatuses || {})) {
+    const nodeId = getNodeIdByStepForState(step);
+    if (nodeId) nodeStatuses[nodeId] = status;
+  }
+  return nodeStatuses;
+}
+function projectNodeStatusesToStepStatuses(nodeStatuses = {}) {
+  const stepStatuses = {};
+  for (const [nodeId, status] of Object.entries(nodeStatuses || {})) {
+    const step = getStepIdByNodeIdForState(nodeId);
+    if (step) stepStatuses[step] = status;
+  }
+  return stepStatuses;
+}
+const rawGetStateForNodeCompat = getState;
+getState = async function getStateWithNodeStatuses() {
+  const state = await rawGetStateForNodeCompat();
+  return {
+    ...state,
+    nodeStatuses: {
+      ...projectStepStatusesToNodeStatuses(state?.stepStatuses || {}),
+      ...(state?.nodeStatuses || {}),
+    },
+  };
+};
+const rawSetStateForNodeCompat = setState;
+setState = async function setStateWithNodeStatuses(updates = {}) {
+  const stepStatusUpdates = updates?.nodeStatuses
+    ? projectNodeStatusesToStepStatuses(updates.nodeStatuses)
+    : {};
+  return rawSetStateForNodeCompat({
+    ...updates,
+    ...(Object.keys(stepStatusUpdates).length ? {
+      stepStatuses: {
+        ...stepStatusUpdates,
+        ...(updates.stepStatuses || {}),
+      },
+    } : {}),
+  });
+};
+async function executeNodeAndWait(nodeId, delayAfter) {
+  const directStep = Number(nodeId);
+  if (Number.isInteger(directStep) && directStep > 0) {
+    return executeStepAndWait(directStep, delayAfter);
+  }
+  return executeStepAndWait(getStepIdByNodeIdForState(nodeId), delayAfter);
+}
+function getAutoRunNodeDelayMs() {
+  return 0;
+}
+async function runAutoSequenceFromStep(step, context = {}) {
+  return runAutoSequenceFromNode(getNodeIdByStepForState(step), context);
+}
+`;
+
 const bundle = [
+  'const AUTO_RUN_STEP_IDLE_LOG_TIMEOUT_MS = 300000;',
+  'const AUTO_RUN_STEP_IDLE_LOG_CHECK_INTERVAL_MS = 5000;',
+  'const AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS = 3;',
+  "const AUTO_RUN_STEP_IDLE_RESTART_ERROR_PREFIX = 'AUTO_RUN_STEP_IDLE_RESTART::';",
   extractFunction('isAddPhoneAuthUrl'),
   extractFunction('isAddPhoneAuthState'),
   extractFunction('isMail2925ThreadTerminatedError'),
   extractFunction('isSignupUserAlreadyExistsFailure'),
+  extractFunction('isPlusCheckoutNonFreeTrialFailure'),
+  extractFunction('isPlusCheckoutRestartStep'),
+  extractFunction('isPlusCheckoutRestartRequiredFailure'),
+  extractFunction('getLatestLogTimestamp'),
+  extractFunction('buildAutoRunNodeIdleRestartError'),
+  extractFunction('isAutoRunStepIdleRestartError'),
+  extractFunction('startAutoRunNodeIdleLogWatchdog'),
+  extractFunction('runAutoNodeActionWithIdleLogWatchdog'),
+  extractFunction('executeNodeAndWaitWithAutoRunIdleLogWatchdog'),
   extractFunction('getPostStep6AutoRestartDecision'),
-  extractFunction('runAutoSequenceFromStep'),
+  NODE_COMPAT_HELPERS,
+  extractFunction('getAutoRunWorkflowNodeIds'),
+  extractFunction('runAutoSequenceFromNode'),
+  extractFunction('runAutoSequenceFromNodeGraph'),
 ].join('\n');
 
 test('auto-run stops step4 restart path when mail2925 ends the current thread', async () => {

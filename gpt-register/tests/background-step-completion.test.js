@@ -51,57 +51,56 @@ function extractFunction(name) {
   return source.slice(start, end);
 }
 
-function createApi(events, lastStepId = 10) {
-  return new Function('events', 'lastStepId', `
+function createApi(events, lastNodeId = 'platform-verify') {
+  return new Function('events', 'lastNodeId', `
 let stopRequested = false;
 const LOG_PREFIX = '[test]';
 const STOP_ERROR_MESSAGE = '流程已被用户停止。';
-const LAST_STEP_ID = 10;
 function getErrorMessage(error) {
   return error?.message || String(error || '');
 }
 async function getState() {
   events.push({ type: 'getState' });
-  return { stepStatuses: {}, contributionMode: true };
+  return { nodeStatuses: {}, contributionMode: true };
 }
-function getLastStepIdForState() {
-  return lastStepId;
+function getLastNodeIdForState() {
+  return lastNodeId;
 }
-async function setStepStatus(step, status) {
-  events.push({ type: 'status', step, status });
+async function setNodeStatus(nodeId, status) {
+  events.push({ type: 'status', nodeId, status });
 }
-async function addLog(message, level) {
-  events.push({ type: 'log', message, level });
+async function addLog(message, level, options = {}) {
+  events.push({ type: 'log', message, level, options });
 }
 async function appendManualAccountRunRecordIfNeeded() {
   events.push({ type: 'manual-record' });
 }
-function notifyStepError(step, error) {
-  events.push({ type: 'error', step, error });
+function notifyNodeError(nodeId, error) {
+  events.push({ type: 'error', nodeId, error });
 }
-function notifyStepComplete(step, payload) {
-  events.push({ type: 'notify', step, payload });
+function notifyNodeComplete(nodeId, payload) {
+  events.push({ type: 'notify', nodeId, payload });
 }
-async function handleStepData(step, payload) {
-  events.push({ type: 'handle-start', step, payload });
+async function handleNodeData(nodeId, payload) {
+  events.push({ type: 'handle-start', nodeId, payload });
   await new Promise((resolve) => setTimeout(resolve, 25));
-  events.push({ type: 'handle-done', step });
+  events.push({ type: 'handle-done', nodeId });
 }
 async function appendAndBroadcastAccountRunRecord(status, state) {
   events.push({ type: 'record', status, state });
 }
-${extractFunction('runCompletedStepSideEffects')}
-${extractFunction('reportCompletedStepSideEffectError')}
-${extractFunction('completeStepFromBackground')}
-return { completeStepFromBackground };
-`)(events, lastStepId);
+${extractFunction('runCompletedNodeSideEffects')}
+${extractFunction('reportCompletedNodeSideEffectError')}
+${extractFunction('completeNodeFromBackground')}
+return { completeNodeFromBackground };
+`)(events, lastNodeId);
 }
 
-test('completeStepFromBackground releases final step before slow post-completion side effects', async () => {
+test('completeNodeFromBackground releases final node before slow post-completion side effects', async () => {
   const events = [];
-  const api = createApi(events, 10);
+  const api = createApi(events, 'platform-verify');
 
-  await api.completeStepFromBackground(10, { localhostUrl: 'http://localhost:1455/auth/callback?code=ok' });
+  await api.completeNodeFromBackground('platform-verify', { localhostUrl: 'http://localhost:1455/auth/callback?code=ok' });
 
   const types = events.map((event) => event.type);
   assert.equal(types.indexOf('notify') < types.indexOf('handle-start'), true);
@@ -115,11 +114,11 @@ test('completeStepFromBackground releases final step before slow post-completion
   assert.equal(settledTypes.includes('record'), true);
 });
 
-test('completeStepFromBackground keeps non-final step data handling before completion signal', async () => {
+test('completeNodeFromBackground keeps non-final node data handling before completion signal', async () => {
   const events = [];
-  const api = createApi(events, 10);
+  const api = createApi(events, 'platform-verify');
 
-  await api.completeStepFromBackground(9, { localhostUrl: 'http://localhost:1455/auth/callback?code=ok' });
+  await api.completeNodeFromBackground('confirm-oauth', { localhostUrl: 'http://localhost:1455/auth/callback?code=ok' });
 
   const types = events.map((event) => event.type);
   assert.equal(types.indexOf('handle-done') < types.indexOf('notify'), true);

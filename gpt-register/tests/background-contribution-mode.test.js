@@ -351,6 +351,65 @@ test('message router re-syncs contribution mode before AUTO_RUN when sidepanel p
   ]);
 });
 
+test('message router blocks AUTO_RUN and SCHEDULE_AUTO_RUN when shared auto-run validation fails', async () => {
+  const source = fs.readFileSync('background/message-router.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundMessageRouter;`)(globalScope);
+
+  const calls = [];
+  const router = api.createMessageRouter({
+    clearStopRequest: () => {},
+    getPendingAutoRunTimerPlan: () => null,
+    getState: async () => ({
+      activeFlowId: 'site-a',
+      panelMode: 'cpa',
+      signupMethod: 'phone',
+      stepStatuses: {},
+    }),
+    normalizeRunCount: (value) => Number(value) || 1,
+    scheduleAutoRun: async () => {
+      calls.push({ type: 'scheduleAutoRun' });
+      return { ok: true };
+    },
+    setState: async (updates) => {
+      calls.push({ type: 'setState', updates });
+    },
+    startAutoRunLoop: () => {
+      calls.push({ type: 'startAutoRunLoop' });
+    },
+    validateAutoRunStart: () => ({
+      ok: false,
+      errors: [{ message: '当前 flow 不支持手机号注册。' }],
+    }),
+  });
+
+  await assert.rejects(
+    () => router.handleMessage({
+      type: 'AUTO_RUN',
+      payload: {
+        totalRuns: 2,
+        autoRunSkipFailures: true,
+        mode: 'restart',
+      },
+    }),
+    /当前 flow 不支持手机号注册。/
+  );
+
+  await assert.rejects(
+    () => router.handleMessage({
+      type: 'SCHEDULE_AUTO_RUN',
+      payload: {
+        totalRuns: 2,
+        delayMinutes: 5,
+        autoRunSkipFailures: false,
+      },
+    }),
+    /当前 flow 不支持手机号注册。/
+  );
+
+  assert.deepStrictEqual(calls, []);
+});
+
 test('account run history snapshot sync is disabled in contribution mode', () => {
   const source = fs.readFileSync('background/account-run-history.js', 'utf8');
   const globalScope = {};

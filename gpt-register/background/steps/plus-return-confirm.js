@@ -9,7 +9,7 @@
   function createPlusReturnConfirmExecutor(deps = {}) {
     const {
       addLog,
-      completeStepFromBackground,
+      completeNodeFromBackground,
       getTabId,
       isTabAlive,
       setState,
@@ -53,7 +53,7 @@
         plusCheckoutTabId: tabId,
         plusReturnUrl: tab?.url || '',
       });
-      await completeStepFromBackground(9, {
+      await completeNodeFromBackground('plus-checkout-return', {
         plusReturnUrl: tab?.url || '',
       });
     }

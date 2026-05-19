@@ -6,6 +6,7 @@
       chrome,
       addLog,
       closeConflictingTabsForSource,
+      createAutomationTab = null,
       ensureContentScriptReadyOnTab,
       getPanelMode,
       normalizeCodex2ApiUrl,
@@ -18,6 +19,25 @@
       SUB2API_STEP1_RESPONSE_TIMEOUT_MS,
     } = deps;
 
+    let sub2ApiApi = null;
+
+    function getSub2ApiApi() {
+      if (sub2ApiApi) {
+        return sub2ApiApi;
+      }
+      const factory = deps.createSub2ApiApi
+        || self.MultiPageBackgroundSub2ApiApi?.createSub2ApiApi;
+      if (typeof factory !== 'function') {
+        throw new Error('SUB2API 直连接口模块未加载，无法生成 OAuth 链接。');
+      }
+      sub2ApiApi = factory({
+        addLog,
+        normalizeSub2ApiUrl,
+        DEFAULT_SUB2API_GROUP_NAME,
+      });
+      return sub2ApiApi;
+    }
+
     function normalizeAdminKey(value = '') {
       return String(value || '').trim();
     }
@@ -28,25 +48,6 @@
       } catch {
         return '';
       }
-    }
-
-    function normalizeSub2ApiGroupNames(value) {
-      const source = Array.isArray(value)
-        ? value
-        : String(value || '').split(/[\r\n,，;；]+/);
-      const seen = new Set();
-      const names = [];
-      for (const item of source) {
-        const parts = String(item || '').split(/[\r\n,，;；]+/);
-        for (const part of parts) {
-          const name = String(part || '').trim();
-          const key = name.toLowerCase();
-          if (!name || seen.has(key)) continue;
-          seen.add(key);
-          names.push(name);
-        }
-      }
-      return names.length ? names : [DEFAULT_SUB2API_GROUP_NAME];
     }
 
     function getCodex2ApiErrorMessage(payload, responseStatus = 500) {
@@ -268,12 +269,10 @@
     async function requestSub2ApiOAuthUrl(state, options = {}) {
       const { logLabel = 'OAuth 刷新' } = options;
       const sub2apiUrl = normalizeSub2ApiUrl(state.sub2apiUrl);
-      const groupNames = normalizeSub2ApiGroupNames([
-        ...(Array.isArray(state.sub2apiGroupNames) ? state.sub2apiGroupNames : []),
-        state.sub2apiGroupName,
-      ]);
-      const groupName = groupNames.join(', ');
 
+      if (!sub2apiUrl) {
+        throw new Error('SUB2API URL is not configured. Please fill it in the side panel first.');
+      }
       if (!state.sub2apiEmail) {
         throw new Error('尚未配置 SUB2API 登录邮箱，请先在侧边栏填写。');
       }
@@ -281,52 +280,14 @@
         throw new Error('尚未配置 SUB2API 登录密码，请先在侧边栏填写。');
       }
 
-      await addLog(`${logLabel}：正在打开 SUB2API 后台...`);
-
-      const injectFiles = ['content/utils.js', 'content/sub2api-panel.js'];
-      await closeConflictingTabsForSource('sub2api-panel', sub2apiUrl);
-
-      const tab = await chrome.tabs.create({ url: sub2apiUrl, active: true });
-      const tabId = tab.id;
-      await rememberSourceLastUrl('sub2api-panel', sub2apiUrl);
-
-      await addLog(`${logLabel}：SUB2API 页面已打开，正在等待页面进入目标地址...`);
-      const matchedTab = await waitForTabUrlFamily('sub2api-panel', tabId, sub2apiUrl, {
-        timeoutMs: 15000,
-        retryDelayMs: 400,
-      });
-      if (!matchedTab) {
-        await addLog(`${logLabel}：SUB2API 页面尚未稳定，继续尝试连接内容脚本...`, 'warn');
-      }
-
-      await ensureContentScriptReadyOnTab('sub2api-panel', tabId, {
-        inject: injectFiles,
-        injectSource: 'sub2api-panel',
-        timeoutMs: 45000,
-        retryDelayMs: 900,
-        logMessage: `${logLabel}：SUB2API 页面仍在加载，正在重试连接内容脚本...`,
-      });
-
-      const result = await sendToContentScript('sub2api-panel', {
-        type: 'REQUEST_OAUTH_URL',
-        source: 'background',
-        payload: {
+      const api = getSub2ApiApi();
+      return api.generateOpenAiAuthUrl({
+        ...state,
           sub2apiUrl,
-          sub2apiEmail: state.sub2apiEmail,
-          sub2apiPassword: state.sub2apiPassword,
-          sub2apiGroupName: groupName,
-          sub2apiGroupNames: groupNames,
-          sub2apiDefaultProxyName: state.sub2apiDefaultProxyName,
-          logStep: 7,
-        },
       }, {
-        responseTimeoutMs: SUB2API_STEP1_RESPONSE_TIMEOUT_MS,
+        logLabel,
+        timeoutMs: SUB2API_STEP1_RESPONSE_TIMEOUT_MS,
       });
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-      return result || {};
     }
 
     return {

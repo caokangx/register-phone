@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
@@ -240,7 +240,7 @@ test('step 8 escalates to rerun step 7 after too many local retry_without_step7 
       },
     },
     CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     confirmCustomVerificationStepBypass: async () => {},
     ensureStep8VerificationPageReady: async () => {
       calls.ensureReady += 1;

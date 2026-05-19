@@ -14,23 +14,23 @@ if (document.documentElement.getAttribute(SUB2API_PANEL_LISTENER_SENTINEL) !== '
   document.documentElement.setAttribute(SUB2API_PANEL_LISTENER_SENTINEL, '1');
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'EXECUTE_STEP' || message.type === 'REQUEST_OAUTH_URL') {
+    if (message.type === 'EXECUTE_NODE' || message.type === 'REQUEST_OAUTH_URL') {
       resetStopState();
       const handler = message.type === 'REQUEST_OAUTH_URL'
         ? requestOAuthUrl(message.payload)
-        : handleStep(message.step, message.payload);
+        : handleNode(message.nodeId || message.payload?.nodeId, message.payload);
       handler.then((result) => {
         sendResponse({ ok: true, ...(result || {}) });
       }).catch((err) => {
         if (isStopError(err)) {
-          if (message.step) {
-            log('已被用户停止。', 'warn', { step: message.step });
+          if (message.payload?.visibleStep || message.step) {
+            log('已被用户停止。', 'warn', { step: message.payload?.visibleStep || message.step });
           }
           sendResponse({ stopped: true, error: err.message });
           return;
         }
-        if (message.step) {
-          reportError(message.step, err.message);
+        if (message.nodeId || message.payload?.nodeId) {
+          reportError(message.nodeId || message.payload?.nodeId, err.message);
         }
         sendResponse({ error: err.message });
       });
@@ -73,6 +73,16 @@ async function handleStep(step, payload = {}) {
       return step9_submitOpenAiCallback({ ...(payload || {}), visibleStep: step });
     default:
       throw new Error(`sub2api-panel.js 不处理步骤 ${step}`);
+  }
+}
+
+async function handleNode(nodeId, payload = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  switch (normalizedNodeId) {
+    case 'platform-verify':
+      return step9_submitOpenAiCallback(payload);
+    default:
+      throw new Error(`sub2api-panel.js 不处理节点 ${normalizedNodeId}`);
   }
 }
 
@@ -198,14 +208,11 @@ function normalizeSub2ApiGroupNames(value) {
   const seen = new Set();
   const names = [];
   for (const item of source) {
-    const parts = String(item || '').split(/[\r\n,，;；]+/);
-    for (const part of parts) {
-      const name = String(part || '').trim();
-      const key = name.toLowerCase();
-      if (!name || seen.has(key)) continue;
-      seen.add(key);
-      names.push(name);
-    }
+    const name = String(item || '').trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
   }
   return names.length ? names : [SUB2API_DEFAULT_GROUP_NAME];
 }
@@ -253,6 +260,21 @@ function resolveSub2ApiProxyPreference(payload = {}, backgroundState = {}) {
     return normalizeSub2ApiProxyPreference(backgroundState.sub2apiDefaultProxyName);
   }
   return SUB2API_DEFAULT_PROXY_NAME;
+}
+
+function resolveSub2ApiAccountPriority(payload = {}, backgroundState = {}) {
+  const candidate = payload.sub2apiAccountPriority !== undefined
+    ? payload.sub2apiAccountPriority
+    : backgroundState.sub2apiAccountPriority;
+  const rawValue = String(candidate ?? '').trim();
+  if (!rawValue) {
+    return SUB2API_DEFAULT_PRIORITY;
+  }
+  const numeric = Number(rawValue);
+  if (!Number.isSafeInteger(numeric) || numeric < 1) {
+    throw new Error('SUB2API 账号优先级必须是大于等于 1 的整数。');
+  }
+  return numeric;
 }
 
 function normalizeProxyId(value) {
@@ -498,10 +520,11 @@ async function step1_generateOpenAiAuthUrl(payload = {}, options = {}) {
   const { report = true } = options;
   const logStep = Number.isInteger(payload?.logStep) ? payload.logStep : 1;
   const redirectUri = normalizeRedirectUri();
-  const groupNames = normalizeSub2ApiGroupNames([
-    ...(Array.isArray(payload.sub2apiGroupNames) ? payload.sub2apiGroupNames : []),
-    payload.sub2apiGroupName,
-  ]);
+  const groupNames = normalizeSub2ApiGroupNames(
+    Array.isArray(payload.sub2apiSelectedGroupNames) && payload.sub2apiSelectedGroupNames.length
+      ? payload.sub2apiSelectedGroupNames
+      : (payload.sub2apiGroupName || SUB2API_DEFAULT_GROUP_NAME)
+  );
   const groupName = groupNames[0] || SUB2API_DEFAULT_GROUP_NAME;
 
   const { origin, token } = await loginSub2Api(payload);
@@ -574,24 +597,26 @@ async function step9_submitOpenAiCallback(payload = {}) {
   const proxySelector = preferredProxyId || proxyPreference;
   const proxy = proxySelector ? await resolveSub2ApiProxy(origin, token, proxySelector) : null;
   const proxyId = normalizeProxyId(proxy?.id);
+  const accountPriority = resolveSub2ApiAccountPriority(payload, backgroundState);
   const storedGroupIds = Array.isArray(payload.sub2apiGroupIds)
     ? payload.sub2apiGroupIds
     : (Array.isArray(backgroundState.sub2apiGroupIds) ? backgroundState.sub2apiGroupIds : []);
   const groupIdsFromState = storedGroupIds
     .map((id) => Number(id))
     .filter((id) => Number.isFinite(id) && id > 0);
-  const configuredGroupNames = normalizeSub2ApiGroupNames([
-    ...(Array.isArray(payload.sub2apiGroupNames) ? payload.sub2apiGroupNames : []),
-    ...(Array.isArray(backgroundState.sub2apiGroupNames) ? backgroundState.sub2apiGroupNames : []),
-    payload.sub2apiGroupName,
-    backgroundState.sub2apiGroupName,
-  ]);
-  const primaryGroupName = configuredGroupNames[0] || SUB2API_DEFAULT_GROUP_NAME;
+  const selectedGroupNames = Array.isArray(payload.sub2apiSelectedGroupNames) && payload.sub2apiSelectedGroupNames.length
+    ? payload.sub2apiSelectedGroupNames
+    : (Array.isArray(backgroundState.sub2apiSelectedGroupNames) && backgroundState.sub2apiSelectedGroupNames.length
+      ? backgroundState.sub2apiSelectedGroupNames
+      : null);
+  const fallbackGroupNames = selectedGroupNames
+    ? selectedGroupNames
+    : (payload.sub2apiGroupName || backgroundState.sub2apiGroupName || SUB2API_DEFAULT_GROUP_NAME);
   const groups = groupIdsFromState.length
     ? groupIdsFromState.map((id) => ({ id }))
-    : ((configuredGroupNames.length > 1 || !payload.sub2apiGroupId)
-      ? await getGroupsByNames(origin, token, configuredGroupNames)
-      : [{ id: payload.sub2apiGroupId, name: primaryGroupName }]);
+    : (payload.sub2apiGroupId && !(selectedGroupNames && selectedGroupNames.length > 1)
+      ? [{ id: payload.sub2apiGroupId, name: payload.sub2apiGroupName || backgroundState.sub2apiGroupName || SUB2API_DEFAULT_GROUP_NAME }]
+      : await getGroupsByNames(origin, token, fallbackGroupNames));
 
   if (!sessionId) {
     throw new Error('缺少 SUB2API session_id，请重新执行步骤 1。');
@@ -632,7 +657,7 @@ async function step9_submitOpenAiCallback(payload = {}) {
   const accountName = resolvedEmail
     || flowEmail
     || String(payload.sub2apiDraftName || backgroundState.sub2apiDraftName || '').trim()
-    || buildDraftAccountName(primaryGroupName);
+    || buildDraftAccountName(payload.sub2apiGroupName || backgroundState.sub2apiGroupName || SUB2API_DEFAULT_GROUP_NAME);
   const createPayload = {
     name: accountName,
     notes: '',
@@ -640,7 +665,7 @@ async function step9_submitOpenAiCallback(payload = {}) {
     type: 'oauth',
     credentials,
     concurrency: SUB2API_DEFAULT_CONCURRENCY,
-    priority: SUB2API_DEFAULT_PRIORITY,
+    priority: accountPriority,
     rate_multiplier: SUB2API_DEFAULT_RATE_MULTIPLIER,
     group_ids: groupIds,
     auto_pause_on_expired: true,
@@ -662,9 +687,10 @@ async function step9_submitOpenAiCallback(payload = {}) {
 
   const verifiedStatus = `SUB2API 已创建账号 #${createdAccount?.id || 'unknown'}`;
   log(verifiedStatus, 'ok', { step: visibleStep, stepKey: 'platform-verify' });
-  reportComplete(visibleStep, {
+  reportComplete('platform-verify', {
     localhostUrl: callback.url,
     verifiedStatus,
+    visibleStep,
   });
   openAccountsPageSoon(origin);
 }

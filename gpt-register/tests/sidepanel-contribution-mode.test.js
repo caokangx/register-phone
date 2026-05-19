@@ -132,7 +132,10 @@ test('sidepanel settings refresh preserves rendered step progress', () => {
 
   const bundle = [
     extractFunction('isDoneStatus'),
+    extractFunction('getNodeStatuses'),
     extractFunction('getStepStatuses'),
+    extractFunction('escapeCssValue'),
+    extractFunction('renderSingleNodeStatus'),
     extractFunction('renderSingleStepStatus'),
     extractFunction('renderStepStatuses'),
     extractFunction('updateProgressCounter'),
@@ -148,13 +151,24 @@ const STATUS_ICONS = {
   manual_completed: 'M',
   skipped: 'K',
 };
-let latestState = { stepStatuses: { 1: 'completed', 2: 'running', 3: 'pending' } };
+let latestState = { nodeStatuses: { 'open-chatgpt': 'completed', 'submit-signup-email': 'running', 'fill-password': 'pending' } };
+let NODE_IDS = ['open-chatgpt', 'submit-signup-email', 'fill-password'];
+let NODE_DEFAULT_STATUSES = { 'open-chatgpt': 'pending', 'submit-signup-email': 'pending', 'fill-password': 'pending' };
 let STEP_IDS = [1, 2, 3];
 let STEP_DEFAULT_STATUSES = { 1: 'pending', 2: 'pending', 3: 'pending' };
+function getStepIdByNodeIdForCurrentMode(nodeId) {
+  return { 'open-chatgpt': 1, 'submit-signup-email': 2, 'fill-password': 3 }[nodeId] || 0;
+}
 const rows = new Map(STEP_IDS.map((step) => [step, { className: 'step-row' }]));
 const statusEls = new Map(STEP_IDS.map((step) => [step, { textContent: '' }]));
+const nodeRows = new Map(NODE_IDS.map((nodeId) => [nodeId, rows.get(getStepIdByNodeIdForCurrentMode(nodeId))]));
+const nodeStatusEls = new Map(NODE_IDS.map((nodeId) => [nodeId, statusEls.get(getStepIdByNodeIdForCurrentMode(nodeId))]));
 const document = {
   querySelector(selector) {
+    const nodeMatch = selector.match(/data-node-id="([^"]+)"/);
+    if (nodeMatch) {
+      return selector.includes('step-status') ? nodeStatusEls.get(nodeMatch[1]) : nodeRows.get(nodeMatch[1]);
+    }
     const match = selector.match(/data-step="(\\d+)"/);
     const step = match ? Number(match[1]) : 0;
     return selector.includes('step-status') ? statusEls.get(step) : rows.get(step);

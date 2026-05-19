@@ -1,30 +1,92 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-test('step 6 runs cookie cleanup and completes from background', async () => {
-  const source = fs.readFileSync('background/steps/clear-login-cookies.js', 'utf8');
+test('step 6 waits for registration success and completes from background', async () => {
+  const source = fs.readFileSync('background/steps/wait-registration-success.js', 'utf8');
   const globalScope = {};
   const api = new Function('self', `${source}; return self.MultiPageBackgroundStep6;`)(globalScope);
 
   const events = {
-    cleanupCalls: 0,
+    logs: [],
+    waits: [],
     completedSteps: [],
   };
 
   const executor = api.createStep6Executor({
-    completeStepFromBackground: async (step) => {
+    addLog: async (message, level = 'info') => {
+      events.logs.push({ message, level });
+    },
+    completeNodeFromBackground: async (step) => {
       events.completedSteps.push(step);
     },
-    runPreStep6CookieCleanup: async () => {
-      events.cleanupCalls += 1;
+    sleepWithStop: async (ms) => {
+      events.waits.push(ms);
     },
   });
 
   await executor.executeStep6();
 
-  assert.equal(events.cleanupCalls, 1);
-  assert.deepStrictEqual(events.completedSteps, [6]);
+  assert.deepStrictEqual(events.waits, [20000]);
+  assert.deepStrictEqual(events.completedSteps, ['wait-registration-success']);
+  assert.ok(events.logs.some(({ message }) => /等待 20 秒/.test(message)));
+});
+
+test('step 6 only clears cookies when cleanup switch is enabled', async () => {
+  const source = fs.readFileSync('background/steps/wait-registration-success.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep6;`)(globalScope);
+
+  const events = {
+    removedCookies: [],
+    browsingDataCalls: [],
+    completedSteps: [],
+  };
+  const chromeApi = {
+    cookies: {
+      getAllCookieStores: async () => [{ id: 'store-a' }],
+      getAll: async () => [
+        { domain: '.chatgpt.com', path: '/auth', name: 'session', storeId: 'store-a' },
+        { domain: '.example.com', path: '/', name: 'keep', storeId: 'store-a' },
+      ],
+      remove: async (details) => {
+        events.removedCookies.push(details);
+        return details;
+      },
+    },
+    browsingData: {
+      removeCookies: async (details) => {
+        events.browsingDataCalls.push(details);
+      },
+    },
+  };
+
+  const executor = api.createStep6Executor({
+    addLog: async () => {},
+    chrome: chromeApi,
+    completeNodeFromBackground: async (step) => {
+      events.completedSteps.push(step);
+    },
+    sleepWithStop: async () => {},
+  });
+
+  await executor.executeStep6({ step6CookieCleanupEnabled: false });
+
+  assert.deepStrictEqual(events.removedCookies, []);
+  assert.deepStrictEqual(events.browsingDataCalls, []);
+
+  await executor.executeStep6({ step6CookieCleanupEnabled: true });
+
+  assert.deepStrictEqual(events.completedSteps, ['wait-registration-success', 'wait-registration-success']);
+  assert.deepStrictEqual(events.removedCookies, [
+    {
+      url: 'https://chatgpt.com/auth',
+      name: 'session',
+      storeId: 'store-a',
+    },
+  ]);
+  assert.equal(events.browsingDataCalls.length, 1);
+  assert.ok(events.browsingDataCalls[0].origins.includes('https://chatgpt.com'));
 });
 
 test('step 7 retries up to configured limit and then fails', async () => {
@@ -40,7 +102,7 @@ test('step 7 retries up to configured limit and then fails', async () => {
 
   const executor = api.createStep7Executor({
     addLog: async () => {},
-    completeStepFromBackground: async () => {
+    completeNodeFromBackground: async () => {
       events.completed += 1;
     },
     getErrorMessage: (error) => error?.message || String(error || ''),
@@ -75,7 +137,7 @@ test('step 7 retries up to configured limit and then fails', async () => {
   assert.equal(events.completed, 0);
 });
 
-test('step 7 exits internal retry loop immediately when add-phone is detected', async () => {
+test('step 7 hands add-phone to the dedicated post-login phone node without internal retry', async () => {
   const source = fs.readFileSync('background/steps/oauth-login.js', 'utf8');
   const globalScope = {};
   const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
@@ -83,7 +145,7 @@ test('step 7 exits internal retry loop immediately when add-phone is detected', 
   const events = {
     refreshCalls: 0,
     sendCalls: 0,
-    completed: 0,
+    completions: [],
     logs: [],
   };
 
@@ -91,8 +153,8 @@ test('step 7 exits internal retry loop immediately when add-phone is detected', 
     addLog: async (message, level = 'info') => {
       events.logs.push({ message, level });
     },
-    completeStepFromBackground: async () => {
-      events.completed += 1;
+    completeNodeFromBackground: async (step, payload) => {
+      events.completions.push({ step, payload });
     },
     getErrorMessage: (error) => error?.message || String(error || ''),
     getLoginAuthStateLabel: (state) => state || 'unknown',
@@ -112,18 +174,172 @@ test('step 7 exits internal retry loop immediately when add-phone is detected', 
     throwIfStopped: () => {},
   });
 
-  await assert.rejects(
-    () => executor.executeStep7({ email: 'user@example.com', password: 'secret' }),
-    /add-phone/
-  );
+  await executor.executeStep7({ email: 'user@example.com', password: 'secret' });
 
   assert.equal(events.refreshCalls, 1, 'add-phone should stop further OAuth refresh attempts');
   assert.equal(events.sendCalls, 1, 'add-phone should stop after the first failed login attempt');
-  assert.equal(events.completed, 0);
+  assert.deepStrictEqual(events.completions, [
+    {
+      step: 'oauth-login',
+      payload: {
+        loginVerificationRequestedAt: null,
+        skipLoginVerificationStep: true,
+        addPhonePage: true,
+        directOAuthConsentPage: false,
+      },
+    },
+  ]);
   assert.ok(
     !events.logs.some(({ message }) => /准备重试/.test(message)),
     'add-phone failure should not be logged as an internal retryable attempt'
   );
+});
+
+test('step 7 no longer runs shared phone verification inside oauth-login', async () => {
+  const source = fs.readFileSync('background/steps/oauth-login.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
+
+  const events = {
+    refreshCalls: 0,
+    phoneCalls: [],
+    completions: [],
+  };
+
+  const executor = api.createStep7Executor({
+    addLog: async () => {},
+    completeNodeFromBackground: async (step, payload) => {
+      events.completions.push({ step, payload });
+    },
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getLoginAuthStateLabel: (state) => state || 'unknown',
+    getState: async () => ({
+      email: 'user@example.com',
+      password: 'secret',
+      phoneVerificationEnabled: true,
+    }),
+    getTabId: async (sourceName) => (sourceName === 'signup-page' ? 91 : 0),
+    isStep6RecoverableResult: (result) => result?.step6Outcome === 'recoverable',
+    isStep6SuccessResult: (result) => result?.step6Outcome === 'success',
+    phoneVerificationHelpers: {
+      completePhoneVerificationFlow: async (tabId, pageState, options) => {
+        events.phoneCalls.push({ tabId, pageState, options });
+        return { success: true, consentReady: true, url: 'https://auth.openai.com/authorize/resume' };
+      },
+    },
+    refreshOAuthUrlBeforeStep6: async () => {
+      events.refreshCalls += 1;
+      return `https://oauth.example/${events.refreshCalls}`;
+    },
+    reuseOrCreateTab: async () => {},
+    sendToContentScriptResilient: async () => {
+      throw new Error('提交密码后页面直接进入手机号页面，未经过登录验证码页。URL: https://auth.openai.com/add-phone');
+    },
+    STEP6_MAX_ATTEMPTS: 3,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep7({
+    email: 'user@example.com',
+    password: 'secret',
+    phoneVerificationEnabled: true,
+  });
+
+  assert.equal(events.refreshCalls, 1);
+  assert.deepStrictEqual(events.phoneCalls, []);
+  assert.deepStrictEqual(events.completions, [
+    {
+      step: 'oauth-login',
+      payload: {
+        loginVerificationRequestedAt: null,
+        skipLoginVerificationStep: true,
+        addPhonePage: true,
+        directOAuthConsentPage: false,
+      },
+    },
+  ]);
+});
+
+test('step 7 add-phone handoff does not depend on phone verification being enabled', async () => {
+  const source = fs.readFileSync('background/steps/oauth-login.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
+
+  const events = {
+    phoneCalls: 0,
+    completions: 0,
+  };
+
+  const executor = api.createStep7Executor({
+    addLog: async () => {},
+    completeNodeFromBackground: async () => {
+      events.completions += 1;
+    },
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getLoginAuthStateLabel: (state) => state || 'unknown',
+    getState: async () => ({ email: 'user@example.com', password: 'secret', phoneVerificationEnabled: false }),
+    getTabId: async () => 91,
+    isStep6RecoverableResult: (result) => result?.step6Outcome === 'recoverable',
+    isStep6SuccessResult: (result) => result?.step6Outcome === 'success',
+    phoneVerificationHelpers: {
+      completePhoneVerificationFlow: async () => {
+        events.phoneCalls += 1;
+        return {};
+      },
+    },
+    refreshOAuthUrlBeforeStep6: async () => 'https://oauth.example/latest',
+    reuseOrCreateTab: async () => {},
+    sendToContentScriptResilient: async () => {
+      throw new Error('提交密码后页面直接进入手机号页面，未经过登录验证码页。URL: https://auth.openai.com/add-phone');
+    },
+    STEP6_MAX_ATTEMPTS: 3,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep7({ email: 'user@example.com', password: 'secret', phoneVerificationEnabled: false });
+  assert.equal(events.phoneCalls, 0);
+  assert.equal(events.completions, 1);
+});
+
+test('step 7 ignores obsolete shared add-phone verifier during handoff', async () => {
+  const source = fs.readFileSync('background/steps/oauth-login.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
+
+  const events = {
+    phoneCalls: 0,
+    completions: 0,
+  };
+
+  const executor = api.createStep7Executor({
+    addLog: async () => {},
+    completeNodeFromBackground: async () => {
+      events.completions += 1;
+    },
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getLoginAuthStateLabel: (state) => state || 'unknown',
+    getState: async () => ({ email: 'user@example.com', password: 'secret', phoneVerificationEnabled: true }),
+    getTabId: async () => 91,
+    isStep6RecoverableResult: (result) => result?.step6Outcome === 'recoverable',
+    isStep6SuccessResult: (result) => result?.step6Outcome === 'success',
+    phoneVerificationHelpers: {
+      completePhoneVerificationFlow: async () => {
+        events.phoneCalls += 1;
+        throw new Error('步骤 9：没有可用手机号。');
+      },
+    },
+    refreshOAuthUrlBeforeStep6: async () => 'https://oauth.example/latest',
+    reuseOrCreateTab: async () => {},
+    sendToContentScriptResilient: async () => {
+      throw new Error('提交密码后页面直接进入手机号页面，未经过登录验证码页。URL: https://auth.openai.com/add-phone');
+    },
+    STEP6_MAX_ATTEMPTS: 3,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep7({ email: 'user@example.com', password: 'secret', phoneVerificationEnabled: true });
+  assert.equal(events.phoneCalls, 0);
+  assert.equal(events.completions, 1);
 });
 
 test('step 7 starts a new oauth timeout window for each refreshed oauth url', async () => {
@@ -138,7 +354,7 @@ test('step 7 starts a new oauth timeout window for each refreshed oauth url', as
 
   const executor = api.createStep7Executor({
     addLog: async () => {},
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     getErrorMessage: (error) => error?.message || String(error || ''),
     getLoginAuthStateLabel: (state) => state || 'unknown',
     getOAuthFlowStepTimeoutMs: async (defaultTimeoutMs, options) => {
@@ -152,6 +368,7 @@ test('step 7 starts a new oauth timeout window for each refreshed oauth url', as
     reuseOrCreateTab: async () => {},
     sendToContentScriptResilient: async (_source, _message, options) => ({
       step6Outcome: 'success',
+      state: 'verification_page',
       usedTimeoutMs: options.timeoutMs,
     }),
     startOAuthFlowTimeoutWindow: async (payload) => {
@@ -189,7 +406,7 @@ test('step 7 forwards direct OAuth consent skip metadata when completing', async
 
   const executor = api.createStep7Executor({
     addLog: async () => {},
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       events.completions.push({ step, payload });
     },
     getErrorMessage: (error) => error?.message || String(error || ''),
@@ -217,7 +434,7 @@ test('step 7 forwards direct OAuth consent skip metadata when completing', async
 
   assert.deepStrictEqual(events.completions, [
     {
-      step: 10,
+      step: 'oauth-login',
       payload: {
         loginVerificationRequestedAt: null,
         skipLoginVerificationStep: true,
@@ -233,12 +450,15 @@ test('step 7 forwards phone login identity payload when account identifier is ph
   const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
 
   const events = {
+    completions: [],
     payloads: [],
   };
 
   const executor = api.createStep7Executor({
     addLog: async () => {},
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async (step, payload) => {
+      events.completions.push({ step, payload });
+    },
     getErrorMessage: (error) => error?.message || String(error || ''),
     getLoginAuthStateLabel: (state) => state || 'unknown',
     getState: async () => ({
@@ -290,28 +510,161 @@ test('step 7 forwards phone login identity payload when account identifier is ph
       countryLabel: 'Thailand',
       accountIdentifier: '66959916439',
       loginIdentifierType: 'phone',
-      isStep10OAuthLogin: false,
-      forcePhoneLoginOnAuthPage: false,
       password: 'secret',
       visibleStep: 7,
     },
   ]);
+  assert.deepStrictEqual(events.completions, [
+    {
+      step: 'oauth-login',
+      payload: {
+        loginVerificationRequestedAt: 123456,
+        accountIdentifierType: 'phone',
+        accountIdentifier: '66959916439',
+        signupPhoneNumber: '66959916439',
+        signupPhoneCompletedActivation: {
+          activationId: 'signup-done',
+          phoneNumber: '66959916439',
+          countryId: 52,
+          countryLabel: 'Thailand',
+        },
+        signupPhoneActivation: null,
+      },
+    },
+  ]);
 });
 
-test('step 10 phone OAuth login tells content script to force phone login URL', async () => {
+test('step 7 uses phone login under Plus mode when signupMethod is phone', async () => {
   const source = fs.readFileSync('background/steps/oauth-login.js', 'utf8');
   const globalScope = {};
   const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
 
-  const payloads = [];
+  const events = {
+    payloads: [],
+  };
+
   const executor = api.createStep7Executor({
     addLog: async () => {},
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     getErrorMessage: (error) => error?.message || String(error || ''),
     getLoginAuthStateLabel: (state) => state || 'unknown',
     getState: async () => ({
+      plusModeEnabled: true,
+      phoneVerificationEnabled: true,
+      signupMethod: 'phone',
+      email: 'plus.user@example.com',
+      password: 'secret',
+      signupPhoneNumber: '+441111111111',
       accountIdentifierType: 'phone',
-      accountIdentifier: '+447780579093',
+      accountIdentifier: '+441111111111',
+    }),
+    isStep6RecoverableResult: (result) => result?.step6Outcome === 'recoverable',
+    isStep6SuccessResult: (result) => result?.step6Outcome === 'success',
+    refreshOAuthUrlBeforeStep6: async () => 'https://oauth.example/latest',
+    reuseOrCreateTab: async () => {},
+    sendToContentScriptResilient: async (_sourceName, message) => {
+      events.payloads.push(message.payload);
+      return {
+        step6Outcome: 'success',
+        state: 'phone_verification_page',
+        loginVerificationRequestedAt: 123456,
+      };
+    },
+    STEP6_MAX_ATTEMPTS: 3,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep7({
+    plusModeEnabled: true,
+    phoneVerificationEnabled: true,
+    signupMethod: 'phone',
+    email: 'plus.user@example.com',
+    password: 'secret',
+    signupPhoneNumber: '+441111111111',
+    accountIdentifierType: 'phone',
+    accountIdentifier: '+441111111111',
+    visibleStep: 10,
+  });
+
+  assert.equal(events.payloads[0].loginIdentifierType, 'phone');
+  assert.equal(events.payloads[0].phoneNumber, '+441111111111');
+  assert.equal(events.payloads[0].email, '');
+  assert.equal(events.payloads[0].accountIdentifier, '+441111111111');
+});
+
+test('step 7 keeps phone login after step 8 stores an unbound email for phone signup', async () => {
+  const source = fs.readFileSync('background/steps/oauth-login.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
+
+  const events = {
+    payloads: [],
+  };
+
+  const phoneSignupState = {
+    phoneVerificationEnabled: true,
+    signupMethod: 'phone',
+    resolvedSignupMethod: 'email',
+    email: 'bound.step8@example.com',
+    accountIdentifierType: 'email',
+    accountIdentifier: 'bound.step8@example.com',
+    signupPhoneNumber: '66959916439',
+    signupPhoneCompletedActivation: {
+      activationId: 'signup-done',
+      phoneNumber: '66959916439',
+      countryId: 52,
+      countryLabel: 'Thailand',
+    },
+    password: 'secret',
+  };
+
+  const executor = api.createStep7Executor({
+    addLog: async () => {},
+    completeNodeFromBackground: async () => {},
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getLoginAuthStateLabel: (state) => state || 'unknown',
+    getState: async () => ({ ...phoneSignupState }),
+    isStep6RecoverableResult: (result) => result?.step6Outcome === 'recoverable',
+    isStep6SuccessResult: (result) => result?.step6Outcome === 'success',
+    refreshOAuthUrlBeforeStep6: async () => 'https://oauth.example/latest',
+    reuseOrCreateTab: async () => {},
+    sendToContentScriptResilient: async (_sourceName, message) => {
+      events.payloads.push(message.payload);
+      return {
+        step6Outcome: 'success',
+        state: 'phone_verification_page',
+        loginVerificationRequestedAt: 123456,
+      };
+    },
+    STEP6_MAX_ATTEMPTS: 3,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep7(phoneSignupState);
+
+  assert.equal(events.payloads[0].loginIdentifierType, 'phone');
+  assert.equal(events.payloads[0].phoneNumber, '66959916439');
+  assert.equal(events.payloads[0].email, '');
+  assert.equal(events.payloads[0].accountIdentifier, '66959916439');
+});
+
+test('step 7 can infer phone login from an available phone signup configuration before step 2 finishes', async () => {
+  const source = fs.readFileSync('background/steps/oauth-login.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
+
+  const events = {
+    payloads: [],
+  };
+
+  const executor = api.createStep7Executor({
+    addLog: async () => {},
+    completeNodeFromBackground: async () => {},
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getLoginAuthStateLabel: (state) => state || 'unknown',
+    getState: async () => ({
+      phoneVerificationEnabled: true,
+      signupMethod: 'phone',
       signupPhoneNumber: '+447780579093',
     }),
     isStep6RecoverableResult: (result) => result?.step6Outcome === 'recoverable',
@@ -319,23 +672,26 @@ test('step 10 phone OAuth login tells content script to force phone login URL', 
     refreshOAuthUrlBeforeStep6: async () => 'https://oauth.example/latest',
     reuseOrCreateTab: async () => {},
     sendToContentScriptResilient: async (_sourceName, message) => {
-      payloads.push(message.payload);
-      return { step6Outcome: 'success', state: 'phone_verification_page' };
+      events.payloads.push(message.payload);
+      return {
+        step6Outcome: 'success',
+        state: 'phone_verification_page',
+        loginVerificationRequestedAt: 987654,
+      };
     },
     STEP6_MAX_ATTEMPTS: 3,
     throwIfStopped: () => {},
   });
 
   await executor.executeStep7({
-    visibleStep: 10,
-    accountIdentifierType: 'phone',
-    accountIdentifier: '+447780579093',
+    phoneVerificationEnabled: true,
+    signupMethod: 'phone',
     signupPhoneNumber: '+447780579093',
   });
 
-  assert.equal(payloads[0].visibleStep, 10);
-  assert.equal(payloads[0].isStep10OAuthLogin, true);
-  assert.equal(payloads[0].forcePhoneLoginOnAuthPage, true);
+  assert.equal(events.payloads[0].loginIdentifierType, 'phone');
+  assert.equal(events.payloads[0].phoneNumber, '+447780579093');
+  assert.equal(events.payloads[0].email, '');
 });
 
 test('step 7 can start from a manually filled signup phone without completed step 2 or step 3 state', async () => {
@@ -350,7 +706,7 @@ test('step 7 can start from a manually filled signup phone without completed ste
 
   const executor = api.createStep7Executor({
     addLog: async () => {},
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       events.completions.push({ step, payload });
     },
     getErrorMessage: (error) => error?.message || String(error || ''),
@@ -390,9 +746,14 @@ test('step 7 can start from a manually filled signup phone without completed ste
   assert.equal(events.payloads[0].password, '');
   assert.deepStrictEqual(events.completions, [
     {
-      step: 7,
+      step: 'oauth-login',
       payload: {
         loginVerificationRequestedAt: 987654,
+        accountIdentifierType: 'phone',
+        accountIdentifier: '+447780579093',
+        signupPhoneNumber: '+447780579093',
+        signupPhoneCompletedActivation: null,
+        signupPhoneActivation: null,
       },
     },
   ]);
@@ -413,7 +774,7 @@ test('step 7 stops immediately when management secret is missing', async () => {
     addLog: async (message, level = 'info') => {
       events.logs.push({ message, level });
     },
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     getErrorMessage: (error) => error?.message || String(error || ''),
     getLoginAuthStateLabel: (state) => state || 'unknown',
     getState: async () => ({ email: 'user@example.com', password: 'secret' }),
@@ -457,7 +818,7 @@ test('step 7 stops immediately when management secret is invalid', async () => {
     addLog: async (message, level = 'info') => {
       events.logs.push({ message, level });
     },
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     getErrorMessage: (error) => error?.message || String(error || ''),
     getLoginAuthStateLabel: (state) => state || 'unknown',
     getState: async () => ({ email: 'user@example.com', password: 'secret' }),

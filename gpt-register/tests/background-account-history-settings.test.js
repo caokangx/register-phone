@@ -55,6 +55,7 @@ test('background account history settings are normalized independently from hotm
     extractFunction('normalizeAccountRunHistoryHelperBaseUrl'),
     extractFunction('normalizeVerificationResendCount'),
     extractFunction('normalizePlusPaymentMethod'),
+    extractFunction('normalizeGpcHelperPhoneMode'),
     extractFunction('normalizePhoneSmsProvider'),
     extractFunction('normalizePhoneSmsProviderOrder'),
     extractFunction('normalizeSignupMethod'),
@@ -78,6 +79,9 @@ test('background account history settings are normalized independently from hotm
     extractFunction('normalizeFiveSimMaxPrice'),
     extractFunction('normalizeFiveSimCountryFallback'),
     extractFunction('normalizeSub2ApiGroupNames'),
+    extractFunction('normalizeBoundedIntegerSetting'),
+    extractFunction('normalizeLocalHttpBaseUrl'),
+    extractFunction('buildPersistentSettingsPayload'),
     extractFunction('normalizePersistentSettingValue'),
   ].join('\n');
 
@@ -148,14 +152,19 @@ const self = {
         .replace(/\\/+$/g, '')
         .replace(/\\/api\\/checkout\\/start$/i, '')
         .replace(/\\/api\\/gopay\\/(?:otp|pin)$/i, '')
-        .replace(/\\/api\\/card\\/balance(?:\\?.*)?$/i, '');
+        .replace(/\\/api\\/gp\\/tasks(?:\\/[^/?#]+)?(?:\\/(?:otp|pin|stop))?(?:\\?.*)?$/i, '')
+        .replace(/\\/api\\/gp\\/balance(?:\\?.*)?$/i, '')
+        .replace(/\\/api\\/card\\/balance(?:\\?.*)?$/i, '')
+        .replace(/\\/api\\/card\\/redeem-api-key(?:\\?.*)?$/i, '');
     },
   },
 };
 const PERSISTED_SETTING_DEFAULTS = {
   autoStepDelaySeconds: null,
-  gopayHelperApiUrl: 'https://gopay.hwork.pro',
+  gopayHelperApiUrl: 'https://gpc.qlhazycoder.top',
   mailProvider: '163',
+  heroSmsMinPrice: '',
+  fiveSimMinPrice: '',
 };
 function normalizePanelMode(value) { return value === 'sub2api' ? 'sub2api' : (value === 'codex2api' ? 'codex2api' : 'cpa'); }
 function normalizeLocalCpaStep9Mode(value) { return value === 'bypass' ? 'bypass' : 'submit'; }
@@ -175,28 +184,59 @@ function normalizeCloudflareTempEmailReceiveMailbox(value) { return String(value
 function normalizeCloudflareTempEmailDomain(value) { return String(value || '').trim(); }
 function normalizeCloudflareTempEmailDomains(value) { return Array.isArray(value) ? value : []; }
 function normalizeHotmailAccounts(value) { return Array.isArray(value) ? value : []; }
+function resolveLegacyAutoStepDelaySeconds(value) {
+  return value && Object.prototype.hasOwnProperty.call(value, 'autoStepDelaySeconds')
+    ? value.autoStepDelaySeconds
+    : undefined;
+}
 ${bundle}
 return {
   normalizeAccountRunHistoryHelperBaseUrl,
   normalizePersistentSettingValue,
+  buildPersistentSettingsPayload,
 };
   `)();
 
   assert.equal(api.normalizePersistentSettingValue('accountRunHistoryTextEnabled', 1), true);
   assert.equal(api.normalizePersistentSettingValue('phoneVerificationEnabled', 1), true);
+  assert.equal(api.normalizePersistentSettingValue('phoneSignupReloginAfterBindEmailEnabled', 1), true);
+  assert.equal(api.normalizePersistentSettingValue('phoneSignupReloginAfterBindEmailEnabled', 0), false);
   assert.equal(api.normalizePersistentSettingValue('plusPaymentMethod', 'gopay'), 'gopay');
   assert.equal(api.normalizePersistentSettingValue('plusPaymentMethod', 'gpc-helper'), 'gpc-helper');
   assert.equal(api.normalizePersistentSettingValue('plusPaymentMethod', 'paypal'), 'paypal');
   assert.equal(api.normalizePersistentSettingValue('plusPaymentMethod', 'unknown'), 'paypal');
   assert.equal(
-    api.normalizePersistentSettingValue('gopayHelperApiUrl', ' https://gopay.hwork.pro/api/checkout/start '),
-    'https://gopay.hwork.pro'
+    api.normalizePersistentSettingValue('gopayHelperApiUrl', ' https://gpc.qlhazycoder.top/api/checkout/start '),
+    'https://gpc.qlhazycoder.top'
   );
-  assert.equal(api.normalizePersistentSettingValue('gopayHelperApiUrl', ''), 'https://gopay.hwork.pro');
-  assert.equal(api.normalizePersistentSettingValue('gopayHelperCardKey', ' card_123 '), 'card_123');
+  assert.equal(
+    api.normalizePersistentSettingValue('gopayHelperApiUrl', ' https://gpc.qlhazycoder.top/api/gp/tasks/task_1/pin '),
+    'https://gpc.qlhazycoder.top'
+  );
+  assert.equal(
+    api.normalizePersistentSettingValue('gopayHelperApiUrl', ' https://gpc.qlhazycoder.top/api/gp/balance '),
+    'https://gpc.qlhazycoder.top'
+  );
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperApiUrl', ''), 'https://gpc.qlhazycoder.top');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperApiKey', ' gpc-123 '), 'gpc-123');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperPhoneMode', 'auto'), 'auto');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperPhoneMode', 'builtin'), 'auto');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperPhoneMode', 'unknown'), 'manual');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperRemainingUses', '998'), 998);
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperAutoModeEnabled', 1), true);
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperApiKeyStatus', ' active '), 'active');
   assert.equal(api.normalizePersistentSettingValue('gopayHelperCountryCode', ' 86 '), '+86');
   assert.equal(api.normalizePersistentSettingValue('gopayHelperPhoneNumber', ' +86 138-0013-8000 '), '+8613800138000');
   assert.equal(api.normalizePersistentSettingValue('gopayHelperPin', ' 12-34-56 '), '123456');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperOtpChannel', 'SMS'), 'sms');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperOtpChannel', 'unknown'), 'whatsapp');
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperLocalSmsHelperEnabled', 1), true);
+  assert.equal(
+    api.normalizePersistentSettingValue('gopayHelperLocalSmsHelperUrl', 'http://127.0.0.1:18767/otp?x=1'),
+    'http://127.0.0.1:18767'
+  );
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperLocalSmsTimeoutSeconds', '999'), 300);
+  assert.equal(api.normalizePersistentSettingValue('gopayHelperLocalSmsPollIntervalSeconds', '0'), 1);
   assert.equal(api.normalizePersistentSettingValue('verificationResendCount', '7'), 7);
   assert.equal(api.normalizePersistentSettingValue('verificationResendCount', '-1'), 0);
   assert.equal(api.normalizePersistentSettingValue('phoneVerificationReplacementLimit', '9'), 9);
@@ -205,6 +245,8 @@ return {
   assert.equal(api.normalizePersistentSettingValue('phoneCodeTimeoutWindows', '3'), 3);
   assert.equal(api.normalizePersistentSettingValue('phoneCodePollIntervalSeconds', '6'), 6);
   assert.equal(api.normalizePersistentSettingValue('phoneCodePollMaxRounds', '18'), 18);
+  assert.equal(api.normalizePersistentSettingValue('heroSmsMinPrice', '0.123456'), '0.1235');
+  assert.equal(api.normalizePersistentSettingValue('heroSmsMinPrice', '0'), '');
   assert.equal(api.normalizePersistentSettingValue('heroSmsMaxPrice', '0.123456'), '0.1235');
   assert.equal(api.normalizePersistentSettingValue('heroSmsMaxPrice', '0'), '');
   assert.equal(api.normalizePersistentSettingValue('heroSmsPreferredPrice', '0.051234'), '0.0512');
@@ -214,6 +256,8 @@ return {
   assert.equal(api.normalizePersistentSettingValue('phoneSmsProvider', 'NEXSMS'), 'nexsms');
   assert.equal(api.normalizePersistentSettingValue('phoneSmsProvider', 'unknown'), 'hero-sms');
   assert.deepStrictEqual(api.normalizePersistentSettingValue('phoneSmsProviderOrder', ['nexsms', '5sim', 'nexsms']), ['nexsms', '5sim']);
+  assert.equal(api.normalizePersistentSettingValue('phoneSmsReuseEnabled', false), false);
+  assert.equal(api.normalizePersistentSettingValue('phoneSmsReuseEnabled', true), true);
   assert.equal(api.normalizePersistentSettingValue('fiveSimApiKey', ' demo-five '), ' demo-five ');
   assert.equal(api.normalizePersistentSettingValue('fiveSimProduct', ' OpenAI! '), 'openai');
   assert.equal(api.normalizePersistentSettingValue('fiveSimCountryId', ' England! '), 'england');
@@ -221,6 +265,8 @@ return {
   assert.equal(api.normalizePersistentSettingValue('fiveSimCountryLabel', ''), '越南 (Vietnam)');
   assert.equal(api.normalizePersistentSettingValue('fiveSimMaxPrice', '9.87654'), '9.8765');
   assert.equal(api.normalizePersistentSettingValue('fiveSimMaxPrice', '-1'), '');
+  assert.equal(api.normalizePersistentSettingValue('fiveSimMinPrice', '9.87654'), '9.8765');
+  assert.equal(api.normalizePersistentSettingValue('fiveSimMinPrice', '-1'), '');
   assert.equal(api.normalizePersistentSettingValue('fiveSimOperator', ''), 'any');
   assert.deepStrictEqual(
     api.normalizePersistentSettingValue('fiveSimCountryFallback', [{ id: 'usa', label: 'USA' }, 'thailand:Thailand']),
@@ -288,6 +334,12 @@ return {
     [1, 6]
   );
   assert.equal(api.normalizePersistentSettingValue('nexSmsServiceCode', ' OT! '), 'ot');
+  const rangePayload = api.buildPersistentSettingsPayload({
+    heroSmsMinPrice: '0.023456',
+    fiveSimMinPrice: '0.0789',
+  });
+  assert.equal(rangePayload.heroSmsMinPrice, '0.0235');
+  assert.equal(rangePayload.fiveSimMinPrice, '0.0789');
   assert.deepStrictEqual(
     api.normalizePersistentSettingValue('phonePreferredActivation', {
       provider: 'nexsms',
@@ -306,4 +358,26 @@ return {
       countryLabel: '',
     }
   );
+  const legacyReusePayload = api.buildPersistentSettingsPayload({
+    heroSmsReuseEnabled: false,
+  });
+  assert.equal(legacyReusePayload.phoneSmsReuseEnabled, false);
+  assert.equal(legacyReusePayload.heroSmsReuseEnabled, false);
+  const fiveSimReusePayload = api.buildPersistentSettingsPayload({
+    fiveSimReuseEnabled: false,
+  });
+  assert.equal(fiveSimReusePayload.phoneSmsReuseEnabled, false);
+  assert.equal(fiveSimReusePayload.heroSmsReuseEnabled, false);
+  const conflictingReusePayload = api.buildPersistentSettingsPayload({
+    heroSmsReuseEnabled: true,
+    fiveSimReuseEnabled: false,
+  });
+  assert.equal(conflictingReusePayload.phoneSmsReuseEnabled, true);
+  assert.equal(conflictingReusePayload.heroSmsReuseEnabled, true);
+  const newReusePayload = api.buildPersistentSettingsPayload({
+    phoneSmsReuseEnabled: false,
+    heroSmsReuseEnabled: true,
+  });
+  assert.equal(newReusePayload.phoneSmsReuseEnabled, false);
+  assert.equal(newReusePayload.heroSmsReuseEnabled, false);
 });

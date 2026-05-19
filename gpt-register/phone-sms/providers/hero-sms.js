@@ -109,7 +109,7 @@
       query = { api_key: config.apiKey, ...query };
     }
     if (!config.fetchImpl) {
-      throw new Error('HeroSMS fetch implementation is unavailable.');
+      throw new Error('HeroSMS 网络请求实现不可用。');
     }
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timeoutId = controller
@@ -123,7 +123,7 @@
       const text = await response.text();
       const payload = parsePayload(text);
       if (!response.ok) {
-        const error = new Error(`${actionLabel} failed: ${describePayload(payload) || response.status}`);
+        const error = new Error(`${actionLabel}失败：${describePayload(payload) || response.status}`);
         error.payload = payload;
         error.status = response.status;
         throw error;
@@ -131,7 +131,7 @@
       return payload;
     } catch (error) {
       if (error?.name === 'AbortError') {
-        throw new Error(`${actionLabel} timed out.`);
+        throw new Error(`${actionLabel}超时。`);
       }
       throw error;
     } finally {
@@ -162,7 +162,7 @@
   async function fetchBalance(state = {}, deps = {}) {
     const config = resolveConfig(state, deps);
     if (!config.apiKey) {
-      throw new Error('HeroSMS API key is missing. Save it in the side panel before querying balance.');
+      throw new Error('HeroSMS API Key 缺失，请先在侧边栏保存接码 API Key。');
     }
     const payload = await fetchPayload(config, { action: 'getBalance' }, 'HeroSMS getBalance');
     const balance = Number(String(describePayload(payload)).replace(/^ACCESS_BALANCE:/i, '').trim());

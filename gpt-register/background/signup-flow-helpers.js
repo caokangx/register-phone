@@ -20,6 +20,7 @@
       isSignupPasswordPageUrl,
       isSignupPhoneVerificationPageUrl = null,
       isSignupProfilePageUrl = null,
+      persistRegistrationEmailState = null,
       reuseOrCreateTab,
       sendToContentScriptResilient,
       setEmailState,
@@ -30,11 +31,38 @@
       waitForTabUrlMatch,
     } = deps;
 
+    async function waitForSignupEntryTabToSettle(tabId, step = 1) {
+      if (step !== 2 || !Number.isInteger(tabId) || typeof waitForTabStableComplete !== 'function') {
+        return null;
+      }
+
+      // Do not request window focus here. The automation tab is already
+      // locked to the selected Chrome window; raising that window would
+      // interrupt the user's active workspace.
+
+      if (typeof addLog === 'function') {
+        await addLog(
+          `步骤 ${step}：注册页已打开，正在等待页面加载完成并额外稳定 3 秒...`,
+          'info',
+          { step, stepKey: 'signup-entry' }
+        );
+      }
+
+      return waitForTabStableComplete(tabId, {
+        timeoutMs: 45000,
+        retryDelayMs: 300,
+        stableMs: 3000,
+        initialDelayMs: 300,
+      });
+    }
+
     async function openSignupEntryTab(step = 1) {
       const tabId = await reuseOrCreateTab('signup-page', SIGNUP_ENTRY_URL, {
         inject: SIGNUP_PAGE_INJECT_FILES,
         injectSource: 'signup-page',
       });
+
+      await waitForSignupEntryTabToSettle(tabId, step);
 
       await ensureContentScriptReadyOnTab('signup-page', tabId, {
         inject: SIGNUP_PAGE_INJECT_FILES,
@@ -85,7 +113,7 @@
     function fallbackSignupProfilePageUrl(rawUrl) {
       const parsed = parseUrlSafely(rawUrl);
       if (!parsed) return false;
-      return /\/create-account\/profile(?:[/?#]|$)/i.test(parsed.pathname || '');
+      return /\/(?:create-account\/profile|u\/signup\/profile|signup\/profile|about-you)(?:[/?#]|$)/i.test(parsed.pathname || '');
     }
 
     function resolveSignupPostIdentityState(rawUrl) {
@@ -288,12 +316,22 @@
       if (resolvedEmail === state.email && !options?.preserveAccountIdentity) {
         return;
       }
+      const generatedEmailAlreadyPersisted = Boolean(options?.generatedEmailAlreadyPersisted);
+      if (typeof persistRegistrationEmailState === 'function') {
+        if (!generatedEmailAlreadyPersisted) {
+          await persistRegistrationEmailState(state, resolvedEmail, {
+            source: 'flow',
+            preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+          });
+        }
+        return;
+      }
       const preservedPhoneIdentity = getPreservedPhoneIdentityForEmailResolution(state, options);
       if (preservedPhoneIdentity && typeof setState === 'function') {
-        await setState({
-          email: resolvedEmail,
-          ...preservedPhoneIdentity,
-        });
+        if (!generatedEmailAlreadyPersisted && resolvedEmail !== state.email) {
+          await setEmailState(resolvedEmail, { source: 'flow' });
+        }
+        await setState(preservedPhoneIdentity);
         return;
       }
       if (resolvedEmail !== state.email) {
@@ -337,7 +375,10 @@
       }
 
       if (!generatedEmailAlreadyPersisted || options?.preserveAccountIdentity) {
-        await persistResolvedSignupEmail(resolvedEmail, state, options);
+        await persistResolvedSignupEmail(resolvedEmail, state, {
+          ...options,
+          generatedEmailAlreadyPersisted,
+        });
       }
 
       return resolvedEmail;

@@ -8,6 +8,10 @@
     'auth.openai.com',
     'auth0.openai.com',
     'accounts.openai.com',
+    'paypal.com',
+    'www.paypal.com',
+    'checkout.paypal.com',
+    'paypalobjects.com',
   ];
   const STEP1_COOKIE_CLEAR_ORIGINS = [
     'https://chatgpt.com',
@@ -16,6 +20,11 @@
     'https://auth0.openai.com',
     'https://accounts.openai.com',
     'https://openai.com',
+    'https://paypal.com',
+    'https://www.paypal.com',
+    'https://checkout.paypal.com',
+    'https://paypalobjects.com',
+    'https://www.paypalobjects.com',
   ];
 
   function normalizeCookieDomainForStep1(domain) {
@@ -102,7 +111,7 @@
     const {
       addLog,
       chrome: chromeApi = globalThis.chrome,
-      completeStepFromBackground,
+      completeNodeFromBackground,
       openSignupEntryTab,
     } = deps;
 
@@ -112,7 +121,7 @@
         return;
       }
 
-      await addLog('步骤 1：打开 ChatGPT 官网前清理 ChatGPT / OpenAI cookies...', 'info');
+      await addLog('步骤 1：打开 ChatGPT 官网前清理 ChatGPT / OpenAI / PayPal cookies...', 'info');
       const cookies = await collectStep1Cookies(chromeApi);
       let removedCount = 0;
       for (const cookie of cookies) {
@@ -132,14 +141,14 @@
         }
       }
 
-      await addLog(`步骤 1：已清理 ${removedCount} 个 ChatGPT / OpenAI cookies。`, 'ok');
+      await addLog(`步骤 1：已清理 ${removedCount} 个 ChatGPT / OpenAI / PayPal cookies。`, 'ok');
     }
 
     async function executeStep1() {
       await clearOpenAiCookiesBeforeStep1();
       await addLog('步骤 1：正在打开 ChatGPT 官网...');
       await openSignupEntryTab(1);
-      await completeStepFromBackground(1, {});
+      await completeNodeFromBackground('open-chatgpt', {});
     }
 
     return { executeStep1 };

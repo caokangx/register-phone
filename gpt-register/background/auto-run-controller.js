@@ -17,13 +17,13 @@
       ensureHotmailMailboxReadyForAutoRunRound,
       getAutoRunStatusPayload,
       getErrorMessage,
-      getFirstUnfinishedStep,
+      getFirstUnfinishedNodeId,
       getPendingAutoRunTimerPlan,
-      getRunningSteps,
+      getRunningNodeIds,
       getState,
-      hasSavedProgress,
+      hasSavedNodeProgress,
       isAddPhoneAuthFailure,
-      isGoPayManualInterventionRequiredFailure,
+      isGpcTaskEndedFailure,
       isPhoneSmsPlatformRateLimitFailure,
       isPlusCheckoutNonFreeTrialFailure,
       isRestartCurrentAttemptError,
@@ -34,13 +34,48 @@
       normalizeAutoRunFallbackThreadIntervalMinutes,
       persistAutoRunTimerPlan,
       resetState,
-      runAutoSequenceFromStep,
+      runAutoSequenceFromNode,
       runtime,
       setState,
       sleepWithStop,
       throwIfAutoRunSessionStopped,
-      waitForRunningStepsToFinish,
+      waitForRunningNodesToFinish,
     } = deps;
+
+    function getRunningWorkflowNodes(state = {}) {
+      if (typeof getRunningNodeIds === 'function') {
+        return getRunningNodeIds(state.nodeStatuses || {}, state);
+      }
+      return [];
+    }
+
+    function getFirstUnfinishedWorkflowNode(state = {}) {
+      if (typeof getFirstUnfinishedNodeId === 'function') {
+        return getFirstUnfinishedNodeId(state.nodeStatuses || {}, state);
+      }
+      return null;
+    }
+
+    function hasSavedWorkflowProgress(state = {}) {
+      if (typeof hasSavedNodeProgress === 'function') {
+        return hasSavedNodeProgress(state.nodeStatuses || {}, state);
+      }
+      return false;
+    }
+
+    async function waitForRunningWorkflowNodesToFinish(payload = {}) {
+      if (typeof waitForRunningNodesToFinish === 'function') {
+        return waitForRunningNodesToFinish(payload);
+      }
+      return getState();
+    }
+
+    async function runAutoSequenceFromWorkflowNode(startNodeId, context = {}) {
+      if (typeof runAutoSequenceFromNode === 'function') {
+        return runAutoSequenceFromNode(startNodeId, context);
+      }
+      throw new Error('自动运行节点执行器未接入。');
+    }
 
     function createAutoRunRoundSummary(round) {
       return {
@@ -83,6 +118,88 @@
 
     function getAutoRunRoundRetryCount(summary) {
       return Math.max(0, Number(summary?.attempts || 0) - 1);
+    }
+
+    function normalizeRecordNode(value = '') {
+      return String(value || '').trim();
+    }
+
+    function extractNodeFromRecordStatus(status = '') {
+      const match = String(status || '').trim().match(/^node:([^:]+):(failed|stopped)$/i);
+      return match ? normalizeRecordNode(match[1]) : '';
+    }
+
+    function getKnownNodeIdsFromState(state = {}) {
+      const ids = new Set();
+      for (const key of Object.keys(state?.nodeStatuses || {})) {
+        const nodeId = normalizeRecordNode(key);
+        if (nodeId) {
+          ids.add(nodeId);
+        }
+      }
+
+      const currentNodeId = normalizeRecordNode(state?.currentNodeId);
+      if (currentNodeId) {
+        ids.add(currentNodeId);
+      }
+
+      return Array.from(ids);
+    }
+
+    function inferRecordNodeFromState(state = {}, preferredStatuses = []) {
+      const statuses = state?.nodeStatuses || {};
+      const preferredStatusSet = new Set(preferredStatuses.map((item) => String(item || '').trim()).filter(Boolean));
+      const nodeIds = getKnownNodeIdsFromState(state);
+      const currentNodeId = normalizeRecordNode(state?.currentNodeId);
+
+      if (currentNodeId && preferredStatusSet.has(String(statuses[currentNodeId] || '').trim())) {
+        return currentNodeId;
+      }
+
+      const matchingNodes = nodeIds.filter((nodeId) => preferredStatusSet.has(String(statuses[nodeId] || '').trim()));
+      if (matchingNodes.length) {
+        return matchingNodes[matchingNodes.length - 1];
+      }
+
+      if (currentNodeId) {
+        const currentStatus = String(statuses[currentNodeId] || '').trim();
+        if (!['', 'pending', 'completed', 'manual_completed', 'skipped'].includes(currentStatus)) {
+          return currentNodeId;
+        }
+      }
+
+      return '';
+    }
+
+    function inferRecordNodeFromError(errorLike = null, state = {}) {
+      if (!errorLike || typeof errorLike !== 'object') {
+        return '';
+      }
+
+      return normalizeRecordNode(errorLike.failedNodeId)
+        || normalizeRecordNode(errorLike.nodeId)
+        || normalizeRecordNode(errorLike.currentNodeId);
+    }
+
+    function resolveAutoRunAccountRecordStatus(status, state = {}, errorLike = null) {
+      const normalizedStatus = String(status || '').trim().toLowerCase();
+      const explicitNode = extractNodeFromRecordStatus(status);
+      if (explicitNode) {
+        return `node:${explicitNode}:${normalizedStatus.endsWith(':stopped') ? 'stopped' : 'failed'}`;
+      }
+      if (normalizedStatus === 'failed') {
+        const failedNode = inferRecordNodeFromError(errorLike, state)
+          || inferRecordNodeFromState(state, ['failed', 'running']);
+        return failedNode ? `node:${failedNode}:failed` : status;
+      }
+
+      if (normalizedStatus === 'stopped') {
+        const stoppedNode = inferRecordNodeFromError(errorLike, state)
+          || inferRecordNodeFromState(state, ['stopped', 'running']);
+        return stoppedNode ? `node:${stoppedNode}:stopped` : status;
+      }
+
+      return status;
     }
 
     function formatAutoRunFailureReasons(reasons = []) {
@@ -167,7 +284,9 @@
               const retryCount = getAutoRunRoundRetryCount(item);
               const finalReason = item.finalFailureReason || item.failureReasons[item.failureReasons.length - 1] || '未知错误';
               const reasonSummary = formatAutoRunFailureReasons(item.failureReasons);
-              return `第 ${item.round} 轮（重试 ${retryCount} 次，最终原因：${finalReason}；失败记录：${reasonSummary}）`;
+              return !reasonSummary || reasonSummary === finalReason
+                ? `第 ${item.round} 轮（重试 ${retryCount} 次，最终原因：${finalReason}）`
+                : `第 ${item.round} 轮（重试 ${retryCount} 次，最终原因：${finalReason}；失败记录：${reasonSummary}）`;
             })
             .join('；')}`,
           'error'
@@ -348,7 +467,7 @@
 
       let successfulRuns = roundSummaries.filter((item) => item.status === 'success').length;
       const initialState = await getState();
-      const initialPhase = continueCurrentOnFirstAttempt && getRunningSteps(initialState.stepStatuses, initialState).length
+      const initialPhase = continueCurrentOnFirstAttempt && getRunningWorkflowNodes(initialState).length
         ? 'waiting_step'
         : 'running';
       const showResumePosition = continueCurrentOnFirstAttempt || resumeCurrentRun > 1 || resumeAttemptRun > 1;
@@ -383,24 +502,25 @@
             autoRunAttemptRun: attemptRun,
           });
           roundSummary.attempts = attemptRun;
-          let startStep = 1;
+          const defaultStartNodeId = typeof runAutoSequenceFromNode === 'function' ? 'open-chatgpt' : 1;
+          let startNodeId = defaultStartNodeId;
           let useExistingProgress = false;
 
           if (reuseExistingProgress) {
             let currentState = await getState();
-            if (getRunningSteps(currentState.stepStatuses, currentState).length) {
-              currentState = await waitForRunningStepsToFinish({
+            if (getRunningWorkflowNodes(currentState).length) {
+              currentState = await waitForRunningWorkflowNodesToFinish({
                 currentRun: targetRun,
                 totalRuns,
                 attemptRun,
               });
             }
-            const resumeStep = getFirstUnfinishedStep(currentState.stepStatuses, currentState);
-            if (resumeStep && hasSavedProgress(currentState.stepStatuses, currentState)) {
-              startStep = resumeStep;
+            const resumeNodeId = getFirstUnfinishedWorkflowNode(currentState);
+            if (resumeNodeId && hasSavedWorkflowProgress(currentState)) {
+              startNodeId = resumeNodeId;
               useExistingProgress = true;
-            } else if (hasSavedProgress(currentState.stepStatuses, currentState)) {
-              await addLog('检测到当前流程已处理完成，本轮将改为从步骤 1 重新开始。', 'info');
+            } else if (hasSavedWorkflowProgress(currentState)) {
+              await addLog('检测到当前流程已处理完成，本轮将改为从首个节点重新开始。', 'info');
             }
           }
 
@@ -454,7 +574,7 @@
             forceFreshTabsNextRun = false;
           }
 
-          const appendRoundRecordIfNeeded = async (status, reason = '') => {
+          const appendRoundRecordIfNeeded = async (status, reason = '', errorLike = null) => {
             if (roundRecordAppended) {
               return;
             }
@@ -463,7 +583,9 @@
               return;
             }
 
-            const record = await appendAccountRunRecord(status, null, reason);
+            const recordState = await getState();
+            const recordStatus = resolveAutoRunAccountRecordStatus(status, recordState, errorLike);
+            const record = await appendAccountRunRecord(recordStatus, recordState, reason);
             if (record) {
               roundRecordAppended = true;
             }
@@ -478,7 +600,7 @@
               sessionId,
             });
 
-            if (!useExistingProgress && startStep === 1 && typeof ensureHotmailMailboxReadyForAutoRunRound === 'function') {
+            if (!useExistingProgress && startNodeId === defaultStartNodeId && typeof ensureHotmailMailboxReadyForAutoRunRound === 'function') {
               await ensureHotmailMailboxReadyForAutoRunRound({
                 targetRun,
                 totalRuns,
@@ -487,7 +609,7 @@
               });
             }
 
-            await runAutoSequenceFromStep(startStep, {
+            await runAutoSequenceFromWorkflowNode(startNodeId, {
               targetRun,
               totalRuns,
               attemptRuns: attemptRun,
@@ -505,7 +627,7 @@
           } catch (err) {
             if (isStopError(err)) {
               stoppedEarly = true;
-              await appendRoundRecordIfNeeded('stopped', getErrorMessage(err));
+              await appendRoundRecordIfNeeded('stopped', getErrorMessage(err), err);
               await addLog(`第 ${targetRun}/${totalRuns} 轮已被用户停止`, 'warn');
               await broadcastAutoRunStatus('stopped', {
                 currentRun: targetRun,
@@ -526,19 +648,20 @@
               && !blockedByPhoneNoSupply
               && typeof isAddPhoneAuthFailure === 'function'
               && isAddPhoneAuthFailure(err);
-            const blockedByGoPayManualIntervention = typeof isGoPayManualInterventionRequiredFailure === 'function'
-              && isGoPayManualInterventionRequiredFailure(err);
             const blockedByPlusNonFreeTrial = typeof isPlusCheckoutNonFreeTrialFailure === 'function'
               && isPlusCheckoutNonFreeTrialFailure(err);
+            const blockedByGpcTaskEnded = typeof isGpcTaskEndedFailure === 'function'
+              ? isGpcTaskEndedFailure(err)
+              : /GPC_TASK_ENDED::/i.test(err?.message || String(err || ''));
             const blockedBySignupUserAlreadyExists = typeof isSignupUserAlreadyExistsFailure === 'function'
               && !keepSameEmailUntilAddPhone
               && isSignupUserAlreadyExistsFailure(err);
             const blockedByStep4Route405 = typeof isStep4Route405RecoveryLimitFailure === 'function'
               && isStep4Route405RecoveryLimitFailure(err);
             const canRetry = !blockedByAddPhone
-              && !blockedByGoPayManualIntervention
               && !blockedByPhoneNoSupply
               && !blockedByPlusNonFreeTrial
+              && !blockedByGpcTaskEnded
               && !blockedBySignupUserAlreadyExists
               && autoRunSkipFailures
               && attemptRun < maxAttemptsForRound;
@@ -553,7 +676,7 @@
               await setState({
                 autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
               });
-              await appendRoundRecordIfNeeded('failed', reason);
+              await appendRoundRecordIfNeeded('failed', reason, err);
               cancelPendingCommands('当前轮因认证流程进入 add-phone 已终止。');
               await broadcastStopToContentScripts();
               if (!autoRunSkipFailures) {
@@ -582,36 +705,13 @@
               break;
             }
 
-            if (blockedByGoPayManualIntervention) {
-              roundSummary.status = 'failed';
-              roundSummary.finalFailureReason = reason;
-              await setState({
-                autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
-              });
-              await appendRoundRecordIfNeeded('failed', reason);
-              cancelPendingCommands('当前轮因 GoPay 技术错误需人工处理已终止。');
-              await broadcastStopToContentScripts();
-              await addLog(
-                `第 ${targetRun}/${totalRuns} 轮检测到 GoPay 技术错误，当前自动运行将停止并保留支付页面，等待人工处理。`,
-                'warn'
-              );
-              stoppedEarly = true;
-              await broadcastAutoRunStatus('stopped', {
-                currentRun: targetRun,
-                totalRuns,
-                attemptRun,
-                sessionId: 0,
-              });
-              break;
-            }
-
             if (blockedByPhoneNoSupply) {
               roundSummary.status = 'failed';
               roundSummary.finalFailureReason = reason;
               await setState({
                 autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
               });
-              await appendRoundRecordIfNeeded('failed', reason);
+              await appendRoundRecordIfNeeded('failed', reason, err);
               cancelPendingCommands('当前轮因接码号池暂无可用号码已终止。');
               await broadcastStopToContentScripts();
               if (!autoRunSkipFailures) {
@@ -646,7 +746,7 @@
               await setState({
                 autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
               });
-              await appendRoundRecordIfNeeded('failed', reason);
+              await appendRoundRecordIfNeeded('failed', reason, err);
               cancelPendingCommands('当前轮因 Plus 免费试用资格不可用已终止。');
               await broadcastStopToContentScripts();
               if (!autoRunSkipFailures) {
@@ -675,13 +775,48 @@
               break;
             }
 
+            if (blockedByGpcTaskEnded) {
+              roundSummary.status = 'failed';
+              roundSummary.finalFailureReason = reason;
+              await setState({
+                autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
+              });
+              await appendRoundRecordIfNeeded('failed', reason, err);
+              cancelPendingCommands('当前轮因 GPC 任务已结束。');
+              await broadcastStopToContentScripts();
+              if (!autoRunSkipFailures) {
+                await addLog(
+                  `第 ${targetRun}/${totalRuns} 轮 GPC 任务已结束，自动重试未开启，当前自动运行将停止。`,
+                  'warn'
+                );
+                stoppedEarly = true;
+                await broadcastAutoRunStatus('stopped', {
+                  currentRun: targetRun,
+                  totalRuns,
+                  attemptRun,
+                  sessionId: 0,
+                });
+                break;
+              }
+
+              await addLog(`第 ${targetRun}/${totalRuns} 轮 GPC 任务已结束，本轮将直接失败并跳过剩余重试。`, 'warn');
+              await addLog(
+                targetRun < totalRuns
+                  ? `第 ${targetRun}/${totalRuns} 轮因 GPC 任务结束提前结束，自动流程将继续下一轮。`
+                  : `第 ${targetRun}/${totalRuns} 轮因 GPC 任务结束提前结束，已无后续轮次，本次自动运行结束。`,
+                'warn'
+              );
+              forceFreshTabsNextRun = true;
+              break;
+            }
+
             if (blockedBySignupUserAlreadyExists) {
               roundSummary.status = 'failed';
               roundSummary.finalFailureReason = reason;
               await setState({
                 autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
               });
-              await appendRoundRecordIfNeeded('failed', reason);
+              await appendRoundRecordIfNeeded('failed', reason, err);
               cancelPendingCommands('当前轮因 user_already_exists 已终止。');
               await broadcastStopToContentScripts();
               if (!autoRunSkipFailures) {
@@ -716,7 +851,7 @@
               await setState({
                 autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
               });
-              await appendRoundRecordIfNeeded('failed', reason);
+              await appendRoundRecordIfNeeded('failed', reason, err);
               cancelPendingCommands('当前轮因步骤 4 连续 405 错误已终止。');
               await broadcastStopToContentScripts();
               if (!autoRunSkipFailures) {
@@ -772,7 +907,7 @@
               } catch (sleepError) {
                 if (isStopError(sleepError)) {
                   stoppedEarly = true;
-                  await appendRoundRecordIfNeeded('stopped', getErrorMessage(sleepError));
+                  await appendRoundRecordIfNeeded('stopped', getErrorMessage(sleepError), sleepError);
                   await addLog(`第 ${targetRun}/${totalRuns} 轮已被用户停止`, 'warn');
                   await broadcastAutoRunStatus('stopped', {
                     currentRun: targetRun,
@@ -796,7 +931,7 @@
               } catch (sleepError) {
                 if (isStopError(sleepError)) {
                   stoppedEarly = true;
-                  await appendRoundRecordIfNeeded('stopped', getErrorMessage(sleepError));
+                  await appendRoundRecordIfNeeded('stopped', getErrorMessage(sleepError), sleepError);
                   await addLog(`第 ${targetRun}/${totalRuns} 轮已被用户停止`, 'warn');
                   await broadcastAutoRunStatus('stopped', {
                     currentRun: targetRun,
@@ -818,7 +953,7 @@
             await setState({
               autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
             });
-            await appendRoundRecordIfNeeded('failed', reason);
+            await appendRoundRecordIfNeeded('failed', reason, err);
             if (!autoRunSkipFailures) {
               cancelPendingCommands('当前轮执行失败。');
               await broadcastStopToContentScripts();
@@ -933,6 +1068,7 @@
       handleAutoRunLoopUnhandledError,
       logAutoRunFinalSummary,
       normalizeAutoRunRoundSummary,
+      resolveAutoRunAccountRecordStatus,
       serializeAutoRunRoundSummaries,
       skipAutoRunCountdown,
       startAutoRunLoop,

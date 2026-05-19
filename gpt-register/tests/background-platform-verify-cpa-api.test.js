@@ -1,4 +1,4 @@
-const assert = require('node:assert/strict');
+﻿const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 
@@ -17,7 +17,7 @@ function createDeps(overrides = {}) {
       },
     },
     closeConflictingTabsForSource: async () => {},
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       completed.push({ step, payload });
     },
     ensureContentScriptReadyOnTab: async () => {},
@@ -40,6 +40,20 @@ function createDeps(overrides = {}) {
   };
 
   return { deps, logs, completed, uiCalls };
+}
+
+function loadStep10WithSub2Api() {
+  const sub2apiSource = fs.readFileSync('background/sub2api-api.js', 'utf8');
+  const step10Source = fs.readFileSync('background/steps/platform-verify.js', 'utf8');
+  return new Function('self', `${sub2apiSource}\n${step10Source}; return self.MultiPageBackgroundStep10;`)({});
+}
+
+function createSub2ApiResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(payload),
+  };
 }
 
 test('platform verify module submits CPA callback via management API first', async () => {
@@ -83,7 +97,7 @@ test('platform verify module submits CPA callback via management API first', asy
     assert.equal(uiCalled, false);
     assert.deepStrictEqual(completed, [
       {
-        step: 10,
+        step: 'platform-verify',
         payload: {
           localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
           verifiedStatus: 'CPA API 回调提交成功',
@@ -240,11 +254,109 @@ test('platform verify module rejects callback when cpa oauth state mismatches', 
   }
 });
 
-test('platform verify module sends Plus visible step 13 to SUB2API panel', async () => {
-  const source = fs.readFileSync('background/steps/platform-verify.js', 'utf8');
+test('platform verify module submits Plus visible step 13 to SUB2API via direct API', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
   const sentMessages = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const parsed = new URL(url);
+    const body = options.body ? JSON.parse(options.body) : null;
+    fetchCalls.push({ path: parsed.pathname, method: options.method || 'GET', body });
 
-  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep10;`)({});
+    if (parsed.pathname === '/api/v1/auth/login') {
+      return createSub2ApiResponse({ code: 0, data: { access_token: 'admin-token' } });
+    }
+    if (parsed.pathname === '/api/v1/admin/groups/all') {
+      return createSub2ApiResponse({ code: 0, data: [{ id: 5, name: 'codex', platform: 'openai' }] });
+    }
+    if (parsed.pathname === '/api/v1/admin/openai/exchange-code') {
+      return createSub2ApiResponse({
+        code: 0,
+        data: {
+          access_token: 'openai-access',
+          refresh_token: 'openai-refresh',
+          email: 'flow@example.com',
+        },
+      });
+    }
+    if (parsed.pathname === '/api/v1/admin/accounts') {
+      return createSub2ApiResponse({ code: 0, data: { id: 11 } });
+    }
+    return createSub2ApiResponse({ code: 1, message: `unexpected path ${parsed.pathname}` }, 404);
+  };
+
+  const api = loadStep10WithSub2Api();
+  const { deps, completed } = createDeps({
+    getPanelMode: () => 'sub2api',
+    getTabId: async () => 91,
+    isTabAlive: async () => true,
+    sendToContentScript: async (sourceName, message, options) => {
+      sentMessages.push({ sourceName, message, options });
+      return { ok: true };
+    },
+  });
+  const executor = api.createStep10Executor(deps);
+
+  try {
+    await executor.executeStep10({
+      panelMode: 'sub2api',
+      visibleStep: 13,
+      localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
+      sub2apiUrl: 'https://sub.example/admin/accounts',
+      sub2apiEmail: 'admin@example.com',
+      sub2apiPassword: 'secret',
+      sub2apiGroupName: 'codex',
+      sub2apiSessionId: 'session-1',
+      sub2apiOAuthState: 'oauth-state',
+    });
+
+    const exchangeCall = fetchCalls.find((call) => call.path === '/api/v1/admin/openai/exchange-code');
+    const createCall = fetchCalls.find((call) => call.path === '/api/v1/admin/accounts');
+    assert.equal(sentMessages.length, 0);
+    assert.equal(exchangeCall.body.code, 'callback-code');
+    assert.equal(exchangeCall.body.state, 'oauth-state');
+    assert.deepStrictEqual(createCall.body.group_ids, [5]);
+    assert.deepStrictEqual(completed, [{
+      step: 'platform-verify',
+      payload: {
+        localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
+        verifiedStatus: 'SUB2API 已创建账号 #11',
+      },
+    }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('platform verify module forwards SUB2API account priority to direct create API', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
+  const sentMessages = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const parsed = new URL(url);
+    const body = options.body ? JSON.parse(options.body) : null;
+    fetchCalls.push({ path: parsed.pathname, method: options.method || 'GET', body });
+
+    if (parsed.pathname === '/api/v1/auth/login') {
+      return createSub2ApiResponse({ code: 0, data: { access_token: 'admin-token' } });
+    }
+    if (parsed.pathname === '/api/v1/admin/openai/exchange-code') {
+      return createSub2ApiResponse({
+        code: 0,
+        data: {
+          access_token: 'openai-access',
+          refresh_token: 'openai-refresh',
+          email: 'flow@example.com',
+        },
+      });
+    }
+    if (parsed.pathname === '/api/v1/admin/accounts') {
+      return createSub2ApiResponse({ code: 0, data: { id: 11 } });
+    }
+    return createSub2ApiResponse({ code: 1, message: `unexpected path ${parsed.pathname}` }, 404);
+  };
+
+  const api = loadStep10WithSub2Api();
   const { deps } = createDeps({
     getPanelMode: () => 'sub2api',
     getTabId: async () => 91,
@@ -256,19 +368,23 @@ test('platform verify module sends Plus visible step 13 to SUB2API panel', async
   });
   const executor = api.createStep10Executor(deps);
 
-  await executor.executeStep10({
-    panelMode: 'sub2api',
-    visibleStep: 13,
-    localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
-    sub2apiUrl: 'https://sub.example/admin/accounts',
-    sub2apiEmail: 'admin@example.com',
-    sub2apiPassword: 'secret',
-    sub2apiSessionId: 'session-1',
-    sub2apiOAuthState: 'oauth-state',
-  });
+  try {
+    await executor.executeStep10({
+      panelMode: 'sub2api',
+      localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
+      sub2apiUrl: 'https://sub.example/admin/accounts',
+      sub2apiEmail: 'admin@example.com',
+      sub2apiPassword: 'secret',
+      sub2apiSessionId: 'session-1',
+      sub2apiOAuthState: 'oauth-state',
+      sub2apiGroupId: 5,
+      sub2apiAccountPriority: 2,
+    });
 
-  assert.equal(sentMessages.length, 1);
-  assert.equal(sentMessages[0].sourceName, 'sub2api-panel');
-  assert.equal(sentMessages[0].message.step, 13);
+    const createCall = fetchCalls.find((call) => call.path === '/api/v1/admin/accounts');
+    assert.equal(sentMessages.length, 0);
+    assert.equal(createCall.body.priority, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
-

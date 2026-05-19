@@ -1,4 +1,4 @@
-const assert = require('node:assert/strict');
+﻿const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 
@@ -35,7 +35,7 @@ test('platform verify module supports codex2api protocol callback exchange', asy
       },
       chrome: {},
       closeConflictingTabsForSource: async () => {},
-      completeStepFromBackground: async (step, payload) => {
+      completeNodeFromBackground: async (step, payload) => {
         completed.push({ step, payload });
       },
       ensureContentScriptReadyOnTab: async () => {},
@@ -68,7 +68,7 @@ test('platform verify module supports codex2api protocol callback exchange', asy
     ]);
     assert.deepStrictEqual(completed, [
       {
-        step: 10,
+        step: 'platform-verify',
         payload: {
           localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
           verifiedStatus: 'OAuth 账号 flow@example.com 添加成功',
@@ -80,13 +80,14 @@ test('platform verify module supports codex2api protocol callback exchange', asy
   }
 });
 
-test('platform verify retries transient SUB2API oauth/token exchange errors before failing', async () => {
+test('platform verify retries transient SUB2API oauth/token exchange errors before succeeding', async () => {
   const source = fs.readFileSync('background/steps/platform-verify.js', 'utf8');
   const api = new Function('self', `${source}; return self.MultiPageBackgroundStep10;`)({});
 
   const logs = [];
   const attempts = [];
   let callCount = 0;
+  let contentScriptCalled = false;
   const executor = api.createStep10Executor({
     addLog: async (message, level = 'info') => {
       logs.push({ message, level });
@@ -97,7 +98,7 @@ test('platform verify retries transient SUB2API oauth/token exchange errors befo
       },
     },
     closeConflictingTabsForSource: async () => {},
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     ensureContentScriptReadyOnTab: async () => {},
     getPanelMode: () => 'sub2api',
     getTabId: async () => 12,
@@ -107,16 +108,23 @@ test('platform verify retries transient SUB2API oauth/token exchange errors befo
     normalizeSub2ApiUrl: () => 'https://sub2api.example.com/admin/accounts',
     rememberSourceLastUrl: async () => {},
     reuseOrCreateTab: async () => 12,
-    sendToContentScript: async (_source, message) => {
-      attempts.push(message.type);
-      callCount += 1;
-      if (callCount === 1) {
-        return {
-          error: 'request failed: Post "https://auth.openai.com/oauth/token": unexpected EOF',
-        };
-      }
-      return { ok: true };
+    sendToContentScript: async () => {
+      contentScriptCalled = true;
+      return {};
     },
+    createSub2ApiApi: () => ({
+      submitOpenAiCallback: async () => {
+        attempts.push('direct-api');
+        callCount += 1;
+        if (callCount === 1) {
+          throw new Error('request failed: Post "https://auth.openai.com/oauth/token": unexpected EOF');
+        }
+        return {
+          localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
+          verifiedStatus: 'SUB2API 已创建账号 #11',
+        };
+      },
+    }),
     sendToContentScriptResilient: async () => ({}),
     shouldBypassStep9ForLocalCpa: () => false,
     SUB2API_STEP9_RESPONSE_TIMEOUT_MS: 120000,
@@ -133,7 +141,8 @@ test('platform verify retries transient SUB2API oauth/token exchange errors befo
   });
 
   assert.equal(callCount, 2);
-  assert.deepStrictEqual(attempts, ['EXECUTE_STEP', 'EXECUTE_STEP']);
+  assert.equal(contentScriptCalled, false);
+  assert.deepStrictEqual(attempts, ['direct-api', 'direct-api']);
   assert.equal(
     logs.some((entry) => /临时网络波动/.test(entry.message) && entry.level === 'warn'),
     true
@@ -146,6 +155,7 @@ test('platform verify retries transient SUB2API token_exchange_user_error before
 
   const logs = [];
   let callCount = 0;
+  let contentScriptCalled = false;
   const executor = api.createStep10Executor({
     addLog: async (message, level = 'info') => {
       logs.push({ message, level });
@@ -156,7 +166,7 @@ test('platform verify retries transient SUB2API token_exchange_user_error before
       },
     },
     closeConflictingTabsForSource: async () => {},
-    completeStepFromBackground: async () => {},
+    completeNodeFromBackground: async () => {},
     ensureContentScriptReadyOnTab: async () => {},
     getPanelMode: () => 'sub2api',
     getTabId: async () => 12,
@@ -167,14 +177,21 @@ test('platform verify retries transient SUB2API token_exchange_user_error before
     rememberSourceLastUrl: async () => {},
     reuseOrCreateTab: async () => 12,
     sendToContentScript: async () => {
-      callCount += 1;
-      if (callCount === 1) {
-        return {
-          error: 'token exchange failed: status 400, body: { "error": { "message": "Invalid request. Please try again later.", "type": "invalid_request_error", "param": null, "code": "token_exchange_user_error" } }',
-        };
-      }
+      contentScriptCalled = true;
       return { ok: true };
     },
+    createSub2ApiApi: () => ({
+      submitOpenAiCallback: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          throw new Error('token exchange failed: status 400, body: { "error": { "message": "Invalid request. Please try again later.", "type": "invalid_request_error", "param": null, "code": "token_exchange_user_error" } }');
+        }
+        return {
+          localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
+          verifiedStatus: 'SUB2API 已创建账号 #11',
+        };
+      },
+    }),
     sendToContentScriptResilient: async () => ({}),
     shouldBypassStep9ForLocalCpa: () => false,
     SUB2API_STEP9_RESPONSE_TIMEOUT_MS: 120000,
@@ -191,6 +208,7 @@ test('platform verify retries transient SUB2API token_exchange_user_error before
   });
 
   assert.equal(callCount, 2);
+  assert.equal(contentScriptCalled, false);
   assert.equal(
     logs.some((entry) => /临时网络波动/.test(entry.message) && entry.level === 'warn'),
     true

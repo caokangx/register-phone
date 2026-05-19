@@ -55,6 +55,7 @@ test('normalizeCloudflareTempEmailMailApiMessages extracts sender, subject, code
       {
         id: 'mail-1',
         address: 'user@example.com',
+        original_recipient: 'Forwarded.User@Duck.com',
         created_at: '2026-04-13T09:15:00.000Z',
         raw: [
           'From: OpenAI <noreply@tm.openai.com>',
@@ -70,6 +71,7 @@ test('normalizeCloudflareTempEmailMailApiMessages extracts sender, subject, code
   assert.equal(messages.length, 1);
   assert.equal(messages[0].id, 'mail-1');
   assert.equal(messages[0].address, 'user@example.com');
+  assert.equal(messages[0].originalRecipient, 'forwarded.user@duck.com');
   assert.equal(messages[0].subject, 'OpenAI verification code');
   assert.equal(messages[0].from.emailAddress.address, 'OpenAI <noreply@tm.openai.com>');
   assert.match(messages[0].bodyPreview, /654321/);

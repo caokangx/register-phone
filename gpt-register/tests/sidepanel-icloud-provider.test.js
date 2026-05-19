@@ -456,6 +456,10 @@ function syncAutoRunState() {}
 function syncPasswordField() {}
 function renderStepStatuses() {}
 function setLocalCpaStep9Mode() {}
+function normalizePanelMode(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'sub2api' || normalized === 'codex2api' ? normalized : 'cpa';
+}
 function isCustomMailProvider() { return false; }
 function setMail2925Mode() {}
 function normalizeIcloudFetchMode(value) { return String(value || '') === 'always_new' ? 'always_new' : 'reuse_existing'; }

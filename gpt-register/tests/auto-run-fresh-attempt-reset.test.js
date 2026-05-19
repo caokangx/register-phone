@@ -72,6 +72,33 @@ const AUTO_RUN_RETRY_DELAY_MS = 3000;
 const AUTO_RUN_TIMER_KIND_BETWEEN_ROUNDS = 'between_rounds';
 const AUTO_RUN_TIMER_KIND_BEFORE_RETRY = 'before_retry';
 const STEP_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const STEP_NODE_IDS = {
+  1: 'open-chatgpt',
+  2: 'submit-signup-email',
+  3: 'fill-password',
+  4: 'fetch-signup-code',
+  5: 'fill-profile',
+  6: 'wait-registration-success',
+  7: 'oauth-login',
+  8: 'fetch-login-code',
+  9: 'confirm-oauth',
+  10: 'platform-verify',
+};
+const NODE_STEP_IDS = Object.fromEntries(Object.entries(STEP_NODE_IDS).map(([step, nodeId]) => [nodeId, Number(step)]));
+function getNodeIdByStepForState(step) {
+  return STEP_NODE_IDS[Number(step)] || '';
+}
+function getStepIdByNodeIdForState(nodeId) {
+  return NODE_STEP_IDS[String(nodeId || '').trim()] || null;
+}
+function projectStepStatusesToNodeStatuses(stepStatuses = {}) {
+  const nodeStatuses = {};
+  for (const [step, status] of Object.entries(stepStatuses || {})) {
+    const nodeId = getNodeIdByStepForState(step);
+    if (nodeId) nodeStatuses[nodeId] = status;
+  }
+  return nodeStatuses;
+}
 const DEFAULT_STATE = {
   stepStatuses: {
     1: 'pending',
@@ -86,6 +113,7 @@ const DEFAULT_STATE = {
     10: 'pending',
   },
 };
+DEFAULT_STATE.nodeStatuses = projectStepStatusesToNodeStatuses(DEFAULT_STATE.stepStatuses);
 
 let stopRequested = false;
 let runCalls = 0;
@@ -137,6 +165,10 @@ async function getState() {
   return {
     ...currentState,
     stepStatuses: { ...(currentState.stepStatuses || {}) },
+    nodeStatuses: {
+      ...projectStepStatusesToNodeStatuses(currentState.stepStatuses || {}),
+      ...(currentState.nodeStatuses || {}),
+    },
     tabRegistry: { ...(currentState.tabRegistry || {}) },
     sourceLastUrls: { ...(currentState.sourceLastUrls || {}) },
   };
@@ -149,6 +181,9 @@ async function setState(updates) {
     stepStatuses: updates.stepStatuses
       ? { ...updates.stepStatuses }
       : currentState.stepStatuses,
+    nodeStatuses: updates.nodeStatuses
+      ? { ...updates.nodeStatuses }
+      : currentState.nodeStatuses,
     tabRegistry: updates.tabRegistry
       ? { ...updates.tabRegistry }
       : currentState.tabRegistry,
@@ -163,6 +198,7 @@ async function resetState() {
   currentState = {
     ...DEFAULT_STATE,
     stepStatuses: { ...DEFAULT_STATE.stepStatuses },
+    nodeStatuses: { ...DEFAULT_STATE.nodeStatuses },
     vpsUrl: prev.vpsUrl,
     vpsPassword: prev.vpsPassword,
     customPassword: prev.customPassword,
@@ -262,6 +298,18 @@ async function runAutoSequenceFromStep() {
       9: 'completed',
       10: 'completed',
     },
+    nodeStatuses: projectStepStatusesToNodeStatuses({
+      1: 'completed',
+      2: 'completed',
+      3: 'completed',
+      4: 'completed',
+      5: 'completed',
+      6: 'completed',
+      7: 'completed',
+      8: 'completed',
+      9: 'completed',
+      10: 'completed',
+    }),
     tabRegistry: {
       'signup-page': { tabId: 88, ready: true },
     },
@@ -269,6 +317,26 @@ async function runAutoSequenceFromStep() {
       'signup-page': 'https://auth.openai.com/authorize',
     },
   };
+}
+
+async function runAutoSequenceFromNode(nodeId, context = {}) {
+  return runAutoSequenceFromStep(getStepIdByNodeIdForState(nodeId) || 1, context);
+}
+
+function getFirstUnfinishedNodeId() {
+  return 'open-chatgpt';
+}
+
+function getRunningNodeIds() {
+  return [];
+}
+
+function hasSavedNodeProgress() {
+  return false;
+}
+
+async function waitForRunningNodesToFinish() {
+  return getState();
 }
 
 ${helperBundle}
@@ -303,24 +371,24 @@ const controller = self.MultiPageBackgroundAutoRunController.createAutoRunContro
   createAutoRunSessionId,
   getAutoRunStatusPayload,
   getErrorMessage,
-  getFirstUnfinishedStep,
+  getFirstUnfinishedNodeId,
   getPendingAutoRunTimerPlan,
-  getRunningSteps,
+  getRunningNodeIds,
   getState,
   getStopRequested: () => stopRequested,
-  hasSavedProgress,
+  hasSavedNodeProgress,
   isRestartCurrentAttemptError,
   isStopError,
   launchAutoRunTimerPlan,
   normalizeAutoRunFallbackThreadIntervalMinutes,
   persistAutoRunTimerPlan,
   resetState,
-  runAutoSequenceFromStep,
+  runAutoSequenceFromNode,
   runtime,
   setState,
   sleepWithStop,
   throwIfAutoRunSessionStopped,
-  waitForRunningStepsToFinish,
+  waitForRunningNodesToFinish,
   throwIfStopped,
   chrome,
 });

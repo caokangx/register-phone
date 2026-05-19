@@ -5,6 +5,119 @@ const fs = require('node:fs');
 const source = fs.readFileSync('background/auto-run-controller.js', 'utf8');
 const globalScope = {};
 const api = new Function('self', `${source}; return self.MultiPageBackgroundAutoRunController;`)(globalScope);
+const rawCreateAutoRunController = api.createAutoRunController.bind(api);
+
+const TEST_STEP_NODE_IDS = Object.freeze({
+  1: 'open-chatgpt',
+  2: 'submit-signup-email',
+  3: 'fill-password',
+  4: 'fetch-signup-code',
+  5: 'fill-profile',
+  6: 'wait-registration-success',
+  7: 'oauth-login',
+  8: 'fetch-login-code',
+  9: 'confirm-oauth',
+  10: 'platform-verify',
+});
+
+const TEST_NODE_STEP_IDS = Object.fromEntries(
+  Object.entries(TEST_STEP_NODE_IDS).map(([step, nodeId]) => [nodeId, Number(step)])
+);
+
+function getTestNodeIdByStep(step) {
+  return TEST_STEP_NODE_IDS[Number(step)] || '';
+}
+
+function getTestStepIdByNodeId(nodeId) {
+  return TEST_NODE_STEP_IDS[String(nodeId || '').trim()] || null;
+}
+
+function projectStepStatusesToNodeStatuses(stepStatuses = {}) {
+  const nodeStatuses = {};
+  for (const [step, status] of Object.entries(stepStatuses || {})) {
+    const nodeId = getTestNodeIdByStep(step);
+    if (nodeId) {
+      nodeStatuses[nodeId] = status;
+    }
+  }
+  return nodeStatuses;
+}
+
+function normalizeAutoRunControllerTestDeps(deps = {}) {
+  const normalized = { ...deps };
+
+  if (typeof normalized.getState === 'function') {
+    const getState = normalized.getState;
+    normalized.getState = async () => {
+      const state = await getState();
+      return {
+        ...state,
+        nodeStatuses: {
+          ...projectStepStatusesToNodeStatuses(state?.stepStatuses || {}),
+          ...(state?.nodeStatuses || {}),
+        },
+      };
+    };
+  }
+
+  if (
+    typeof normalized.runAutoSequenceFromNode !== 'function'
+    && typeof normalized.runAutoSequenceFromStep === 'function'
+  ) {
+    const runAutoSequenceFromStep = normalized.runAutoSequenceFromStep;
+    normalized.runAutoSequenceFromNode = async (nodeId, context = {}) => (
+      runAutoSequenceFromStep(getTestStepIdByNodeId(nodeId) || 1, context)
+    );
+  }
+
+  if (
+    typeof normalized.getFirstUnfinishedNodeId !== 'function'
+    && typeof normalized.getFirstUnfinishedStep === 'function'
+  ) {
+    const getFirstUnfinishedStep = normalized.getFirstUnfinishedStep;
+    normalized.getFirstUnfinishedNodeId = (statuses = {}, state = {}) => (
+      getTestNodeIdByStep(getFirstUnfinishedStep(statuses, state))
+    );
+  }
+
+  if (
+    typeof normalized.getRunningNodeIds !== 'function'
+    && typeof normalized.getRunningSteps === 'function'
+  ) {
+    const getRunningSteps = normalized.getRunningSteps;
+    normalized.getRunningNodeIds = (statuses = {}, state = {}) => (
+      getRunningSteps(statuses, state)
+        .map(getTestNodeIdByStep)
+        .filter(Boolean)
+    );
+  }
+
+  if (
+    typeof normalized.hasSavedNodeProgress !== 'function'
+    && typeof normalized.hasSavedProgress === 'function'
+  ) {
+    normalized.hasSavedNodeProgress = normalized.hasSavedProgress;
+  }
+
+  if (
+    typeof normalized.waitForRunningNodesToFinish !== 'function'
+    && typeof normalized.waitForRunningStepsToFinish === 'function'
+  ) {
+    normalized.waitForRunningNodesToFinish = normalized.waitForRunningStepsToFinish;
+  }
+
+  delete normalized.runAutoSequenceFromStep;
+  delete normalized.getFirstUnfinishedStep;
+  delete normalized.getRunningSteps;
+  delete normalized.hasSavedProgress;
+  delete normalized.waitForRunningStepsToFinish;
+
+  return normalized;
+}
+
+api.createAutoRunController = (deps = {}) => (
+  rawCreateAutoRunController(normalizeAutoRunControllerTestDeps(deps))
+);
 
 test('auto-run controller skips add-phone failures to the next round instead of stopping when auto retry is enabled', async () => {
   const events = {
@@ -330,6 +443,167 @@ test('auto-run controller treats phone-number supply exhaustion as round-fatal a
   assert.equal(events.broadcasts.some(({ phase }) => phase === 'stopped'), false);
   assert.equal(runtime.state.autoRunActive, false);
   assert.equal(runtime.state.autoRunSessionId, 0);
+});
+
+test('auto-run controller treats ended GPC task as round-fatal and skips same-round retries', async () => {
+  const events = {
+    logs: [],
+    broadcasts: [],
+    accountRecords: [],
+    runCalls: 0,
+  };
+
+  let currentState = {
+    stepStatuses: {},
+    vpsUrl: 'https://example.com/vps',
+    vpsPassword: 'secret',
+    customPassword: '',
+    autoRunSkipFailures: true,
+    autoRunFallbackThreadIntervalMinutes: 0,
+    autoRunDelayEnabled: false,
+    autoRunDelayMinutes: 30,
+    autoStepDelaySeconds: null,
+    mailProvider: '163',
+    emailGenerator: 'duck',
+    gmailBaseEmail: '',
+    mail2925BaseEmail: '',
+    emailPrefix: 'demo',
+    inbucketHost: '',
+    inbucketMailbox: '',
+    cloudflareDomain: '',
+    cloudflareDomains: [],
+    tabRegistry: {},
+    sourceLastUrls: {},
+    autoRunRoundSummaries: [],
+  };
+
+  const runtime = {
+    state: {
+      autoRunActive: false,
+      autoRunCurrentRun: 0,
+      autoRunTotalRuns: 1,
+      autoRunAttemptRun: 0,
+      autoRunSessionId: 0,
+    },
+    get() {
+      return { ...this.state };
+    },
+    set(updates = {}) {
+      this.state = { ...this.state, ...updates };
+    },
+  };
+
+  let sessionSeed = 0;
+
+  const controller = api.createAutoRunController({
+    addLog: async (message, level = 'info') => {
+      events.logs.push({ message, level });
+    },
+    appendAccountRunRecord: async (status, _state, reason) => {
+      events.accountRecords.push({ status, reason });
+      return { status, reason };
+    },
+    AUTO_RUN_MAX_RETRIES_PER_ROUND: 3,
+    AUTO_RUN_RETRY_DELAY_MS: 3000,
+    AUTO_RUN_TIMER_KIND_BEFORE_RETRY: 'before_retry',
+    AUTO_RUN_TIMER_KIND_BETWEEN_ROUNDS: 'between_rounds',
+    broadcastAutoRunStatus: async (phase, payload = {}) => {
+      events.broadcasts.push({ phase, ...payload });
+      currentState = {
+        ...currentState,
+        autoRunning: ['scheduled', 'running', 'waiting_step', 'waiting_email', 'retrying', 'waiting_interval'].includes(phase),
+        autoRunPhase: phase,
+        autoRunCurrentRun: payload.currentRun ?? runtime.state.autoRunCurrentRun,
+        autoRunTotalRuns: payload.totalRuns ?? runtime.state.autoRunTotalRuns,
+        autoRunAttemptRun: payload.attemptRun ?? runtime.state.autoRunAttemptRun,
+        autoRunSessionId: payload.sessionId ?? runtime.state.autoRunSessionId,
+      };
+    },
+    broadcastStopToContentScripts: async () => {},
+    cancelPendingCommands: () => {},
+    clearStopRequest: () => {},
+    createAutoRunSessionId: () => {
+      sessionSeed += 1;
+      return sessionSeed;
+    },
+    getAutoRunStatusPayload: (phase, payload = {}) => ({
+      autoRunning: ['scheduled', 'running', 'waiting_step', 'waiting_email', 'retrying', 'waiting_interval'].includes(phase),
+      autoRunPhase: phase,
+      autoRunCurrentRun: payload.currentRun ?? 0,
+      autoRunTotalRuns: payload.totalRuns ?? 1,
+      autoRunAttemptRun: payload.attemptRun ?? 0,
+      autoRunSessionId: payload.sessionId ?? 0,
+    }),
+    getErrorMessage: (error) => String(error?.message || error || '').replace(/^GPC_TASK_ENDED::/i, ''),
+    getFirstUnfinishedStep: () => 1,
+    getPendingAutoRunTimerPlan: () => null,
+    getRunningSteps: () => [],
+    getState: async () => ({
+      ...currentState,
+      stepStatuses: { ...(currentState.stepStatuses || {}) },
+      tabRegistry: { ...(currentState.tabRegistry || {}) },
+      sourceLastUrls: { ...(currentState.sourceLastUrls || {}) },
+    }),
+    getStopRequested: () => false,
+    hasSavedProgress: () => false,
+    isAddPhoneAuthFailure: () => false,
+    isGpcTaskEndedFailure: (error) => /GPC_TASK_ENDED::/i.test(error?.message || String(error || '')),
+    isRestartCurrentAttemptError: () => false,
+    isStopError: (error) => (error?.message || String(error || '')) === '流程已被用户停止。',
+    launchAutoRunTimerPlan: async () => false,
+    normalizeAutoRunFallbackThreadIntervalMinutes: (value) => Math.max(0, Math.floor(Number(value) || 0)),
+    persistAutoRunTimerPlan: async () => ({}),
+    resetState: async () => {
+      currentState = {
+        ...currentState,
+        stepStatuses: {},
+        tabRegistry: {},
+        sourceLastUrls: {},
+      };
+    },
+    runAutoSequenceFromStep: async () => {
+      events.runCalls += 1;
+      if (events.runCalls === 1) {
+        throw new Error('GPC_TASK_ENDED::等待 OTP 超过 60 秒，任务已超时');
+      }
+    },
+    runtime,
+    setState: async (updates = {}) => {
+      currentState = {
+        ...currentState,
+        ...updates,
+        stepStatuses: updates.stepStatuses ? { ...updates.stepStatuses } : currentState.stepStatuses,
+        tabRegistry: updates.tabRegistry ? { ...updates.tabRegistry } : currentState.tabRegistry,
+        sourceLastUrls: updates.sourceLastUrls ? { ...updates.sourceLastUrls } : currentState.sourceLastUrls,
+      };
+    },
+    sleepWithStop: async () => {},
+    throwIfAutoRunSessionStopped: (sessionId) => {
+      if (sessionId && sessionId !== runtime.state.autoRunSessionId) {
+        throw new Error('流程已被用户停止。');
+      }
+    },
+    waitForRunningStepsToFinish: async () => currentState,
+    chrome: {
+      runtime: {
+        sendMessage() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+
+  await controller.autoRunLoop(2, {
+    autoRunSkipFailures: true,
+    mode: 'restart',
+  });
+
+  assert.equal(events.runCalls, 2, 'ended GPC task should fail current round and continue next round');
+  assert.equal(events.broadcasts.some(({ phase }) => phase === 'retrying'), false);
+  assert.equal(events.accountRecords.length, 1);
+  assert.equal(events.accountRecords[0].status, 'failed');
+  assert.match(events.accountRecords[0].reason, /等待 OTP/);
+  assert.ok(events.logs.some(({ message }) => /GPC 任务.*继续下一轮|继续下一轮/.test(message)));
 });
 
 test('auto-run controller keeps same-round retrying for step9 local replacement exhaustion errors', async () => {
@@ -1147,173 +1421,6 @@ test('auto-run controller retries 5sim rate limit failures instead of treating c
   assert.ok(events.logs.some(({ message }) => /自动重试/.test(message)));
   assert.equal(events.logs.some(({ message }) => /触发 add-phone\/手机号页/.test(message)), false);
   assert.equal(events.sleeps.filter((ms) => ms === 3000).length, 1);
-  assert.equal(runtime.state.autoRunActive, false);
-  assert.equal(runtime.state.autoRunSessionId, 0);
-});
-
-test('auto-run controller still stops immediately if GoPay technical error escalates to manual intervention fallback', async () => {
-  const events = {
-    logs: [],
-    broadcasts: [],
-    accountRecords: [],
-    runCalls: 0,
-    cancelReasons: [],
-  };
-
-  let currentState = {
-    stepStatuses: {},
-    vpsUrl: 'https://example.com/vps',
-    vpsPassword: 'secret',
-    customPassword: '',
-    autoRunSkipFailures: true,
-    autoRunFallbackThreadIntervalMinutes: 0,
-    autoRunDelayEnabled: false,
-    autoRunDelayMinutes: 30,
-    autoStepDelaySeconds: null,
-    mailProvider: '163',
-    emailGenerator: 'duck',
-    gmailBaseEmail: '',
-    mail2925BaseEmail: '',
-    emailPrefix: 'demo',
-    inbucketHost: '',
-    inbucketMailbox: '',
-    cloudflareDomain: '',
-    cloudflareDomains: [],
-    tabRegistry: {},
-    sourceLastUrls: {},
-    autoRunRoundSummaries: [],
-  };
-
-  const runtime = {
-    state: {
-      autoRunActive: false,
-      autoRunCurrentRun: 0,
-      autoRunTotalRuns: 1,
-      autoRunAttemptRun: 0,
-      autoRunSessionId: 0,
-    },
-    get() {
-      return { ...this.state };
-    },
-    set(updates = {}) {
-      this.state = { ...this.state, ...updates };
-    },
-  };
-
-  let sessionSeed = 0;
-
-  const controller = api.createAutoRunController({
-    addLog: async (message, level = 'info') => {
-      events.logs.push({ message, level });
-    },
-    appendAccountRunRecord: async (status, _state, reason) => {
-      events.accountRecords.push({ status, reason });
-      return { status, reason };
-    },
-    AUTO_RUN_MAX_RETRIES_PER_ROUND: 3,
-    AUTO_RUN_RETRY_DELAY_MS: 3000,
-    AUTO_RUN_TIMER_KIND_BEFORE_RETRY: 'before_retry',
-    AUTO_RUN_TIMER_KIND_BETWEEN_ROUNDS: 'between_rounds',
-    broadcastAutoRunStatus: async (phase, payload = {}) => {
-      events.broadcasts.push({ phase, ...payload });
-      currentState = {
-        ...currentState,
-        autoRunning: ['scheduled', 'running', 'waiting_step', 'waiting_email', 'retrying', 'waiting_interval'].includes(phase),
-        autoRunPhase: phase,
-        autoRunCurrentRun: payload.currentRun ?? runtime.state.autoRunCurrentRun,
-        autoRunTotalRuns: payload.totalRuns ?? runtime.state.autoRunTotalRuns,
-        autoRunAttemptRun: payload.attemptRun ?? runtime.state.autoRunAttemptRun,
-        autoRunSessionId: payload.sessionId ?? runtime.state.autoRunSessionId,
-      };
-    },
-    broadcastStopToContentScripts: async () => {},
-    cancelPendingCommands: (reason) => {
-      events.cancelReasons.push(reason);
-    },
-    clearStopRequest: () => {},
-    createAutoRunSessionId: () => {
-      sessionSeed += 1;
-      return sessionSeed;
-    },
-    getAutoRunStatusPayload: (phase, payload = {}) => ({
-      autoRunning: ['scheduled', 'running', 'waiting_step', 'waiting_email', 'retrying', 'waiting_interval'].includes(phase),
-      autoRunPhase: phase,
-      autoRunCurrentRun: payload.currentRun ?? 0,
-      autoRunTotalRuns: payload.totalRuns ?? 1,
-      autoRunAttemptRun: payload.attemptRun ?? 0,
-      autoRunSessionId: payload.sessionId ?? 0,
-    }),
-    getErrorMessage: (error) => error?.message || String(error || ''),
-    getFirstUnfinishedStep: () => 1,
-    getPendingAutoRunTimerPlan: () => null,
-    getRunningSteps: () => [],
-    getState: async () => ({
-      ...currentState,
-      stepStatuses: { ...(currentState.stepStatuses || {}) },
-      tabRegistry: { ...(currentState.tabRegistry || {}) },
-      sourceLastUrls: { ...(currentState.sourceLastUrls || {}) },
-    }),
-    getStopRequested: () => false,
-    hasSavedProgress: () => false,
-    isAddPhoneAuthFailure: () => false,
-    isGoPayManualInterventionRequiredFailure: (error) => /GOPAY_MANUAL_INTERVENTION_REQUIRED::/i.test(error?.message || String(error || '')),
-    isPhoneSmsPlatformRateLimitFailure: () => false,
-    isRestartCurrentAttemptError: () => false,
-    isSignupUserAlreadyExistsFailure: () => false,
-    isStopError: (error) => (error?.message || String(error || '')) === '流程已被用户停止。',
-    launchAutoRunTimerPlan: async () => false,
-    normalizeAutoRunFallbackThreadIntervalMinutes: (value) => Math.max(0, Math.floor(Number(value) || 0)),
-    persistAutoRunTimerPlan: async () => ({}),
-    resetState: async () => {
-      currentState = {
-        ...currentState,
-        stepStatuses: {},
-        tabRegistry: {},
-        sourceLastUrls: {},
-      };
-    },
-    runAutoSequenceFromStep: async () => {
-      events.runCalls += 1;
-      throw new Error('GOPAY_MANUAL_INTERVENTION_REQUIRED::步骤 7：GoPay 页面显示技术错误，请手动处理后继续。 当前页面已保留，请手动处理后继续。');
-    },
-    runtime,
-    setState: async (updates = {}) => {
-      currentState = {
-        ...currentState,
-        ...updates,
-        stepStatuses: updates.stepStatuses ? { ...updates.stepStatuses } : currentState.stepStatuses,
-        tabRegistry: updates.tabRegistry ? { ...updates.tabRegistry } : currentState.tabRegistry,
-        sourceLastUrls: updates.sourceLastUrls ? { ...updates.sourceLastUrls } : currentState.sourceLastUrls,
-      };
-    },
-    sleepWithStop: async () => {},
-    throwIfAutoRunSessionStopped: (sessionId) => {
-      if (sessionId && sessionId !== runtime.state.autoRunSessionId) {
-        throw new Error('流程已被用户停止。');
-      }
-    },
-    waitForRunningStepsToFinish: async () => currentState,
-    chrome: {
-      runtime: {
-        sendMessage() {
-          return Promise.resolve();
-        },
-      },
-    },
-  });
-
-  await controller.autoRunLoop(2, {
-    autoRunSkipFailures: true,
-    mode: 'restart',
-  });
-
-  assert.equal(events.runCalls, 1, 'GoPay technical error should stop immediately instead of starting another round');
-  assert.equal(events.broadcasts.some(({ phase }) => phase === 'retrying'), false, 'manual intervention should not enter retrying phase');
-  assert.equal(events.broadcasts.some(({ phase }) => phase === 'stopped'), true, 'manual intervention should stop the whole auto-run');
-  assert.equal(events.accountRecords.length, 1, 'manual intervention should persist a failed round record');
-  assert.equal(events.accountRecords[0].status, 'failed');
-  assert.ok(events.cancelReasons.some((reason) => /GoPay 技术错误需人工处理/.test(reason)));
-  assert.ok(events.logs.some(({ message }) => /停止并保留支付页面，等待人工处理/.test(message)));
   assert.equal(runtime.state.autoRunActive, false);
   assert.equal(runtime.state.autoRunSessionId, 0);
 });

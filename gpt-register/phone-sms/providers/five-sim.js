@@ -578,8 +578,18 @@
     const maxPrice = normalizeFiveSimMaxPrice(state.fiveSimMaxPrice);
     const operator = normalizeFiveSimOperator(state.fiveSimOperator);
     if (maxPrice && operator !== DEFAULT_OPERATOR) {
-      throw new Error('5sim maxPrice only works when operator is "any"; clear the price limit or switch operator to any before buying a number.');
+      throw new Error('5sim 价格上限仅支持运营商为 "any" 时使用；请清空价格上限，或先把运营商切换为 any。');
     }
+  }
+
+  function normalizeReuseEnabled(state = {}) {
+    if (Object.prototype.hasOwnProperty.call(state, 'phoneSmsReuseEnabled')) {
+      return state.phoneSmsReuseEnabled !== false;
+    }
+    if (Object.prototype.hasOwnProperty.call(state, 'heroSmsReuseEnabled')) {
+      return state.heroSmsReuseEnabled !== false;
+    }
+    return true;
   }
 
   async function buyActivationWithPrice(state = {}, countryConfig, maxPrice, deps = {}) {
@@ -589,7 +599,7 @@
     if (maxPrice !== null && maxPrice !== undefined) {
       query.maxPrice = maxPrice;
     }
-    if (state.fiveSimReuseEnabled !== false) {
+    if (normalizeReuseEnabled(state)) {
       query.reuse = 1;
     }
     const payload = await fetchJson(
@@ -837,6 +847,15 @@
       const status = String(payload?.status || '').trim().toUpperCase();
       if (['CANCELED', 'BANNED', 'FINISHED', 'TIMEOUT'].includes(status)) {
         throw new Error(`5sim 查询验证码失败：订单状态 ${status}`);
+      }
+      if (typeof options.onWaitingForCode === 'function') {
+        await options.onWaitingForCode({
+          activation: normalizedActivation,
+          elapsedMs: Date.now() - start,
+          pollCount,
+          statusText: String(payload?.status || lastResponse || '未知'),
+          timeoutMs,
+        });
       }
       await deps.sleepWithStop(intervalMs);
     }

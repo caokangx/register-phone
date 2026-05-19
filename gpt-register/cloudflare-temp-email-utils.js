@@ -327,6 +327,12 @@
       row.email,
       row.recipient,
     ]));
+    const originalRecipient = normalizeCloudflareTempEmailAddress(firstNonEmptyString([
+      row.original_recipient,
+      row.originalRecipient,
+      row.original_recipient_email,
+      row.originalRecipientEmail,
+    ]));
     const raw = firstNonEmptyString([row.raw, row.source, row.mime, row.message]);
     const parsedMime = raw ? extractTextFromMime(raw) : { headers: {}, text: '' };
     const subject = decodeMimeEncodedWords(firstNonEmptyString([
@@ -350,6 +356,7 @@
     return {
       id: firstNonEmptyString([row.id, row.mail_id]),
       address,
+      originalRecipient,
       addressId: firstNonEmptyString([row.address_id, row.addressId]),
       subject,
       from: {

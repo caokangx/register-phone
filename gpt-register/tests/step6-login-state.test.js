@@ -54,6 +54,7 @@ const bundle = [
   extractFunction('getPageTextSnapshot'),
   extractFunction('getLoginVerificationDisplayedEmail'),
   extractFunction('getPhoneVerificationDisplayedPhone'),
+  extractFunction('getContactVerificationServerErrorText'),
   extractFunction('isPhoneVerificationPageReady'),
   extractFunction('inspectLoginAuthState'),
   extractFunction('normalizeStep6Snapshot'),
@@ -61,12 +62,14 @@ const bundle = [
 
 function createApi(overrides = {}) {
   return new Function(`
+const CONTACT_VERIFICATION_SERVER_ERROR_PATTERN = /this\\s+page\\s+isn['\\u2019]?t\\s+working|currently\\s+unable\\s+to\\s+handle\\s+this\\s+request|http\\s+error\\s+500|500\\s+internal\\s+server\\s+error/i;
 const location = {
   href: ${JSON.stringify(overrides.href || 'https://auth.openai.com/log-in')},
   pathname: ${JSON.stringify(overrides.pathname || '/log-in')},
 };
 
 const document = {
+  title: ${JSON.stringify(overrides.title || '')},
   body: {
     innerText: ${JSON.stringify(overrides.pageText || '')},
     textContent: ${JSON.stringify(overrides.pageText || '')},
@@ -140,10 +143,6 @@ function isOAuthConsentPage() {
   return ${JSON.stringify(Boolean(overrides.oauthConsentPage))};
 }
 
-function findSessionSelectionButton() {
-  return ${overrides.sessionSelectionButton ? JSON.stringify(overrides.sessionSelectionButton) : 'null'};
-}
-
 ${bundle}
 
 return {
@@ -210,6 +209,35 @@ return {
 
   const snapshot = api.inspectLoginAuthState();
   assert.strictEqual(snapshot.state, 'phone_verification_page');
+}
+
+{
+  const api = createApi({
+    pathname: '/contact-verification',
+    href: 'https://auth.openai.com/contact-verification',
+    verificationTarget: { id: 'otp' },
+    pageText: 'Check your phone. We just sent a code to +66 81 234 5678.',
+  });
+
+  assert.strictEqual(api.isPhoneVerificationPageReady(), true);
+
+  const snapshot = api.inspectLoginAuthState();
+  assert.strictEqual(snapshot.state, 'phone_verification_page');
+}
+
+{
+  const api = createApi({
+    pathname: '/contact-verification',
+    href: 'https://auth.openai.com/contact-verification',
+    title: "This page isn't working",
+    verificationTarget: { id: 'otp' },
+    pageText: 'auth.openai.com is currently unable to handle this request. HTTP ERROR 500',
+  });
+
+  assert.strictEqual(api.isPhoneVerificationPageReady(), false);
+
+  const snapshot = api.inspectLoginAuthState();
+  assert.notStrictEqual(snapshot.state, 'phone_verification_page');
 }
 
 {
@@ -297,26 +325,5 @@ assert.ok(
   extractFunction('inspectLoginAuthState').includes("state: 'add_email_page'"),
   'inspectLoginAuthState 应产出 add_email_page 状态'
 );
-
-{
-  const api = createApi({
-    sessionSelectionButton: { id: '_r_6_', name: 'session_id' },
-  });
-
-  const snapshot = api.inspectLoginAuthState();
-  assert.strictEqual(snapshot.state, 'session_selection_page', 'OAuth 已登录提示页应识别为 session_selection_page');
-  assert.strictEqual(snapshot.sessionSelectionPage, true);
-  assert.deepStrictEqual(snapshot.sessionSelectionButton, { id: '_r_6_', name: 'session_id' });
-}
-
-{
-  const api = createApi({
-    sessionSelectionButton: { id: '_r_6_', name: 'session_id' },
-    addPhonePage: true,
-  });
-
-  const snapshot = api.inspectLoginAuthState();
-  assert.strictEqual(snapshot.state, 'add_phone_page', 'add-phone 页比 session_selection_page 优先');
-}
 
 console.log('step6 login state tests passed');

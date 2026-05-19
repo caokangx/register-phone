@@ -185,6 +185,15 @@ test('extractVerificationCode returns first six-digit code from multilingual mai
   assert.equal(extractVerificationCode('No code here'), null);
 });
 
+test('extractVerificationCode supports runtime mail rule patterns', () => {
+  assert.equal(
+    extractVerificationCode('Mailbox notice: use pin A-778899 to continue.', {
+      codePatterns: [{ source: 'pin\\s+A-(\\d{6})', flags: 'i' }],
+    }),
+    '778899'
+  );
+});
+
 test('extractVerificationCodeFromMessage reads code from the latest message subject or preview', () => {
   assert.equal(
     extractVerificationCodeFromMessage({
@@ -212,6 +221,30 @@ test('extractVerificationCodeFromMessage reads code from the latest message subj
     }),
     '982219'
   );
+});
+
+test('pickVerificationMessageWithTimeFallback supports required keyword hints and runtime code patterns', () => {
+  const messages = [
+    {
+      id: 'mail-1',
+      subject: 'Security center',
+      from: { emailAddress: { address: 'alerts@example.com' } },
+      bodyPreview: 'Use pin A-661122 to continue',
+      receivedDateTime: '2026-04-14T10:06:00.000Z',
+    },
+  ];
+
+  const result = pickVerificationMessageWithTimeFallback(messages, {
+    afterTimestamp: 0,
+    senderFilters: [],
+    subjectFilters: [],
+    requiredKeywords: ['security'],
+    codePatterns: [{ source: 'pin\\s+A-(\\d{6})', flags: 'i' }],
+    excludeCodes: [],
+  });
+
+  assert.equal(result.match?.code, '661122');
+  assert.equal(result.usedTimeFallback, false);
 });
 
 test('getHotmailListToggleLabel reflects expanded state and account count', () => {
@@ -358,18 +391,26 @@ test('pickVerificationMessageWithTimeFallback can ignore afterTimestamp while ke
 
 test('buildHotmailMailApiLatestUrl includes email, client id, refresh token, and mailbox', () => {
   const url = new URL(buildHotmailMailApiLatestUrl({
+    apiUrl: 'https://example.com/api/mail-new',
     clientId: 'client-123',
     email: 'user@hotmail.com',
     refreshToken: 'refresh-token-xyz',
     mailbox: 'Junk',
   }));
 
-  assert.equal(url.origin + url.pathname, 'https://apple.882263.xyz/api/mail-new');
+  assert.equal(url.origin + url.pathname, 'https://example.com/api/mail-new');
   assert.equal(url.searchParams.get('client_id'), 'client-123');
   assert.equal(url.searchParams.get('email'), 'user@hotmail.com');
   assert.equal(url.searchParams.get('refresh_token'), 'refresh-token-xyz');
   assert.equal(url.searchParams.get('mailbox'), 'Junk');
   assert.equal(url.searchParams.get('response_type'), 'json');
+});
+
+test('buildHotmailMailApiLatestUrl requires an explicit api url', () => {
+  assert.throws(
+    () => buildHotmailMailApiLatestUrl({ email: 'user@hotmail.com' }),
+    /Hotmail mail API URL is required/
+  );
 });
 
 test('buildHotmailMailApiLatestUrl supports custom api url and can omit response_type', () => {

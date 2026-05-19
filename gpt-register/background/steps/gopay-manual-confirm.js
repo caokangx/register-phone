@@ -2,8 +2,6 @@
   root.MultiPageBackgroundGoPayManualConfirm = factory();
 })(typeof self !== 'undefined' ? self : globalThis, function createBackgroundGoPayManualConfirmModule() {
   const PLUS_CHECKOUT_SOURCE = 'plus-checkout';
-  const STEP_ID = 8;
-  const STEP_LABEL = `步骤 ${STEP_ID}`;
   const DEFAULT_CONFIRM_TITLE = 'GoPay 订阅确认';
   const DEFAULT_CONFIRM_MESSAGE = 'GoPay 订阅页已打开。请先手动完成订阅，完成后确认继续 OAuth 登录。';
 
@@ -12,6 +10,7 @@
       addLog,
       broadcastDataUpdate,
       chrome,
+      createAutomationTab = null,
       getTabId,
       isTabAlive,
       registerTab,
@@ -43,17 +42,19 @@
 
       const checkoutUrl = String(state?.plusCheckoutUrl || '').trim();
       if (!checkoutUrl) {
-        throw new Error(`${STEP_LABEL}：未检测到 GoPay 订阅页，请先执行步骤 6。`);
+        throw new Error('步骤 7：未检测到 GoPay 订阅页，请先执行步骤 6。');
       }
 
       if (!chrome?.tabs?.create) {
-        throw new Error(`${STEP_LABEL}：无法自动重新打开 GoPay 订阅页。`);
+        throw new Error('步骤 7：无法自动重新打开 GoPay 订阅页。');
       }
 
-      const tab = await chrome.tabs.create({ url: checkoutUrl, active: true });
+      const tab = typeof createAutomationTab === 'function'
+        ? await createAutomationTab({ url: checkoutUrl, active: true })
+        : await chrome.tabs.create({ url: checkoutUrl, active: true });
       const tabId = Number(tab?.id) || 0;
       if (!tabId) {
-        throw new Error(`${STEP_LABEL}：重新打开 GoPay 订阅页失败。`);
+        throw new Error('步骤 7：重新打开 GoPay 订阅页失败。');
       }
       if (typeof registerTab === 'function') {
         await registerTab(PLUS_CHECKOUT_SOURCE, tabId);
@@ -71,7 +72,7 @@
         plusCheckoutTabId: tabId,
         plusManualConfirmationPending: true,
         plusManualConfirmationRequestId: buildRequestId(),
-        plusManualConfirmationStep: STEP_ID,
+        plusManualConfirmationStep: 7,
         plusManualConfirmationMethod: 'gopay',
         plusManualConfirmationTitle: DEFAULT_CONFIRM_TITLE,
         plusManualConfirmationMessage: DEFAULT_CONFIRM_MESSAGE,
@@ -82,7 +83,7 @@
         broadcastDataUpdate(payload);
       }
 
-      await addLog(`${STEP_LABEL}：正在等待手动完成 GoPay 订阅，确认后继续 OAuth 登录。`, 'info');
+      await addLog('步骤 7：正在等待手动完成 GoPay 订阅，确认后继续 OAuth 登录。', 'info');
     }
 
     return {

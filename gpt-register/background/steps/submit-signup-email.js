@@ -5,7 +5,7 @@
     const {
       addLog,
       chrome,
-      completeStepFromBackground,
+      completeNodeFromBackground,
       ensureContentScriptReadyOnTab,
       ensureSignupAuthEntryPageReady,
       ensureSignupEntryPageReady,
@@ -18,6 +18,7 @@
       resolveSignupEmailForFlow,
       sendToContentScriptResilient,
       SIGNUP_PAGE_INJECT_FILES,
+      waitForTabStableComplete = null,
     } = deps;
 
     function getErrorMessage(error) {
@@ -36,12 +37,7 @@
 
     function isRetryableStep2TransportErrorMessage(errorLike) {
       const message = getErrorMessage(errorLike);
-      return /Content script on signup-page did not respond in \d+s|Receiving end does not exist|message channel closed|A listener indicated an asynchronous response|port closed before a response was received|did not respond in \d+s/i.test(message);
-    }
-
-    function isSignupLoginPasswordPageUrl(rawUrl) {
-      const url = String(rawUrl || '').trim();
-      return /https:\/\/auth\.openai\.com\/log-in\/password(?:[/?#]|$)/i.test(url);
+      return /Content script on signup-page did not respond in \d+s|内容脚本\s+\d+(?:\.\d+)?\s*秒内未响应|Receiving end does not exist|message channel closed|A listener indicated an asynchronous response|port closed before a response was received|did not respond in \d+s/i.test(message);
     }
 
     function isLikelyLoggedInChatgptHomeUrl(rawUrl) {
@@ -156,7 +152,8 @@
 
       try {
         return await sendToContentScriptResilient('signup-page', {
-          type: 'EXECUTE_STEP',
+          type: 'EXECUTE_NODE',
+          nodeId: 'submit-signup-email',
           step: 2,
           source: 'background',
           payload,
@@ -168,6 +165,32 @@
       } catch (error) {
         return { error: getErrorMessage(error) };
       }
+    }
+
+    async function waitForStep2SignupTabToSettle(tabId, logMessage) {
+      if (!Number.isInteger(tabId) || typeof waitForTabStableComplete !== 'function') {
+        return null;
+      }
+
+      await addLog(
+        logMessage || '步骤 2：注册页标签已切换，正在等待页面加载完成并额外稳定 3 秒...',
+        'info',
+        { step: 2, stepKey: 'signup-entry' }
+      );
+
+      return waitForTabStableComplete(tabId, {
+        timeoutMs: 45000,
+        retryDelayMs: 300,
+        stableMs: 3000,
+        initialDelayMs: 300,
+      });
+    }
+
+    async function keepSignupTabWindowInBackgroundForStep2(tabId) {
+      // Intentionally no-op: the task tab is locked to the selected Chrome
+      // window by the tab-runtime layer. Step 2 must not focus/raise that
+      // window while the user is working in another app or browser window.
+      void tabId;
     }
 
     async function ensureSignupPhoneEntryReady(tabId) {
@@ -215,6 +238,11 @@
         signupTabId = (await ensureSignupEntryPageReady(2)).tabId;
       } else {
         await chrome.tabs.update(signupTabId, { active: true });
+        await keepSignupTabWindowInBackgroundForStep2(signupTabId);
+        await waitForStep2SignupTabToSettle(
+          signupTabId,
+          '步骤 2：已切换到注册页标签，正在等待页面加载完成并额外稳定 3 秒...'
+        );
         await ensureContentScriptReadyOnTab('signup-page', signupTabId, {
           inject: SIGNUP_PAGE_INJECT_FILES,
           injectSource: 'signup-page',
@@ -364,19 +392,7 @@
         skipUrlWait: Boolean(step2Result?.alreadyOnPasswordPage),
       });
 
-      if (
-        landingResult?.state === 'password_page'
-        && isSignupLoginPasswordPageUrl(landingResult?.url || step2Result?.url || '')
-      ) {
-        if (activation && typeof phoneVerificationHelpers?.cancelSignupPhoneActivation === 'function') {
-          await phoneVerificationHelpers.cancelSignupPhoneActivation(state, activation).catch(() => {});
-        }
-        throw new Error(
-          `STEP2_PHONE_ALREADY_REGISTERED::步骤 2：提交手机号后进入登录密码页，说明该手机号已注册，当前轮将回到步骤 1 重新获取新号码。手机号：${phoneNumber}`
-        );
-      }
-
-      await completeStepFromBackground(2, {
+      await completeNodeFromBackground('submit-signup-email', {
         accountIdentifierType: 'phone',
         accountIdentifier: phoneNumber,
         signupPhoneNumber: phoneNumber,
@@ -469,7 +485,7 @@
         skipUrlWait: Boolean(step2Result?.alreadyOnPasswordPage),
       });
 
-      await completeStepFromBackground(2, {
+      await completeNodeFromBackground('submit-signup-email', {
         email: resolvedEmail,
         accountIdentifierType: 'email',
         accountIdentifier: resolvedEmail,

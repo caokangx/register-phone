@@ -73,6 +73,39 @@ function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeRulePatternList(patterns = []) {
+  return Array.isArray(patterns) ? patterns : [];
+}
+
+function extractCodeByRulePatterns(text, patterns = []) {
+  const normalizedText = String(text || '');
+  for (const pattern of normalizeRulePatternList(patterns)) {
+    try {
+      const source = String(pattern?.source || '').trim();
+      if (!source) {
+        continue;
+      }
+      const flags = String(pattern?.flags || '').replace(/[^dgimsuvy]/g, '');
+      const match = normalizedText.match(new RegExp(source, flags));
+      if (!match) {
+        continue;
+      }
+      for (let index = 1; index < match.length; index += 1) {
+        const candidate = String(match[index] || '').trim();
+        if (candidate) {
+          return candidate;
+        }
+      }
+      if (String(match[0] || '').trim()) {
+        return String(match[0] || '').trim();
+      }
+    } catch (_) {
+      // Ignore invalid runtime rule patterns and continue with other candidates.
+    }
+  }
+  return null;
+}
+
 function getNetEaseMailLabel(hostname) {
   const currentHostname = String(
     hostname || (typeof location !== 'undefined' ? location.hostname : '') || ''
@@ -129,7 +162,7 @@ function isLikelyMailItemNode(node) {
     return false;
   }
 
-  return /发件人|验证码|verification|chatgpt|openai|code|log-?in/i.test(summaryText);
+  return /发件人|验证码|verification|code|log-?in/i.test(summaryText);
 }
 
 function findMailItems() {
@@ -406,7 +439,7 @@ function selectOpenedMailTextCandidate(item, candidates = [], options = {}) {
     if (sender && lower.includes(sender)) {
       return true;
     }
-    return Boolean(extractVerificationCode(candidate) && /chatgpt|openai|verification|验证码|log-?in\s+code/i.test(lower));
+    return Boolean(extractVerificationCode(candidate, { codePatterns: options.codePatterns }) && /verification|验证码|log-?in\s+code|enter\s+this\s+code|code/i.test(lower));
   }) || source[0] || '';
 
   const filteredCandidates = candidates.filter((candidate) => !excludedSet.has(normalizeText(candidate)));
@@ -443,9 +476,11 @@ async function returnToInbox() {
   return false;
 }
 
-async function openMailAndGetMessageText(item) {
+async function openMailAndGetMessageText(item, options = {}) {
   const beforeCandidates = collectOpenedMailTextCandidates();
-  const beforeText = selectOpenedMailTextCandidate(item, beforeCandidates);
+  const beforeText = selectOpenedMailTextCandidate(item, beforeCandidates, {
+    codePatterns: options.codePatterns,
+  });
   if (typeof simulateClick === 'function') {
     simulateClick(item);
   } else {
@@ -456,6 +491,7 @@ async function openMailAndGetMessageText(item) {
   for (let i = 0; i < 24; i += 1) {
     await sleep(250);
     const candidate = readOpenedMailText(item, {
+      codePatterns: options.codePatterns,
       excludedTexts: beforeCandidates,
       allowExcludedFallback: false,
     });
@@ -463,7 +499,7 @@ async function openMailAndGetMessageText(item) {
       continue;
     }
     openedText = candidate;
-    if (extractVerificationCode(candidate)) {
+    if (extractVerificationCode(candidate, { codePatterns: options.codePatterns })) {
       break;
     }
     if (candidate !== beforeText && candidate.length > beforeText.length + 24) {
@@ -488,7 +524,15 @@ function scheduleEmailCleanup(item, step) {
 // ============================================================
 
 async function handlePollEmail(step, payload) {
-  const { senderFilters, subjectFilters, maxAttempts, intervalMs, excludeCodes = [], filterAfterTimestamp = 0 } = payload;
+  const {
+    codePatterns = [],
+    senderFilters,
+    subjectFilters,
+    maxAttempts,
+    intervalMs,
+    excludeCodes = [],
+    filterAfterTimestamp = 0,
+  } = payload;
   const excludedCodeSet = new Set(excludeCodes.filter(Boolean));
   const filterAfterMinute = normalizeMinuteTimestamp(Number(filterAfterTimestamp) || 0);
   const mailLabel = getNetEaseMailLabel();
@@ -581,12 +625,12 @@ async function handlePollEmail(step, payload) {
       });
 
       if (senderMatch || subjectMatch) {
-        let code = extractVerificationCode(combinedText);
+        let code = extractVerificationCode(combinedText, { codePatterns });
         let codeSource = '邮件列表';
 
         if (!code) {
-          const openedText = await openMailAndGetMessageText(item);
-          code = extractVerificationCode(openedText);
+          const openedText = await openMailAndGetMessageText(item, { codePatterns });
+          code = extractVerificationCode(openedText, { codePatterns });
           if (code) {
             codeSource = '邮件正文';
           }
@@ -716,12 +760,16 @@ async function refreshInbox() {
 // Verification Code Extraction
 // ============================================================
 
-function extractVerificationCode(text) {
+function extractVerificationCode(text, options = {}) {
+  const matchedByRule = extractCodeByRulePatterns(text, options?.codePatterns);
+  if (matchedByRule) {
+    return matchedByRule;
+  }
   const matchCn = text.match(/(?:代码为|验证码[^0-9]*?)[\s：:]*(\d{6})/);
   if (matchCn) return matchCn[1];
 
-  const matchOpenAiLogin = text.match(/(?:chatgpt\s+log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
-  if (matchOpenAiLogin) return matchOpenAiLogin[1];
+  const matchLoginCode = text.match(/(?:log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
+  if (matchLoginCode) return matchLoginCode[1];
 
   const matchEn = text.match(/code[:\s]+is[:\s]+(\d{6})|code[:\s]+(\d{6})/i);
   if (matchEn) return matchEn[1] || matchEn[2];

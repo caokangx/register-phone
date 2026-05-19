@@ -105,7 +105,8 @@
         `步骤 3：正在填写密码，${identityLabel}，密码为${state.customPassword ? '自定义' : '自动生成'}（${password.length} 位）`
       );
       await sendToContentScript('signup-page', {
-        type: 'EXECUTE_STEP',
+        type: 'EXECUTE_NODE',
+        nodeId: 'fill-password',
         step: 3,
         source: 'background',
         payload: {

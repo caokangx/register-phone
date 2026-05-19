@@ -1,4 +1,4 @@
-const assert = require('assert');
+﻿const assert = require('assert');
 const fs = require('fs');
 
 const helperSource = fs.readFileSync('background.js', 'utf8');
@@ -97,7 +97,7 @@ const helpers = self.MultiPageBackgroundVerificationFlow.createVerificationFlowH
   addLog,
   chrome: {},
   CLOUDFLARE_TEMP_EMAIL_PROVIDER,
-  completeStepFromBackground: async () => {},
+  completeNodeFromBackground: async () => {},
   confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
   getHotmailVerificationPollConfig,
   getHotmailVerificationRequestTimestamp: () => 123,
@@ -164,7 +164,7 @@ const helpers = self.MultiPageBackgroundVerificationFlow.createVerificationFlowH
   addLog,
   chrome,
   CLOUDFLARE_TEMP_EMAIL_PROVIDER,
-  completeStepFromBackground: async () => {},
+  completeNodeFromBackground: async () => {},
   confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
   getHotmailVerificationPollConfig: () => ({}),
   getHotmailVerificationRequestTimestamp: () => 123,

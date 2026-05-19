@@ -1,4 +1,4 @@
-const assert = require('assert');
+﻿const assert = require('assert');
 const fs = require('fs');
 
 const step9ModuleSource = fs.readFileSync('background/steps/confirm-oauth.js', 'utf8');
@@ -148,8 +148,8 @@ function setStep8TabUpdatedListener(listener) { step8TabUpdatedListener = listen
 function getStep8TabUpdatedListener() { return step8TabUpdatedListener; }
 function setStep8PendingReject(handler) { step8PendingReject = handler; }
 
-async function completeStepFromBackground(step, payload) {
-  completePayload = { step, payload };
+async function completeNodeFromBackground(nodeId, payload) {
+  completePayload = { nodeId, payload };
 }
 
 const STEP8_CLICK_RETRY_DELAY_MS = 200;
@@ -167,7 +167,7 @@ const executor = self.MultiPageBackgroundStep9.createStep9Executor({
   chrome,
   cleanupStep8NavigationListeners,
   clickWithDebugger,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureStep8SignupPageReady,
   getOAuthFlowRemainingMs,
   getOAuthFlowStepTimeoutMs,
@@ -226,7 +226,7 @@ return {
   assert.strictEqual(snapshot.cleanupCalls >= 1, true, 'step9 should cleanup navigation listeners');
   assert.strictEqual(snapshot.hasPendingReject, false, 'step9 should clear pending reject after completion');
   assert.deepStrictEqual(snapshot.completePayload, {
-    step: 9,
+    nodeId: 'confirm-oauth',
     payload: {
       localhostUrl: 'http://localhost:1455/auth/callback?code=abc&state=xyz',
     },

@@ -48,11 +48,59 @@ function extractFunction(name) {
   return source.slice(start, end);
 }
 
+const NODE_COMPAT_HELPERS = `
+const workflowEngine = null;
+const STEP_NODE_IDS = {
+  1: 'open-chatgpt',
+  2: 'submit-signup-email',
+  3: 'fill-password',
+  4: 'fetch-signup-code',
+  5: 'fill-profile',
+  6: 'wait-registration-success',
+  7: 'oauth-login',
+  8: 'fetch-login-code',
+  9: 'confirm-oauth',
+  10: 'platform-verify',
+};
+const NODE_STEP_IDS = Object.fromEntries(Object.entries(STEP_NODE_IDS).map(([step, nodeId]) => [nodeId, Number(step)]));
+function getNodeIdsForState() {
+  return Object.values(STEP_NODE_IDS);
+}
+function getNodeIdByStepForState(step) {
+  return STEP_NODE_IDS[Number(step)] || '';
+}
+function getStepIdByNodeIdForState(nodeId) {
+  return NODE_STEP_IDS[String(nodeId || '').trim()] || null;
+}
+function projectStepStatusesToNodeStatuses(stepStatuses = {}) {
+  const nodeStatuses = {};
+  for (const [step, status] of Object.entries(stepStatuses || {})) {
+    const nodeId = getNodeIdByStepForState(step);
+    if (nodeId) nodeStatuses[nodeId] = status;
+  }
+  return nodeStatuses;
+}
+function normalizeStatusMapForNodes(statuses = {}, state = {}) {
+  return {
+    ...DEFAULT_STATE.nodeStatuses,
+    ...projectStepStatusesToNodeStatuses(state?.stepStatuses || {}),
+    ...(state?.nodeStatuses || {}),
+    ...(statuses || {}),
+  };
+}
+DEFAULT_STATE.nodeStatuses = projectStepStatusesToNodeStatuses(DEFAULT_STATE.stepStatuses || {});
+`;
+
 test('generic stopped record resolves to next unfinished step during execution gap', async () => {
   const bundle = [
+    NODE_COMPAT_HELPERS,
+    extractFunction('isStepDoneStatus'),
+    extractFunction('getRunningNodeIds'),
     extractFunction('getRunningSteps'),
+    extractFunction('inferStoppedRecordNode'),
     extractFunction('inferStoppedRecordStep'),
     extractFunction('resolveAccountRunRecordStatusForStop'),
+    extractFunction('extractStoppedNodeFromRecordStatus'),
     extractFunction('extractStoppedStepFromRecordStatus'),
     extractFunction('resolveAccountRunRecordReasonForStop'),
     extractFunction('appendAndBroadcastAccountRunRecord'),
@@ -103,10 +151,9 @@ return {
       10: 'pending',
     },
   };
-
   assert.equal(api.inferStoppedRecordStep(state), 7);
-  assert.equal(api.resolveAccountRunRecordStatusForStop('stopped', state), 'step7_stopped');
-  assert.equal(api.resolveAccountRunRecordReasonForStop('step7_stopped', '流程已被用户停止。'), '步骤 7 已被用户停止。');
+  assert.equal(api.resolveAccountRunRecordStatusForStop('stopped', state), 'node:oauth-login:stopped');
+  assert.equal(api.resolveAccountRunRecordReasonForStop('node:oauth-login:stopped', '流程已被用户停止。'), '节点 oauth-login 已被用户停止。');
   assert.equal(
     api.resolveAccountRunRecordReasonForStop('step2_stopped', '步骤 2 已使用邮箱，流程尚未完成。'),
     '步骤 2 已停止：邮箱已设置，流程尚未完成。'
@@ -114,19 +161,23 @@ return {
 
   await api.appendAndBroadcastAccountRunRecord('stopped', state, '流程已被用户停止。');
   assert.deepStrictEqual(api.getCaptured(), {
-    status: 'step7_stopped',
+    status: 'node:oauth-login:stopped',
     state,
-    reason: '步骤 7 已被用户停止。',
+    reason: '节点 oauth-login 已被用户停止。',
   });
 });
 
 test('requestStop appends a stopped record for the next unfinished step when no step is running', async () => {
   const bundle = [
+    NODE_COMPAT_HELPERS,
     extractFunction('normalizeAutoRunSessionId'),
     extractFunction('clearCurrentAutoRunSessionId'),
     extractFunction('cleanupStep8NavigationListeners'),
     extractFunction('rejectPendingStep8'),
+    extractFunction('isStepDoneStatus'),
+    extractFunction('getRunningNodeIds'),
     extractFunction('getRunningSteps'),
+    extractFunction('inferStoppedRecordNode'),
     extractFunction('inferStoppedRecordStep'),
     extractFunction('requestStop'),
   ].join('\n');
@@ -148,6 +199,7 @@ const AUTO_RUN_TIMER_KIND_SCHEDULED_START = 'scheduled_start';
 const DEFAULT_STATE = {
   stepStatuses: Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((step) => [step, 'pending'])),
 };
+const nodeWaiters = new Map();
 const stepWaiters = new Map();
 const appended = [];
 const logs = [];
@@ -176,6 +228,7 @@ async function addLog(message, level) {
 }
 async function broadcastStopToContentScripts() {}
 async function markRunningStepsStopped() {}
+async function markRunningNodesStopped() {}
 async function broadcastAutoRunStatus() {}
 async function appendAndBroadcastAccountRunRecord(status, state, reason) {
   appended.push({ status, state, reason });

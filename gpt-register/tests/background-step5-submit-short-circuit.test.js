@@ -30,7 +30,8 @@ test('step 5 forwards generated profile data and relies on completion signal flo
     {
       source: 'signup-page',
       message: {
-        type: 'EXECUTE_STEP',
+        type: 'EXECUTE_NODE',
+        nodeId: 'fill-profile',
         step: 5,
         source: 'background',
         payload: {

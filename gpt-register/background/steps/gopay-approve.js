@@ -4,15 +4,11 @@
   const GOPAY_SOURCE = 'gopay-flow';
   const GOPAY_OTP_SOURCE = 'gopay-otp-flow';
   const PLUS_CHECKOUT_SOURCE = 'plus-checkout';
-  const GOPAY_INJECT_FILES = ['content/utils.js', 'content/gopay-flow.js'];
+  const GOPAY_INJECT_FILES = ['content/utils.js', 'content/operation-delay.js', 'content/gopay-flow.js'];
   const GOPAY_WAIT_TIMEOUT_MS = 120000;
   const GOPAY_POLL_INTERVAL_MS = 1000;
   const GOPAY_LINKING_RETRY_WAIT_MS = 15000;
   const GOPAY_LINKING_STABLE_WAIT_MS = 60000;
-  const GOPAY_TECHNICAL_ERROR_REFRESH_MAX_ATTEMPTS = 3;
-  const GOPAY_MIDTRANS_BIND_MAX_ITERATIONS = 220;
-  const GOPAY_MIDTRANS_BIND_URL_WAIT_MS = 55000;
-  const GOPAY_MIDTRANS_TAB_CREATE_ATTEMPTS = 3;
   const GOPAY_OTP_FRAME_URL_PATTERN = /\/linking\/otp\b|gopayapi\.com\/linking\/otp/i;
   const GOPAY_PIN_FRAME_URL_PATTERN = /pin-web-client\.gopayapi\.com\/auth\/pin|\/auth\/pin\/verify|linking-validate-pin|merchants-gws-app\.gopayapi\.com\/payment\/validate-pin|\/payment\/validate-pin/i;
   const GOPAY_PAYMENT_FRAME_URL_PATTERN = /merchants-gws-app\.gopayapi\.com\/(?:payment\/details|app\/challenge)|\/gopay-tokenization\/pay/i;
@@ -21,23 +17,20 @@
     const {
       addLog,
       chrome,
-      completeStepFromBackground,
+      completeNodeFromBackground,
       ensureContentScriptReadyOnTabUntilStopped,
       getTabId,
       isTabAlive,
+      queryTabsInAutomationWindow = null,
       registerTab,
       sendTabMessageUntilStopped,
       setState,
       sleepWithStop,
       waitForTabCompleteUntilStopped,
       clickWithDebugger = null,
-      gopayOtpClient = null,
+      requestGoPayOtpInput = null,
       throwIfStopped = null,
-      getState = async () => ({}),
     } = deps;
-
-    let stepId = 8;
-    let stepLabel = '步骤 8';
 
     function normalizeText(value = '') {
       return String(value || '').replace(/\s+/g, ' ').trim();
@@ -84,7 +77,7 @@
 
     async function restartGoPayCheckoutFromStep6(tabId, reason = '') {
       const message = normalizeText(reason || 'GoPay 支付页已失效或点击后没有进入下一步。');
-      await addLog(`${stepLabel}：${message} 正在关闭当前 GoPay/Checkout 页面，并回到步骤 6 重新创建 Plus Checkout。`, 'warn');
+      await addLog(`步骤 8：${message} 正在关闭当前 GoPay/Checkout 页面，并回到步骤 6 重新创建 Plus Checkout。`, 'warn');
       if (Number.isInteger(tabId) && chrome?.tabs?.remove) {
         await chrome.tabs.remove(tabId).catch(() => {});
       }
@@ -95,380 +88,13 @@
         plusPaypalApprovedAt: null,
         plusGoPayApprovedAt: null,
       });
-      throw new Error(`GOPAY_RESTART_FROM_STEP6::${stepLabel}：${message} 已关闭当前支付页，请从步骤 6 重新创建 Plus Checkout。`);
+      throw new Error(`GOPAY_RESTART_FROM_STEP6::步骤 8：${message} 已关闭当前支付页，请从步骤 6 重新创建 Plus Checkout。`);
     }
 
-    async function requireGoPayManualIntervention(reason = '') {
-      const message = normalizeText(reason || 'GoPay 页面显示技术错误，请手动处理后继续。');
-      await addLog(`${stepLabel}：${message} 当前页面将保留，自动流程停止并等待人工处理。`, 'warn');
-      throw new Error(`GOPAY_MANUAL_INTERVENTION_REQUIRED::${stepLabel}：${message} 当前页面已保留，请手动处理后继续。`);
-    }
-
-    async function refreshGoPayPageForTechnicalError(tabId, reason = '', attempt = 1) {
-      const message = normalizeText(reason || 'GoPay 页面显示技术错误。');
-      if (!Number.isInteger(tabId) || !chrome?.tabs?.reload) {
-        await requireGoPayManualIntervention(`${message} 无法自动刷新当前页面。`);
-        return;
-      }
-      if (attempt > GOPAY_TECHNICAL_ERROR_REFRESH_MAX_ATTEMPTS) {
-        await requireGoPayManualIntervention(`${message} 自动刷新重试已达上限（${GOPAY_TECHNICAL_ERROR_REFRESH_MAX_ATTEMPTS} 次）。`);
-        return;
-      }
-      await addLog(`${stepLabel}：${message} 正在自动刷新 GoPay 页面后重试（${attempt}/${GOPAY_TECHNICAL_ERROR_REFRESH_MAX_ATTEMPTS}）...`, 'warn');
-      await chrome.tabs.reload(tabId).catch(async () => {
-        await requireGoPayManualIntervention(`${message} 自动刷新失败。`);
-      });
-      await waitForTabCompleteUntilStopped(tabId);
-      await sleepWithStop(1500);
-      return {
-        reloaded: true,
-        reason: message,
-        attempt,
-      };
-    }
-
-    function isMidtransCheckoutUrl(url = '') {
-      return /app\.midtrans\.com/i.test(String(url || ''));
-    }
-
-    function isActivationBindingHostname(url = '') {
-      try {
-        const host = new URL(String(url || '').split('#')[0]).hostname.toLowerCase();
-        return /(^|\.)gopayapi\.com$/i.test(host) || /\.gopay\.co\.id$/i.test(host);
-      } catch (_) {
-        return false;
-      }
-    }
-
-    function authorizationPageLooksBrokenForBinding(pageState = {}) {
-      const code = String(pageState?.terminalError?.code || '').trim().toLowerCase();
-      if (code === 'technical-error') {
-        return true;
-      }
-      const preview = normalizeText(pageState?.textPreview || '');
-      const looksBad = pageState?.hasTerminalError
-        || /technical\s+error|error\s+teknis|terjadi\s+kesalah|don't\s+worry.*try\s+again/i.test(preview);
-      return Boolean(looksBad);
-    }
-
-    async function waitUntilActivationBindingLoads(bindingTabId, timeoutMs = GOPAY_MIDTRANS_BIND_URL_WAIT_MS) {
-      const startedAt = Date.now();
-      while (Date.now() - startedAt < timeoutMs) {
-        throwIfStopped?.();
-        const t = await chrome.tabs.get(bindingTabId).catch(() => null);
-        if (!t) {
-          await sleepWithStop(300);
-          continue;
-        }
-        const url = String(t.url || '');
-        if (/^chrome-error:/i.test(url)) {
-          await addLog(`${stepLabel}：authorization 标签页载入失败（Chrome 错误页）。`, 'warn');
-          return false;
-        }
-        if (isActivationBindingHostname(url)) {
-          await waitForTabCompleteUntilStopped(bindingTabId).catch(() => {});
-          await sleepWithStop(500);
-          return true;
-        }
-        await sleepWithStop(300);
-      }
-      await addLog(`${stepLabel}：等待 authorization 绑定页达到 gopayapi 超时。`, 'warn');
-      return false;
-    }
-
-    async function createActivationBindingTab(absUrl = '') {
-      const url = String(absUrl || '').trim();
-      if (!url || !chrome?.tabs?.create) {
-        return null;
-      }
-      for (let attempt = 1; attempt <= GOPAY_MIDTRANS_TAB_CREATE_ATTEMPTS; attempt += 1) {
-        throwIfStopped?.();
-        const created = await chrome.tabs.create({ url, active: true }).catch(() => null);
-        if (!created?.id || !Number.isInteger(created.id)) {
-          await sleepWithStop(700);
-          continue;
-        }
-        await chrome.tabs.update(created.id, { active: true }).catch(() => {});
-        if (await waitUntilActivationBindingLoads(created.id)) {
-          return created.id;
-        }
-        await addLog(
-          `${stepLabel}：authorization 页第 ${attempt}/${GOPAY_MIDTRANS_TAB_CREATE_ATTEMPTS} 次打开后未检测到 gopayapi，关闭并重试。`,
-          'warn'
-        );
-        await chrome.tabs.remove(created.id).catch(() => {});
-        await sleepWithStop(700);
-      }
-      return null;
-    }
-
-    async function runMidtransAuthorizeBindingFlow(bindingTabId, midtransTabId, flowState = {}) {
-      const credentials = resolveGoPayCredentials(flowState || {});
-      if (!credentials.phone) {
-        await addLog(`${stepLabel}：无法在 authorization 自动绑定（缺 GoPay 手机号）。`, 'warn');
-        return false;
-      }
-      await addLog(`${stepLabel}：正在 authorization（Midtrans linking）页面自动绑定…`, 'info');
-
-      let phoneSubmitted = false;
-      let otpSubmitted = false;
-      let pinSubmitted = false;
-      let idleStreak = 0;
-
-      try {
-        for (let i = 0; i < GOPAY_MIDTRANS_BIND_MAX_ITERATIONS; i += 1) {
-          throwIfStopped?.();
-
-          const peek = await chrome.tabs.get(bindingTabId).catch(() => null);
-          if (!peek) {
-            await addLog(`${stepLabel}：authorization 绑定页已关闭。`, 'warn');
-            return false;
-          }
-
-          const peekUrl = String(peek.url || '');
-          if (isReturnUrl(peekUrl)) {
-            await addLog(`${stepLabel}：authorization 已回到 ChatGPT / OpenAI。`, 'ok');
-            return true;
-          }
-
-          await ensureGoPayReady(bindingTabId, `${stepLabel}：authorization（Midtrans recovery）页面加载…`);
-
-          const actionFrame = await findGoPayActionFrame(bindingTabId);
-          const actionFrameId = actionFrame.frameId;
-          const actionTargetId = actionFrame.targetId;
-
-          let pageState;
-          try {
-            if (Number.isInteger(actionFrameId)) {
-              await ensureGoPayOtpFrameReady(bindingTabId, actionFrameId);
-            }
-            pageState = actionTargetId
-              ? await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_GET_STATE', {})
-              : (Number.isInteger(actionFrameId)
-                ? await sendGoPayFrameCommand(bindingTabId, actionFrameId, 'GOPAY_GET_STATE', {})
-                : await getGoPayState(bindingTabId));
-          } catch (_) {
-            await sleepWithStop(GOPAY_POLL_INTERVAL_MS);
-            idleStreak += 1;
-            continue;
-          }
-
-          if (!pageState) {
-            await sleepWithStop(GOPAY_POLL_INTERVAL_MS);
-            idleStreak += 1;
-            continue;
-          }
-
-          if (authorizationPageLooksBrokenForBinding(pageState)) {
-            await addLog(`${stepLabel}：authorization 仍显示技术错误或异常，停止自动绑定。`, 'warn');
-            return false;
-          }
-
-          if (pageState.otpInvalid) {
-            await addLog(`${stepLabel}：authorization 页面提示 OTP 错误，重新读取 WhatsApp 验证码。`, 'warn');
-            otpSubmitted = false;
-            await sleepWithStop(1000);
-            if (!pageState.hasOtpInput || pageState.hasPinInput) {
-              continue;
-            }
-          }
-
-          if (pageState.completed) {
-            await addLog(`${stepLabel}：authorization 显示已完成。`, 'ok');
-            return true;
-          }
-
-          const progressing = Boolean(
-            pageState.hasPhoneInput || pageState.hasOtpInput || pageState.hasPinInput
-              || pageState.hasContinueButton || pageState.hasPayNowButton || pageState.otpInvalid
-          );
-          idleStreak = progressing ? 0 : idleStreak + 1;
-          if (idleStreak > 180) {
-            await addLog(`${stepLabel}：authorization 自动绑定超时（无可用控件）。`, 'warn');
-            return false;
-          }
-
-          if (pageState.hasPhoneInput && !phoneSubmitted) {
-            await sendGoPayCommand(bindingTabId, 'GOPAY_SUBMIT_PHONE', {
-              countryCode: credentials.countryCode,
-              phone: credentials.phone,
-            });
-            phoneSubmitted = true;
-            otpSubmitted = false;
-            pinSubmitted = false;
-            await sleepWithStop(1400);
-            continue;
-          }
-
-          if (pageState.hasPinInput && !pinSubmitted) {
-            if (!credentials.pin) {
-              await addLog(`${stepLabel}：authorization 需要 PIN，但侧边栏未配置 GoPay PIN。`, 'warn');
-              return false;
-            }
-            if (actionTargetId) {
-              await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_SUBMIT_PIN', { pin: credentials.pin });
-            } else if (Number.isInteger(actionFrameId)) {
-              await ensureGoPayOtpFrameReady(bindingTabId, actionFrameId);
-              await sendGoPayFrameCommand(bindingTabId, actionFrameId, 'GOPAY_SUBMIT_PIN', { pin: credentials.pin });
-            } else {
-              await sendGoPayCommand(bindingTabId, 'GOPAY_SUBMIT_PIN', { pin: credentials.pin });
-            }
-            pinSubmitted = true;
-            await sleepWithStop(2200);
-            continue;
-          }
-
-          if (pageState.hasOtpInput && !pageState.hasPinInput && !otpSubmitted) {
-            const code = await fetchGoPayOtpFromApi(flowState);
-            credentials.otp = code;
-            if (actionTargetId) {
-              await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_SUBMIT_OTP', { code });
-            } else if (Number.isInteger(actionFrameId)) {
-              await ensureGoPayOtpFrameReady(bindingTabId, actionFrameId);
-              await sendGoPayFrameCommand(bindingTabId, actionFrameId, 'GOPAY_SUBMIT_OTP', { code });
-            } else {
-              await sendGoPayCommand(bindingTabId, 'GOPAY_SUBMIT_OTP', { code });
-            }
-            otpSubmitted = true;
-            await sleepWithStop(1400);
-            continue;
-          }
-
-          if (pageState.hasPayNowButton) {
-            if (actionTargetId) {
-              await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_CLICK_PAY_NOW', {});
-            } else if (Number.isInteger(actionFrameId)) {
-              await sendGoPayFrameCommand(bindingTabId, actionFrameId, 'GOPAY_CLICK_PAY_NOW', {});
-            } else {
-              await sendGoPayCommand(bindingTabId, 'GOPAY_CLICK_PAY_NOW', {});
-            }
-            await sleepWithStop(2400);
-            continue;
-          }
-
-          if (pageState.hasContinueButton) {
-            if (actionTargetId) {
-              await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_CLICK_CONTINUE', {});
-            } else if (Number.isInteger(actionFrameId)) {
-              await sendGoPayFrameCommand(bindingTabId, actionFrameId, 'GOPAY_CLICK_CONTINUE', {});
-            } else {
-              await clickGoPayContinueBestEffort(bindingTabId);
-            }
-            await sleepWithStop(2000);
-            continue;
-          }
-
-          await sleepWithStop(GOPAY_POLL_INTERVAL_MS);
-        }
-
-        await addLog(`${stepLabel}：authorization 自动绑定超过最大迭代。`, 'warn');
-        return false;
-      } finally {
-        await registerTab(GOPAY_SOURCE, midtransTabId).catch(() => {});
-        await chrome.tabs.update(midtransTabId, { active: true }).catch(() => {});
-      }
-    }
-
-    async function attemptMidtransLinkingTechnicalRecovery(tabId, context = {}) {
-      if (!chrome?.tabs?.get || !chrome?.scripting?.executeScript || !Number.isInteger(tabId)) {
-        return null;
-      }
-
-      const tabPeek = await chrome.tabs.get(tabId).catch(() => null);
-      if (!isMidtransCheckoutUrl(String(tabPeek?.url || ''))) {
-        return null;
-      }
-
-      const flowStateRaw = context?.flowState;
-      const flowState = flowStateRaw && typeof flowStateRaw === 'object' ? flowStateRaw : await getState();
-
-      try {
-        const injections = await chrome.scripting.executeScript({
-          target: { tabId, allFrames: true },
-          world: 'MAIN',
-          func: async () => {
-            const replay = globalThis.__MULTIPAGE_midtransReplayLinkingWithoutAuth__;
-            if (typeof replay !== 'function') {
-              return { ok: false, error: 'hook_missing' };
-            }
-            return await replay({ skipWindowOpen: true });
-          },
-        });
-
-        const results = Array.isArray(injections)
-          ? injections.map((entry) => entry && entry.result).filter((r) => r && typeof r === 'object')
-          : [];
-
-        const hit = results.find((entry) => entry.ok === true && entry.activation_link_url);
-        const activationLink = String(hit?.activation_link_url || '').trim();
-
-        if (!hit || !activationLink) {
-          const err = results.map((entry) => entry?.error).find(Boolean);
-          await addLog(
-            `${stepLabel}：Midtrans linking 自愈未拿到 activation_link_url${err ? `（${String(err)}）` : ''}。`,
-            'info'
-          );
-          return null;
-        }
-
-        await addLog(
-          `${stepLabel}：linking 重放成功，正在创建浏览器标签并核验 authorization 绑定页载入…`,
-          'warn'
-        );
-
-        const bindingTabId = await createActivationBindingTab(activationLink);
-        if (!Number.isInteger(bindingTabId)) {
-          await addLog(`${stepLabel}：authorization 绑定页未能可靠打开。`, 'warn');
-          await registerTab(GOPAY_SOURCE, tabId).catch(() => {});
-          return null;
-        }
-
-        await runMidtransAuthorizeBindingFlow(bindingTabId, tabId, flowState);
-
-        await chrome.tabs.reload(tabId).catch(() => {});
-        await waitForTabCompleteUntilStopped(tabId);
-        await sleepWithStop(1500);
-
-        return {
-          reloaded: true,
-          reason: 'midtrans_linking_replay_recovery',
-          midtransRecovery: true,
-        };
-      } catch (err) {
-        await registerTab(GOPAY_SOURCE, tabId).catch(() => {});
-        await addLog(
-          `${stepLabel}：Midtrans linking 自愈异常：${normalizeText(err?.message || err)}`,
-          'warn'
-        );
-        return null;
-      }
-    }
-
-    async function handleGoPayTerminalError(pageState = {}, tabId = null, context = {}) {
+    async function handleGoPayTerminalError(pageState = {}, tabId = null) {
       if (pageState?.hasTerminalError || pageState?.terminalError) {
-        const terminalCode = String(pageState?.terminalError?.code || '').trim().toLowerCase();
-        if (terminalCode === 'technical-error') {
-          const snapshot = Number.isInteger(tabId) ? await chrome.tabs.get(tabId).catch(() => null) : null;
-          const address = String(snapshot?.url || '');
-          if (isMidtransCheckoutUrl(address)) {
-            const midtransReload = await attemptMidtransLinkingTechnicalRecovery(tabId, context);
-            if (midtransReload?.reloaded) {
-              return midtransReload;
-            }
-            await requireGoPayManualIntervention(
-              `${formatGoPayTerminalError(pageState)} 已停止 Midtrans 自动刷新；自愈未生效时请人工处理后继续步骤 8。`
-            );
-            return null;
-          }
-          return await refreshGoPayPageForTechnicalError(
-            tabId,
-            formatGoPayTerminalError(pageState),
-            Number(context?.technicalErrorRefreshAttempts || 1)
-          );
-        }
         await restartGoPayCheckoutFromStep6(tabId, formatGoPayTerminalError(pageState));
       }
-      return null;
     }
 
     function isGoPayUrl(url = '') {
@@ -477,17 +103,18 @@
     }
 
     function isReturnUrl(url = '') {
-      const value = String(url || '');
-      return /https:\/\/(?:chatgpt\.com|chat\.openai\.com|openai\.com)\//i.test(value)
-        && !/gopay|gojek|midtrans|xendit|stripe/i.test(value)
-        && !/\/checkout(?:[\/?#]|$)/i.test(value);
+      return /https:\/\/(?:chatgpt\.com|chat\.openai\.com|openai\.com)\//i.test(String(url || ''))
+        && !/gopay|gojek|midtrans|xendit|stripe/i.test(String(url || ''));
     }
 
     async function findOpenTabId(predicate) {
       if (!chrome?.tabs?.query) {
         return 0;
       }
-      const tabs = await chrome.tabs.query({}).catch(() => []);
+      const queryTabs = typeof queryTabsInAutomationWindow === 'function'
+        ? queryTabsInAutomationWindow
+        : (queryInfo) => chrome.tabs.query(queryInfo);
+      const tabs = await queryTabs({}).catch(() => []);
       const candidates = (Array.isArray(tabs) ? tabs : [])
         .filter((tab) => Number.isInteger(tab?.id) && predicate(tab.url || ''));
       if (!candidates.length) {
@@ -509,7 +136,7 @@
       }
       const discoveredGoPayTabId = await findOpenTabId(isGoPayUrl);
       if (discoveredGoPayTabId) {
-        await addLog(`${stepLabel}：已从当前浏览器标签中发现 GoPay 页面，正在接管继续执行。`, 'info');
+        await addLog('步骤 8：已从当前浏览器标签中发现 GoPay 页面，正在接管继续执行。', 'info');
         if (typeof registerTab === 'function') {
           await registerTab(GOPAY_SOURCE, discoveredGoPayTabId);
         }
@@ -529,7 +156,7 @@
         }
         return storedTabId;
       }
-      throw new Error(`${stepLabel}：未找到 GoPay 标签页，请先完成步骤 6。`);
+      throw new Error('步骤 8：未找到 GoPay 标签页，请先完成步骤 7。');
     }
 
     async function ensureGoPayReady(tabId, logMessage = '') {
@@ -538,7 +165,7 @@
       await ensureContentScriptReadyOnTabUntilStopped(GOPAY_SOURCE, tabId, {
         inject: GOPAY_INJECT_FILES,
         injectSource: GOPAY_SOURCE,
-        logMessage: logMessage || `${stepLabel}：GoPay 页面仍在加载，等待脚本就绪...`,
+        logMessage: logMessage || '步骤 8：GoPay 页面仍在加载，等待脚本就绪...',
       });
     }
 
@@ -606,7 +233,6 @@
               el.inputMode,
             ].filter(Boolean).join(' ')));
             const hasTerminalError = /waktunya\s+habis|ulang(?:i)?\s+prosesnya\s+dari\s+awal|time(?:'s|\s+is)?\s+(?:out|expired)|session\s+expired|expired|technical\s+error|terjadi\s+kesalahan|payment\s+failed|pembayaran\s+gagal|transaksi\s+gagal|declined|failed/i.test(text);
-            const otpInvalid = /kode\s*otp(?:[-\s]*nya)?\s*salah|otp(?:\s*(?:is|nya))?\s*(?:salah|incorrect|invalid|wrong)|kode\s*(?:salah|tidak\s+valid)|mohon\s+cek\s+ulang|coba\s+lagi/i.test(text);
             const isPinPage = /pin|6\s*digit|masukkin\s+pin|masukkan\s+pin|ketik\s+6\s+digit|enter\s+pin|支付密码/i.test(text)
               || /pin-web-client\.gopayapi\.com|\/auth\/pin|\/payment\/validate-pin|linking-validate-pin/i.test(location.href || '');
             const hasPinInput = isPinPage
@@ -615,7 +241,6 @@
               || inputHints.some((hint) => /otp|code|kode|verification|whatsapp/i.test(hint)));
             const hasPayNowButton = controlTexts.some((item) => /^\s*pay\s+now\s*$/i.test(item)
               || /^\s*bayar(?:\s+sekarang)?(?:\s*rp[\s\S]*)?\s*$/i.test(item)
-              || /^\s*bayar\b[\s\S]*$/i.test(item)
               || /(?:^|\s)pay-button(?:\s|$)/i.test(item));
             const hasContinueButton = controlTexts.some((item) => /continue|next|submit|verify|confirm|authorize|allow|lanjut|lanjutkan|berikut|kirim|konfirmasi|hubungkan|sambungkan|tautkan|setuju|izinkan|link|继续|下一步|提交|验证|确认|授权|绑定|关联/i.test(item));
             return {
@@ -625,7 +250,6 @@
               hasOtpInput,
               hasPayNowButton,
               hasContinueButton,
-              otpInvalid,
               textPreview: text.slice(0, 240),
             };
           },
@@ -641,13 +265,7 @@
       }
     }
 
-    async function tabAnyFrameHasPayNowButton(tabId) {
-      const inspections = await inspectGoPayFramesByDom(tabId);
-      return (Array.isArray(inspections) ? inspections : []).some((item) => item?.hasPayNowButton);
-    }
-
     function getGoPayDomFrameKind(frame = {}) {
-      if (frame.otpInvalid) return 'otp';
       if (frame.hasPinInput) return 'pin';
       if (frame.hasOtpInput) return 'otp';
       if (frame.hasPayNowButton) return 'payment';
@@ -658,7 +276,6 @@
 
     function getGoPayDomFramePriority(frame = {}) {
       if (frame.hasTerminalError) return 120;
-      if (frame.otpInvalid) return 115;
       if (frame.hasPinInput) return 110;
       if (frame.hasOtpInput) return 100;
       if (frame.hasPayNowButton) return 90;
@@ -745,7 +362,6 @@
         const isPinPage = /pin|password|passcode|security|sandi|6\\s*digit|masukkin\\s+pin|masukkan\\s+pin|ketik\\s+6\\s+digit|enter\\s+pin|支付密码/i.test(bodyText)
           || /pin-web-client\\.gopayapi\\.com|\\/auth\\/pin|\\/payment\\/validate-pin|linking-validate-pin/i.test(location.href || '');
         const hasTerminalError = /waktunya\\s+habis|ulang(?:i)?\\s+prosesnya\\s+dari\\s+awal|time(?:'s|\\s+is)?\\s+(?:out|expired)|session\\s+expired|expired|kedaluwarsa|technical\\s+error|terjadi\\s+kesalahan|error\\s+teknis|kendala\\s+teknis|gak\\s+bisa\\s+diproses|coba\\s+lagi\\s+nanti|payment\\s+failed|pembayaran\\s+gagal|transaksi\\s+gagal|ditolak|declined|failed/i.test(bodyText);
-        const otpInvalid = /kode\\s*otp(?:[-\\s]*nya)?\\s*salah|otp(?:\\s*(?:is|nya))?\\s*(?:salah|incorrect|invalid|wrong)|kode\\s*(?:salah|tidak\\s+valid)|mohon\\s+cek\\s+ulang|coba\\s+lagi/i.test(bodyText);
         const hasPinInput = isPinPage || inputHints.some((hint) => /pin-input|(?:^|[\\s_-])pin(?:$|[\\s_-])|password|numeric|支付密码/i.test(hint));
         const hasOtpInput = !hasPinInput && (/otp|one[-\\s]*time|kode|verification|whatsapp|验证码|短信/i.test(bodyText)
           || inputHints.some((hint) => /otp|code|kode|verification|whatsapp/i.test(hint)));
@@ -757,14 +373,12 @@
         });
         const hasPayNowButton = controlTexts.some((item) => /^\\s*pay\\s+now\\s*$/i.test(item)
           || /^\\s*bayar(?:\\s+sekarang)?(?:\\s*rp[\\s\\S]*)?\\s*$/i.test(item)
-          || /^\\s*bayar\\b[\\s\\S]*$/i.test(item)
           || /(?:^|\\s)pay-button(?:\\s|$)/i.test(item));
         const hasContinueButton = !hasPayNowButton && !hasPhoneInput && controlTexts.some((item) => /continue|next|submit|verify|confirm|authorize|allow|lanjut|lanjutkan|berikut|kirim|konfirmasi|hubungkan|sambungkan|tautkan|setuju|izinkan|link|继续|下一步|提交|验证|确认|授权|绑定|关联/i.test(item));
         const completed = /success|successful|completed|selesai|berhasil|approved|authorized|支付成功|绑定成功|已授权/i.test(bodyText)
           && !hasPhoneInput
           && !hasOtpInput
-          && !hasPinInput
-          && !hasPayNowButton;
+          && !hasPinInput;
         return {
           url: location.href,
           readyState: document.readyState,
@@ -774,7 +388,6 @@
           hasOtpInput,
           hasPayNowButton,
           hasContinueButton,
-          otpInvalid,
           completed,
           textPreview: bodyText.slice(0, 500),
           inputHints: inputHints.slice(0, 12),
@@ -817,8 +430,7 @@
           const text = getText(el);
           return /(?:^|\\s)pay-button(?:\\s|$)/i.test(text)
             || /^\\s*pay\\s+now\\s*$/i.test(text)
-            || /^\\s*bayar(?:\\s+sekarang)?(?:\\s*rp[\\s\\S]*)?\\s*$/i.test(text)
-            || /^\\s*bayar\\b[\\s\\S]*$/i.test(text);
+            || /^\\s*bayar(?:\\s+sekarang)?(?:\\s*rp[\\s\\S]*)?\\s*$/i.test(text);
         });
         if (!target) {
           return { clicked: false, reason: 'target_not_found', url: location.href, textPreview: normalize(document.body?.innerText || '').slice(0, 240) };
@@ -1360,8 +972,7 @@
             const target = candidates.find((el) => {
               const text = getText(el);
               return /(?:^|\s)pay-button(?:\s|$)/i.test(text)
-                || /^\s*bayar(?:\s+sekarang)?(?:\s*rp[\s\S]*)?\s*$/i.test(text)
-                || /^\s*bayar\b[\s\S]*$/i.test(text);
+                || /^\s*bayar(?:\s+sekarang)?(?:\s*rp[\s\S]*)?\s*$/i.test(text);
             });
             if (!target) {
               return { clicked: false, url: location.href };
@@ -1410,13 +1021,13 @@
       while (Date.now() - startedAt < timeoutMs) {
         const tab = await chrome.tabs.get(tabId).catch(() => null);
         if (!tab) {
-          throw new Error(`${stepLabel}：GoPay 标签页已关闭，无法继续。`);
+          throw new Error('步骤 8：GoPay 标签页已关闭，无法继续。');
         }
         const url = String(tab.url || '');
         if (isReturnUrl(url)) {
           return { returned: true, url };
         }
-        await ensureGoPayReady(tabId, `${stepLabel}：GoPay 页面正在切换，等待脚本重新就绪...`);
+        await ensureGoPayReady(tabId, '步骤 8：GoPay 页面正在切换，等待脚本重新就绪...');
         const actionFrame = await findGoPayActionFrame(tabId);
         const actionFrameId = actionFrame.frameId;
         const actionTargetId = actionFrame.targetId;
@@ -1487,34 +1098,31 @@
       };
     }
 
-    async function fetchGoPayOtpFromApi(state = {}) {
-      if (!gopayOtpClient || typeof gopayOtpClient.pollOtp !== 'function') {
-        throw new Error(`${stepLabel}：未初始化 WhatsApp OTP 客户端，无法自动拉取 GoPay 验证码。`);
+    async function requestManualGoPayOtp(existingCode = '') {
+      if (typeof requestGoPayOtpInput !== 'function') {
+        throw new Error('步骤 8：未配置 GoPay 验证码，也无法打开侧边栏输入弹窗。');
       }
-      const code = await gopayOtpClient.pollOtp(state, {
-        intervalMs: 3000,
-        timeoutMs: 180000,
-        label: 'GoPay 验证码',
-        stepLabel,
-      });
-      const normalized = normalizeGoPayOtp(code);
-      if (!normalized) {
-        throw new Error(`${stepLabel}：WhatsApp 接口返回的 GoPay 验证码为空。`);
+      await addLog(existingCode
+        ? '步骤 8：检测到上次保存的 GoPay 验证码，将弹窗请你确认或改填新验证码。'
+        : '步骤 8：请在侧边栏弹窗中输入 GoPay 验证码，提交后会继续填写 PIN。', 'info');
+      const response = await requestGoPayOtpInput({ code: existingCode });
+      if (response?.error) {
+        throw new Error(response.error);
       }
-      return normalized;
+      const code = normalizeGoPayOtp(response?.code || '');
+      if (!code || response?.cancelled) {
+        throw new Error('步骤 8：GoPay 验证码输入已取消。');
+      }
+      return code;
     }
 
-    async function executeGoPayApprove(state = {}, options = {}) {
-      const requestedStepId = Number(options?.stepId);
-      stepId = Number.isFinite(requestedStepId) && requestedStepId > 0 ? requestedStepId : 8;
-      stepLabel = `步骤 ${stepId}`;
-
+    async function executeGoPayApprove(state = {}) {
       const credentials = resolveGoPayCredentials(state);
       if (!credentials.phone) {
-        throw new Error(`${stepLabel}：未配置 GoPay 手机号，请先在侧边栏填写。`);
+        throw new Error('步骤 8：未配置 GoPay 手机号，请先在侧边栏填写。');
       }
       if (!credentials.pin) {
-        throw new Error(`${stepLabel}：未配置 GoPay PIN，请先在侧边栏填写。`);
+        throw new Error('步骤 8：未配置 GoPay PIN，请先在侧边栏填写。');
       }
 
       const tabId = await resolveGoPayTabId(state);
@@ -1539,7 +1147,6 @@
       let lastContinueClickSignature = '';
       let payNowClickAttempts = 0;
       let lastPayNowClickSignature = '';
-      let technicalErrorRefreshAttempts = 0;
       const stableStateTracker = createGoPayStableStateTracker();
 
       while (true) {
@@ -1547,11 +1154,11 @@
         const tab = await chrome.tabs.get(tabId).catch(() => null);
         const currentUrl = String(tab?.url || '');
         if (currentUrl && isReturnUrl(currentUrl)) {
-          await addLog(`${stepLabel}：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。`, 'ok');
+          await addLog('步骤 8：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。', 'ok');
           break;
         }
 
-        await ensureGoPayReady(tabId, `${stepLabel}：GoPay 页面正在切换，等待脚本重新就绪...`);
+        await ensureGoPayReady(tabId, '步骤 8：GoPay 页面正在切换，等待脚本重新就绪...');
         const actionFrame = await findGoPayActionFrame(tabId);
         const actionFrameId = actionFrame.frameId;
         const actionTargetId = actionFrame.targetId;
@@ -1564,32 +1171,10 @@
             ? await sendGoPayFrameCommand(tabId, actionFrameId, 'GOPAY_GET_STATE', {})
             : await getGoPayState(tabId));
         const stableState = stableStateTracker.update(pageState, currentUrl);
-        if (String(pageState?.terminalError?.code || '').trim().toLowerCase() === 'technical-error') {
-          technicalErrorRefreshAttempts += 1;
-        } else {
-          technicalErrorRefreshAttempts = 0;
-        }
-        const terminalResolution = await handleGoPayTerminalError(pageState, tabId, {
-          technicalErrorRefreshAttempts,
-          flowState: state,
-        });
-        if (terminalResolution?.reloaded) {
-          resetTransientStepFlags();
-          loggedWaiting = false;
-          continue;
-        }
+        await handleGoPayTerminalError(pageState, tabId);
 
         if (pageState.completed) {
-          if (isMidtransCheckoutUrl(currentUrl) && await tabAnyFrameHasPayNowButton(tabId)) {
-            await addLog(
-              `${stepLabel}：Midtrans 仍能在子 frame 检测到 Pay now，忽略「完成」文案，继续尝试支付。`,
-              'info'
-            );
-            loggedWaiting = false;
-            await sleepWithStop(GOPAY_POLL_INTERVAL_MS);
-            continue;
-          }
-          await addLog(`${stepLabel}：GoPay 页面已显示完成状态，准备进入回跳确认。`, 'ok');
+          await addLog('步骤 8：GoPay 页面已显示完成状态，准备进入回跳确认。', 'ok');
           break;
         }
 
@@ -1604,26 +1189,26 @@
           if (!Number.isInteger(actionFrameId) && payNowClickAttempts > 2) {
             const framePayResult = await clickGoPayPayButtonInAnyFrame(tabId);
             if (framePayResult?.clicked) {
-              await addLog(`${stepLabel}：顶层仍显示 Pay now，但已在 GoPay iframe 中点击 Bayar 按钮：${framePayResult.clickTarget || 'Bayar'}。`, 'info');
+              await addLog(`步骤 8：顶层仍显示 Pay now，但已在 GoPay iframe 中点击 Bayar 按钮：${framePayResult.clickTarget || 'Bayar'}。`, 'info');
               await sleepWithStop(2500);
               resetTransientStepFlags();
               loggedWaiting = false;
               continue;
             }
-            await addLog(`${stepLabel}：顶层 Pay now 已重复出现，暂未识别到 iframe 内 Bayar/PIN；继续等待页面切换，不再自动回退步骤 6。`, 'warn');
+            await addLog('步骤 8：顶层 Pay now 已重复出现，暂未识别到 iframe 内 Bayar/PIN；继续等待页面切换，不再自动回退步骤 6。', 'warn');
             await sleepWithStop(3000);
             loggedWaiting = false;
             continue;
           }
           const paymentLabel = actionFrame.kind === 'payment' ? '最终 Bayar 确认' : 'Pay now';
-          await addLog(`${stepLabel}：检测到 GoPay ${paymentLabel} 按钮，正在点击完成支付...`, 'info');
+          await addLog(`步骤 8：检测到 GoPay ${paymentLabel} 按钮，正在点击完成支付...`, 'info');
           const payResult = actionTargetId
             ? await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_CLICK_PAY_NOW', {})
             : (Number.isInteger(actionFrameId)
               ? await sendGoPayFrameCommand(tabId, actionFrameId, 'GOPAY_CLICK_PAY_NOW', {})
               : await sendGoPayCommand(tabId, 'GOPAY_CLICK_PAY_NOW', {}));
           if (payResult?.clickTarget) {
-            await addLog(`${stepLabel}：已点击 GoPay 支付按钮：${payResult.clickTarget}`, 'info');
+            await addLog(`步骤 8：已点击 GoPay 支付按钮：${payResult.clickTarget}`, 'info');
           }
           await sleepWithStop(2500);
           const decision = await waitForGoPayState(tabId, (nextState) => (
@@ -1631,50 +1216,41 @@
             || nextState.completed
             || !nextState.hasPayNowButton
           ), { timeoutMs: 15000 });
-          if (String(decision.pageState?.terminalError?.code || '').trim().toLowerCase() === 'technical-error') {
-            technicalErrorRefreshAttempts += 1;
-          } else if (decision.pageState) {
-            technicalErrorRefreshAttempts = 0;
-          }
-          const payTerminalResolution = await handleGoPayTerminalError(decision.pageState, tabId, {
-            technicalErrorRefreshAttempts,
-            flowState: state,
-          });
-          if (payTerminalResolution?.reloaded) {
-            resetTransientStepFlags();
-            loggedWaiting = false;
-            continue;
-          }
+          await handleGoPayTerminalError(decision.pageState, tabId);
           if (decision.returned) {
-            await addLog(`${stepLabel}：GoPay 支付后已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。`, 'ok');
+            await addLog('步骤 8：GoPay 支付后已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。', 'ok');
             break;
           }
           if (decision.pageState) {
             resetTransientStepFlags();
           }
           if (decision.timeout) {
-            const framePayResult = await clickGoPayPayButtonInAnyFrame(tabId);
-            if (framePayResult?.clicked) {
-              await addLog(`${stepLabel}：已在 GoPay iframe 中点击 Bayar 按钮：${framePayResult.clickTarget || 'Bayar'}。`, 'info');
-              await sleepWithStop(2500);
-              resetTransientStepFlags();
-              loggedWaiting = false;
-              continue;
+            if (!Number.isInteger(actionFrameId)) {
+              const framePayResult = await clickGoPayPayButtonInAnyFrame(tabId);
+              if (framePayResult?.clicked) {
+                await addLog(`步骤 8：已在 GoPay iframe 中点击 Bayar 按钮：${framePayResult.clickTarget || 'Bayar'}。`, 'info');
+                await sleepWithStop(2500);
+                resetTransientStepFlags();
+                loggedWaiting = false;
+                continue;
+              }
             }
             const debuggerResult = await clickGoPayPayNowWithDebugger(tabId, actionFrameId);
             if (debuggerResult?.clickTarget) {
-              await addLog(`${stepLabel}：已使用 debugger 点击 GoPay 支付按钮：${debuggerResult.clickTarget}`, 'info');
+              await addLog(`步骤 8：已使用 debugger 点击 GoPay 支付按钮：${debuggerResult.clickTarget}`, 'info');
             }
             await sleepWithStop(2500);
-            const lateFramePayResult = await clickGoPayPayButtonInAnyFrame(tabId);
-            if (lateFramePayResult?.clicked) {
-              await addLog(`${stepLabel}：Pay now 兜底点击后，已在 GoPay iframe 中补点 Bayar 按钮：${lateFramePayResult.clickTarget || 'Bayar'}。`, 'info');
-              await sleepWithStop(2500);
-              resetTransientStepFlags();
-              loggedWaiting = false;
-              continue;
+            if (!Number.isInteger(actionFrameId)) {
+              const lateFramePayResult = await clickGoPayPayButtonInAnyFrame(tabId);
+              if (lateFramePayResult?.clicked) {
+                await addLog(`步骤 8：顶层 Pay now 点击后，已在 GoPay iframe 中补点 Bayar 按钮：${lateFramePayResult.clickTarget || 'Bayar'}。`, 'info');
+                await sleepWithStop(2500);
+                resetTransientStepFlags();
+                loggedWaiting = false;
+                continue;
+              }
+              await addLog('步骤 8：顶层 Pay now 兜底点击后仍未识别到 iframe 内 Bayar/PIN，继续等待，不自动回退步骤 6。', 'warn');
             }
-            await addLog(`${stepLabel}：Pay now 兜底点击后仍未识别到 iframe 内 Bayar/PIN，继续等待，不自动回退步骤 6。`, 'warn');
           }
           resetTransientStepFlags();
           loggedWaiting = false;
@@ -1682,7 +1258,7 @@
         }
 
         if (pageState.hasPhoneInput && !phoneSubmitted) {
-          await addLog(`${stepLabel}：正在切换 GoPay 区号 ${credentials.countryCode} 并填写手机号...`, 'info');
+          await addLog(`步骤 8：正在切换 GoPay 区号 ${credentials.countryCode} 并填写手机号...`, 'info');
           await sendGoPayCommand(tabId, 'GOPAY_SUBMIT_PHONE', {
             countryCode: credentials.countryCode,
             phone: credentials.phone,
@@ -1696,7 +1272,7 @@
         }
 
         if (pageState.hasPinInput && !pinSubmitted) {
-          await addLog(`${stepLabel}：正在填写 GoPay PIN...`, 'info');
+          await addLog('步骤 8：正在填写 GoPay PIN...', 'info');
           if (actionTargetId) {
             await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_SUBMIT_PIN', { pin: credentials.pin });
           } else if (Number.isInteger(actionFrameId)) {
@@ -1714,56 +1290,30 @@
             || nextState.hasPayNowButton
             || nextState.completed
           ), { timeoutMs: 20000 });
-          if (String(afterPinDecision.pageState?.terminalError?.code || '').trim().toLowerCase() === 'technical-error') {
-            technicalErrorRefreshAttempts += 1;
-          } else if (afterPinDecision.pageState) {
-            technicalErrorRefreshAttempts = 0;
-          }
-          const pinTerminalResolution = await handleGoPayTerminalError(afterPinDecision.pageState, tabId, {
-            technicalErrorRefreshAttempts,
-            flowState: state,
-          });
-          if (pinTerminalResolution?.reloaded) {
-            resetTransientStepFlags();
-            loggedWaiting = false;
-            continue;
-          }
+          await handleGoPayTerminalError(afterPinDecision.pageState, tabId);
           if (afterPinDecision.returned) {
-            await addLog(`${stepLabel}：GoPay PIN 后已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。`, 'ok');
+            await addLog('步骤 8：GoPay PIN 后已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。', 'ok');
             break;
           }
           if (afterPinDecision.pageState?.hasPayNowButton) {
-            await addLog(`${stepLabel}：GoPay PIN 已通过，等待点击 Pay now 完成支付。`, 'info');
+            await addLog('步骤 8：GoPay PIN 已通过，等待点击 Pay now 完成支付。', 'info');
             resetTransientStepFlags();
           }
           await sleepWithStop(800);
           continue;
         }
 
-        if (pageState.otpInvalid) {
-          await addLog(`${stepLabel}：GoPay 提示验证码错误，准备重新读取 WhatsApp 验证码。`, 'warn');
-          otpSubmitted = false;
-          credentials.otp = '';
-          continueClickAttempts = 0;
-          lastContinueClickSignature = '';
-          loggedWaiting = false;
-          await sleepWithStop(1000);
-          if (!pageState.hasOtpInput || pageState.hasPinInput) {
-            continue;
-          }
-        }
-
         if (pageState.hasOtpInput && !pageState.hasPinInput && !otpSubmitted) {
-          const code = await fetchGoPayOtpFromApi(state);
+          const code = await requestManualGoPayOtp(credentials.otp);
           credentials.otp = code;
-          await addLog(`${stepLabel}：正在填写 GoPay 验证码...`, 'info');
+          await addLog('步骤 8：正在填写 GoPay 验证码...', 'info');
           if (actionTargetId) {
             await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_SUBMIT_OTP', { code });
           } else if (Number.isInteger(actionFrameId)) {
             await ensureGoPayOtpFrameReady(tabId, actionFrameId);
             await sendGoPayFrameCommand(tabId, actionFrameId, 'GOPAY_SUBMIT_OTP', { code });
           } else {
-            await ensureGoPayReady(tabId, `${stepLabel}：已获取 GoPay 验证码，等待 GoPay 页面就绪...`);
+            await ensureGoPayReady(tabId, '步骤 8：已获取 GoPay 验证码，等待 GoPay 页面就绪...');
             await sendGoPayCommand(tabId, 'GOPAY_SUBMIT_OTP', { code });
           }
           otpSubmitted = true;
@@ -1784,32 +1334,18 @@
           }
           if (continueClickAttempts > 2) {
             const stableBeforeRetrySeconds = Math.round(stableState.stableMs / 1000);
-            await addLog(`${stepLabel}：GoPay 确认按钮点击后页面仍未变化，先等待 linking 页面加载/跳转（已稳定 ${stableBeforeRetrySeconds}s）。`, 'warn');
+            await addLog(`步骤 8：GoPay 确认按钮点击后页面仍未变化，先等待 linking 页面加载/跳转（已稳定 ${stableBeforeRetrySeconds}s）。`, 'warn');
             const decision = await waitForGoPayState(tabId, (nextState) => (
               nextState.hasTerminalError
-              || nextState.otpInvalid
               || nextState.hasOtpInput
               || nextState.hasPinInput
               || nextState.hasPayNowButton
               || nextState.completed
               || !nextState.hasContinueButton
             ), { timeoutMs: GOPAY_LINKING_RETRY_WAIT_MS });
-            if (String(decision.pageState?.terminalError?.code || '').trim().toLowerCase() === 'technical-error') {
-              technicalErrorRefreshAttempts += 1;
-            } else if (decision.pageState) {
-              technicalErrorRefreshAttempts = 0;
-            }
-            const continueTerminalResolution = await handleGoPayTerminalError(decision.pageState, tabId, {
-              technicalErrorRefreshAttempts,
-              flowState: state,
-            });
-            if (continueTerminalResolution?.reloaded) {
-              resetTransientStepFlags();
-              loggedWaiting = false;
-              continue;
-            }
+            await handleGoPayTerminalError(decision.pageState, tabId);
             if (decision.returned) {
-              await addLog(`${stepLabel}：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。`, 'ok');
+              await addLog('步骤 8：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。', 'ok');
               break;
             }
             if (!decision.timeout) {
@@ -1823,42 +1359,28 @@
             const refreshedStableState = stableStateTracker.update(refreshedState, currentUrl);
             const stableSeconds = Math.round(refreshedStableState.stableMs / 1000);
             if (stableSeconds < Math.round(GOPAY_LINKING_STABLE_WAIT_MS / 1000)) {
-              await addLog(`${stepLabel}：GoPay linking 页面还在同一状态（${stableSeconds}s），改用兜底点击 Hubungkan/确认按钮后继续等待。`, 'info');
+              await addLog(`步骤 8：GoPay linking 页面还在同一状态（${stableSeconds}s），改用兜底点击 Hubungkan/确认按钮后继续等待。`, 'info');
               const retryResult = await clickGoPayContinueBestEffort(tabId);
               if (retryResult?.clickTarget) {
-                await addLog(`${stepLabel}：已兜底点击 GoPay 控件：${retryResult.clickTarget}`, 'info');
+                await addLog(`步骤 8：已兜底点击 GoPay 控件：${retryResult.clickTarget}`, 'info');
               }
               continueClickAttempts = 2;
               await sleepWithStop(2500);
               loggedWaiting = false;
               continue;
             }
-            await addLog(`${stepLabel}：GoPay linking 页面长时间没有变化，已暂停自动重复点击。请手动点击页面上的 Hubungkan/确认按钮，插件会继续等待后续页面。`, 'warn');
+            await addLog('步骤 8：GoPay linking 页面长时间没有变化，已暂停自动重复点击。请手动点击页面上的 Hubungkan/确认按钮，插件会继续等待后续页面。', 'warn');
             const manualDecision = await waitForGoPayState(tabId, (nextState) => (
               nextState.hasTerminalError
-              || nextState.otpInvalid
               || nextState.hasOtpInput
               || nextState.hasPinInput
               || nextState.hasPayNowButton
               || nextState.completed
               || !nextState.hasContinueButton
             ), { timeoutMs: GOPAY_WAIT_TIMEOUT_MS });
-            if (String(manualDecision.pageState?.terminalError?.code || '').trim().toLowerCase() === 'technical-error') {
-              technicalErrorRefreshAttempts += 1;
-            } else if (manualDecision.pageState) {
-              technicalErrorRefreshAttempts = 0;
-            }
-            const manualTerminalResolution = await handleGoPayTerminalError(manualDecision.pageState, tabId, {
-              technicalErrorRefreshAttempts,
-              flowState: state,
-            });
-            if (manualTerminalResolution?.reloaded) {
-              resetTransientStepFlags();
-              loggedWaiting = false;
-              continue;
-            }
+            await handleGoPayTerminalError(manualDecision.pageState, tabId);
             if (manualDecision.returned) {
-              await addLog(`${stepLabel}：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。`, 'ok');
+              await addLog('步骤 8：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。', 'ok');
               break;
             }
             if (!manualDecision.timeout) {
@@ -1868,9 +1390,9 @@
               loggedWaiting = false;
               continue;
             }
-            throw new Error(`${stepLabel}：GoPay linking 页面长时间无变化，请手动点击 Hubungkan/确认按钮后重新执行或继续当前步骤。`);
+            throw new Error('步骤 8：GoPay linking 页面长时间无变化，请手动点击 Hubungkan/确认按钮后重新执行或继续当前步骤。');
           }
-          await addLog(`${stepLabel}：检测到 GoPay 继续/确认按钮，正在点击${continueClickAttempts > 1 ? `（第 ${continueClickAttempts} 次）` : ''}...`, 'info');
+          await addLog(`步骤 8：检测到 GoPay 继续/确认按钮，正在点击${continueClickAttempts > 1 ? `（第 ${continueClickAttempts} 次）` : ''}...`, 'info');
           const clickResult = continueClickAttempts === 1
             ? (actionTargetId
               ? await sendGoPayDebuggerTargetCommand(actionTargetId, 'GOPAY_CLICK_CONTINUE', {})
@@ -1879,7 +1401,7 @@
                 : await sendGoPayCommand(tabId, 'GOPAY_CLICK_CONTINUE', {})))
             : await clickGoPayContinueWithDebugger(tabId, actionFrameId);
           if (clickResult?.clickTarget) {
-            await addLog(`${stepLabel}：已点击 GoPay 控件：${clickResult.clickTarget}${continueClickAttempts > 1 ? '（debugger 真实鼠标事件）' : ''}`, 'info');
+            await addLog(`步骤 8：已点击 GoPay 控件：${clickResult.clickTarget}${continueClickAttempts > 1 ? '（debugger 真实鼠标事件）' : ''}`, 'info');
           }
           await sleepWithStop(2000);
           loggedWaiting = false;
@@ -1888,12 +1410,11 @@
 
         if (!loggedWaiting) {
           loggedWaiting = true;
-          await addLog(`${stepLabel}：等待 GoPay 手机号、验证码、PIN 或完成页面出现...`, 'info');
+          await addLog('步骤 8：等待 GoPay 手机号、验证码、PIN 或完成页面出现...', 'info');
         }
 
         const decision = await waitForGoPayState(tabId, (nextState) => (
           nextState.hasTerminalError
-          || nextState.otpInvalid
           || nextState.hasPhoneInput
           || nextState.hasOtpInput
           || nextState.hasPinInput
@@ -1901,22 +1422,9 @@
           || nextState.hasPayNowButton
           || nextState.completed
         ), { timeoutMs: 10000 });
-        if (String(decision.pageState?.terminalError?.code || '').trim().toLowerCase() === 'technical-error') {
-          technicalErrorRefreshAttempts += 1;
-        } else if (decision.pageState) {
-          technicalErrorRefreshAttempts = 0;
-        }
-        const waitingTerminalResolution = await handleGoPayTerminalError(decision.pageState, tabId, {
-          technicalErrorRefreshAttempts,
-          flowState: state,
-        });
-        if (waitingTerminalResolution?.reloaded) {
-          resetTransientStepFlags();
-          loggedWaiting = false;
-          continue;
-        }
+        await handleGoPayTerminalError(decision.pageState, tabId);
         if (decision.returned) {
-          await addLog(`${stepLabel}：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。`, 'ok');
+          await addLog('步骤 8：GoPay 已跳转回 ChatGPT / OpenAI 页面，准备进入回跳确认。', 'ok');
           break;
         }
         if (decision.timeout) {
@@ -1925,7 +1433,7 @@
       }
 
       await setState({ plusGoPayApprovedAt: Date.now() });
-      await completeStepFromBackground(stepId, {
+      await completeNodeFromBackground('paypal-approve', {
         plusGoPayApprovedAt: Date.now(),
       });
     }

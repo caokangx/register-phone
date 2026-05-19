@@ -122,47 +122,11 @@ def compact_text(value, limit=400):
 def log_info(message):
     print(f"[HotmailHelper] {message}", flush=True)
 
-
-def is_openai_sender(address):
-    sender = str(address or "").strip().lower()
-    return "openai" in sender
-
-
 def get_message_body_content(message):
     body = message.get("body") or {}
     if not isinstance(body, dict):
         return ""
     return str(body.get("content") or "").strip()
-
-
-def log_openai_messages(messages, transport=""):
-    for message in messages or []:
-        sender_info = message.get("from", {}).get("emailAddress", {}) or {}
-        sender = str(sender_info.get("address") or "").strip()
-        if not is_openai_sender(sender):
-            continue
-
-        sender_name = str(sender_info.get("name") or "").strip()
-        mailbox = str(message.get("mailbox") or "").strip() or "INBOX"
-        subject = str(message.get("subject") or "").strip()
-        transport_label = str(transport or "").strip() or "unknown"
-        base = (
-            f"transport={transport_label} mailbox={mailbox} sender={sender} "
-            f"senderName={sender_name or '-'} subject={subject}"
-        )
-
-        log_info(f"openai mail received {base}")
-
-        body_content = get_message_body_content(message)
-        if body_content:
-            log_info(f"openai mail full body start {base}")
-            print(body_content, flush=True)
-            log_info("openai mail full body end")
-            continue
-
-        preview = str(message.get("bodyPreview") or "").strip()
-        if preview:
-            log_info(f"openai mail preview {base} preview={compact_text(preview, 1000)}")
 
 
 def get_proxy_debug_context():
@@ -725,7 +689,6 @@ def collect_messages(email_addr, client_id, refresh_token, mailboxes, top):
         try:
             log_info(f"message collection start transport={transport_name}")
             result = collector(email_addr, client_id, refresh_token, mailboxes, top)
-            log_openai_messages(result.get("messages") or [], transport=transport_name)
             log_info(
                 f"message collection success transport={transport_name} "
                 f"tokenEndpoint={result['token_payload'].get('token_endpoint', '')}"
@@ -739,10 +702,37 @@ def collect_messages(email_addr, client_id, refresh_token, mailboxes, top):
     raise RuntimeError(f"Message collection failed on all transports: {' | '.join(errors)}")
 
 
-def extract_code(text):
+def extract_code(text, code_patterns=None):
     source = str(text or "")
+    for pattern in code_patterns or []:
+        try:
+            source_pattern = str((pattern or {}).get("source") or "").strip()
+            if not source_pattern:
+                continue
+            flags = str((pattern or {}).get("flags") or "").lower()
+            re_flags = 0
+            if "i" in flags:
+                re_flags |= re.IGNORECASE
+            if "m" in flags:
+                re_flags |= re.MULTILINE
+            if "s" in flags:
+                re_flags |= re.DOTALL
+            match = re.search(source_pattern, source, flags=re_flags)
+            if not match:
+                continue
+            if match.lastindex:
+                for group_index in range(1, match.lastindex + 1):
+                    candidate = str(match.group(group_index) or "").strip()
+                    if candidate:
+                        return candidate
+            candidate = str(match.group(0) or "").strip()
+            if candidate:
+                return candidate
+        except re.error:
+            continue
     patterns = [
         r"(?:代码为|验证码[^0-9]*?)[\s：:]*(\d{6})",
+        r"(?:log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})",
         r"code(?:\s+is|[\s:])+(\d{6})",
         r"\b(\d{6})\b",
     ]
@@ -753,9 +743,10 @@ def extract_code(text):
     return ""
 
 
-def select_latest_code(messages, sender_filters, subject_filters, exclude_codes, filter_after_timestamp):
+def select_latest_code(messages, sender_filters, subject_filters, exclude_codes, filter_after_timestamp, required_keywords=None, code_patterns=None):
     sender_keywords = [str(item).strip().lower() for item in sender_filters or [] if str(item).strip()]
     subject_keywords = [str(item).strip().lower() for item in subject_filters or [] if str(item).strip()]
+    required_keyword_hints = [str(item).strip().lower() for item in required_keywords or [] if str(item).strip()]
     excluded = {str(item).strip() for item in exclude_codes or [] if str(item).strip()}
 
     def match_message(message, apply_time_filter):
@@ -767,17 +758,18 @@ def select_latest_code(messages, sender_filters, subject_filters, exclude_codes,
         subject = str(message.get("subject", ""))
         preview = str(message.get("bodyPreview", ""))
         combined = " ".join([sender, subject.lower(), preview.lower()])
-        code = extract_code(" ".join([subject, preview, sender]))
+        code = extract_code(" ".join([subject, preview, sender]), code_patterns=code_patterns)
         if not code:
             body_content = get_message_body_content(message)
             if body_content:
-                code = extract_code(" ".join([subject, body_content, sender]))
+                code = extract_code(" ".join([subject, body_content, sender]), code_patterns=code_patterns)
         if not code or code in excluded:
             return None
 
-        sender_ok = not sender_keywords or any(keyword in combined for keyword in sender_keywords)
-        subject_ok = not subject_keywords or any(keyword in combined for keyword in subject_keywords)
-        if not sender_ok and not subject_ok:
+        sender_ok = bool(sender_keywords) and any(keyword in combined for keyword in sender_keywords)
+        subject_ok = bool(subject_keywords) and any(keyword in combined for keyword in subject_keywords)
+        keyword_ok = bool(required_keyword_hints) and any(keyword in combined for keyword in required_keyword_hints)
+        if (sender_keywords or subject_keywords or required_keyword_hints) and not sender_ok and not subject_ok and not keyword_ok:
             return None
 
         return {"code": code, "message": message}
@@ -862,6 +854,8 @@ class HotmailHelperHandler(BaseHTTPRequestHandler):
                     payload.get("subjectFilters") or [],
                     payload.get("excludeCodes") or [],
                     int(payload.get("filterAfterTimestamp") or 0),
+                    payload.get("requiredKeywords") or [],
+                    payload.get("codePatterns") or [],
                 )
                 json_response(self, 200, {
                     "ok": True,

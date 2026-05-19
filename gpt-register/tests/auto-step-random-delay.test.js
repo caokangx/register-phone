@@ -47,9 +47,13 @@ const bundle = [
   'const PERSISTED_SETTING_DEFAULTS = { autoStepDelaySeconds: null };',
   "const AUTO_RUN_PRE_EXECUTION_DELAYS_BY_STEP_KEY = new Map([['plus-checkout-create', 20000]]);",
   'function getStepDefinitionForState(step, state = {}) { return state.definitions?.[step] || null; }',
+  'function getNodeIdByStepForState(step, state = {}) { return String(getStepDefinitionForState(step, state)?.key || step || "").trim(); }',
+  'function getNodeDefinitionForState(nodeId, state = {}) { return Object.values(state.definitions || {}).find((definition) => String(definition?.key || "").trim() === String(nodeId || "").trim()) || { executeKey: String(nodeId || "").trim() }; }',
   extractFunction('normalizeAutoStepDelaySeconds'),
   extractFunction('resolveLegacyAutoStepDelaySeconds'),
   extractFunction('getStepExecutionKeyForState'),
+  extractFunction('getNodeExecutionKeyForState'),
+  extractFunction('getAutoRunPreExecutionDelayMsForNode'),
   extractFunction('getAutoRunPreExecutionDelayMs'),
 ].join('\n');
 
@@ -140,7 +144,7 @@ assert.strictEqual(
 assert.strictEqual(
   api.getAutoRunPreExecutionDelayMs(6, {
     definitions: {
-      6: { key: 'clear-login-cookies' },
+      6: { key: 'wait-registration-success' },
     },
   }),
   0,

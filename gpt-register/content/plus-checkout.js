@@ -1,64 +1,38 @@
-// content/plus-checkout.js — ChatGPT Plus checkout helper.
+// content/plus-checkout.js — ChatGPT Plus hosted-checkout helper.
+//
+// Two roles:
+// 1) On chatgpt.com: provide accessToken and create a hosted Stripe checkout
+//    session (step 6). Responds to CREATE_PLUS_CHECKOUT and
+//    PLUS_CHECKOUT_GET_STATE.
+// 2) On pay.openai.com / checkout.stripe.com (the hosted checkout page from
+//    step 6): click the PayPal accordion, fill the billing address from a
+//    background-fetched US address, check the terms checkbox, click submit
+//    (step 7). Responds to RUN_HOSTED_CHECKOUT_FLOW.
 
 (function attachPlusCheckoutContentScript() {
 console.log('[MultiPage:plus-checkout] Content script loaded on', location.href);
 window.__MULTIPAGE_PLUS_CHECKOUT_READY__ = true;
 
 const PLUS_CHECKOUT_LISTENER_SENTINEL = 'data-multipage-plus-checkout-listener';
-const PLUS_CHECKOUT_PAYLOAD_BASE = {
-  entry_point: 'all_plans_pricing_modal',
+const PLUS_CHECKOUT_HOSTED_DEFAULTS = Object.freeze({
   plan_name: 'chatgptplusplan',
-  checkout_ui_mode: 'custom',
-  promo_campaign: {
+  billing_details: Object.freeze({
+    country: 'US',
+    currency: 'USD',
+  }),
+  cancel_url: 'https://chatgpt.com/#pricing',
+  promo_campaign: Object.freeze({
     promo_campaign_id: 'plus-1-month-free',
     is_coupon_from_query_param: false,
-  },
-};
-const PLUS_CHECKOUT_CONFIGS = {
-  paypal: {
-    billing_details: {
-      country: 'DE',
-      currency: 'EUR',
-    },
-    checkoutUrlPrefix: 'https://chatgpt.com/checkout/openai_ie/',
-    paymentLabel: 'PayPal',
-  },
-  gopay: {
-    billing_details: {
-      country: 'ID',
-      currency: 'IDR',
-    },
-    checkoutUrlPrefix: 'https://chatgpt.com/checkout/openai_llc/',
-    paymentLabel: 'GoPay',
-  },
-};
-const PAYPAL_DIAGNOSTIC_LOG_INTERVAL_MS = 5000;
-const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
-const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
-const PAYMENT_METHOD_CONFIGS = {
-  [PLUS_PAYMENT_METHOD_PAYPAL]: {
-    id: PLUS_PAYMENT_METHOD_PAYPAL,
-    label: 'PayPal',
-    diagnosticLabel: 'PayPal',
-    checkoutMerchantPath: 'openai_ie',
-    billingDetails: {
-      country: 'DE',
-      currency: 'EUR',
-    },
-    patterns: [/paypal/i],
-  },
-  [PLUS_PAYMENT_METHOD_GOPAY]: {
-    id: PLUS_PAYMENT_METHOD_GOPAY,
-    label: 'GoPay',
-    diagnosticLabel: 'GoPay',
-    checkoutMerchantPath: 'openai_llc',
-    billingDetails: {
-      country: 'ID',
-      currency: 'IDR',
-    },
-    patterns: [/gopay|go\s*pay/i],
-  },
-};
+  }),
+  checkout_ui_mode: 'hosted',
+});
+
+async function performOperationWithDelay(metadata, operation) {
+  const rootScope = typeof window !== 'undefined' ? window : globalThis;
+  const gate = rootScope?.CodexOperationDelay?.performOperationWithDelay;
+  return typeof gate === 'function' ? gate(metadata, operation) : operation();
+}
 
 if (document.documentElement.getAttribute(PLUS_CHECKOUT_LISTENER_SENTINEL) !== '1') {
   document.documentElement.setAttribute(PLUS_CHECKOUT_LISTENER_SENTINEL, '1');
@@ -66,16 +40,8 @@ if (document.documentElement.getAttribute(PLUS_CHECKOUT_LISTENER_SENTINEL) !== '
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (
       message.type === 'CREATE_PLUS_CHECKOUT'
-      || message.type === 'FILL_PLUS_BILLING_AND_SUBMIT'
-      || message.type === 'PLUS_CHECKOUT_FILL_CONTACT_EMAIL'
-      || message.type === 'PLUS_CHECKOUT_SELECT_PAYPAL'
-      || message.type === 'PLUS_CHECKOUT_SELECT_GOPAY'
-      || message.type === 'PLUS_CHECKOUT_FILL_BILLING_ADDRESS'
-      || message.type === 'PLUS_CHECKOUT_FILL_ADDRESS_QUERY'
-      || message.type === 'PLUS_CHECKOUT_SELECT_ADDRESS_SUGGESTION'
-      || message.type === 'PLUS_CHECKOUT_ENSURE_BILLING_ADDRESS'
-      || message.type === 'PLUS_CHECKOUT_CLICK_SUBSCRIBE'
       || message.type === 'PLUS_CHECKOUT_GET_STATE'
+      || message.type === 'RUN_HOSTED_CHECKOUT_FLOW'
     ) {
       resetStopState();
       handlePlusCheckoutCommand(message).then((result) => {
@@ -97,27 +63,11 @@ if (document.documentElement.getAttribute(PLUS_CHECKOUT_LISTENER_SENTINEL) !== '
 async function handlePlusCheckoutCommand(message) {
   switch (message.type) {
     case 'CREATE_PLUS_CHECKOUT':
-      return createPlusCheckoutSession(message.payload || {});
-    case 'FILL_PLUS_BILLING_AND_SUBMIT':
-      return fillPlusBillingAndSubmit(message.payload || {});
-    case 'PLUS_CHECKOUT_FILL_CONTACT_EMAIL':
-      return fillPlusContactEmail(message.payload || {});
-    case 'PLUS_CHECKOUT_SELECT_PAYPAL':
-      return selectPlusPayPalPaymentMethod(message.payload || {});
-    case 'PLUS_CHECKOUT_SELECT_GOPAY':
-      return selectPlusGoPayPaymentMethod(message.payload || {});
-    case 'PLUS_CHECKOUT_FILL_BILLING_ADDRESS':
-      return fillPlusBillingAddress(message.payload || {});
-    case 'PLUS_CHECKOUT_FILL_ADDRESS_QUERY':
-      return fillPlusAddressQuery(message.payload || {});
-    case 'PLUS_CHECKOUT_SELECT_ADDRESS_SUGGESTION':
-      return selectPlusAddressSuggestion(message.payload || {});
-    case 'PLUS_CHECKOUT_ENSURE_BILLING_ADDRESS':
-      return ensurePlusStructuredBillingAddress(message.payload || {});
-    case 'PLUS_CHECKOUT_CLICK_SUBSCRIBE':
-      return clickPlusSubscribe(message.payload || {});
+      return createPlusCheckoutSession();
     case 'PLUS_CHECKOUT_GET_STATE':
       return inspectPlusCheckoutState(message.payload || {});
+    case 'RUN_HOSTED_CHECKOUT_FLOW':
+      return runHostedCheckoutFlow(message.payload || {});
     default:
       throw new Error(`plus-checkout.js 不处理消息：${message.type}`);
   }
@@ -142,512 +92,37 @@ async function waitUntil(predicate, options = {}) {
 }
 
 async function waitForDocumentComplete() {
-  await waitUntil(() => document.readyState === 'complete', {
-    label: '页面加载完成',
-    intervalMs: 200,
-  });
-  await sleep(1000);
+  await waitUntil(() => document.readyState === 'complete', { intervalMs: 200, label: '页面加载' });
 }
 
-function isVisibleElement(el) {
-  if (!el) return false;
-  const style = window.getComputedStyle(el);
-  const rect = el.getBoundingClientRect();
-  return style.display !== 'none'
-    && style.visibility !== 'hidden'
-    && Number(rect.width) > 0
-    && Number(rect.height) > 0;
-}
-
-function normalizeText(text = '') {
-  return String(text || '').replace(/\s+/g, ' ').trim();
-}
-
-function parseLocalizedAmount(rawValue = '') {
-  const raw = normalizeText(rawValue);
-  const match = raw.match(/(?:[$€£¥]\s*)?([+-]?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})|[+-]?\d+(?:[.,]\d{1,2})?)(?:\s*[$€£¥])?/);
-  if (!match) return null;
-  let numericText = String(match[1] || '').trim();
-  const lastComma = numericText.lastIndexOf(',');
-  const lastDot = numericText.lastIndexOf('.');
-  if (lastComma > -1 && lastDot > -1) {
-    const decimalSeparator = lastComma > lastDot ? ',' : '.';
-    const thousandsSeparator = decimalSeparator === ',' ? '.' : ',';
-    numericText = numericText
-      .replace(new RegExp(`\\${thousandsSeparator}`, 'g'), '')
-      .replace(decimalSeparator, '.');
-  } else if (lastComma > -1) {
-    numericText = numericText.replace(',', '.');
-  }
-  const amount = Number(numericText.replace(/[^\d.+-]/g, ''));
-  return Number.isFinite(amount)
-    ? {
-        amount,
-        raw: match[0],
-      }
-    : null;
-}
-
-function getTextAfterTodayDueLabel(text = '') {
-  const normalized = normalizeText(text);
-  const match = normalized.match(/(?:今日应付金额|今日应付|今天应付|amount\s*due\s*today|due\s*today|today'?s\s*total|total\s*due\s*today)/i);
-  if (!match) return '';
-  return normalized.slice((match.index || 0) + match[0].length).trim();
-}
-
-function getCheckoutAmountSummary() {
-  const elements = getVisibleControls('div, span, p, strong, b');
-  const labelPattern = /今日应付金额|今日应付|今天应付|amount\s*due\s*today|due\s*today|today'?s\s*total|total\s*due\s*today/i;
-  const amountPattern = /[$€£¥]\s*[+-]?\d|[+-]?\d+(?:[.,]\d{1,2})?\s*[$€£¥]/;
-
-  for (const element of elements) {
-    const text = normalizeText(element.innerText || element.textContent || '');
-    if (!labelPattern.test(text)) continue;
-
-    const candidates = [];
-    const afterLabelText = getTextAfterTodayDueLabel(text);
-    if (afterLabelText) candidates.push(afterLabelText);
-
-    const parent = element.parentElement;
-    if (parent) {
-      for (const child of Array.from(parent.children || [])) {
-        if (child === element) continue;
-        const childText = normalizeText(child.innerText || child.textContent || '');
-        if (amountPattern.test(childText)) {
-          candidates.push(childText);
-        }
-      }
-      const parentAfterLabelText = getTextAfterTodayDueLabel(parent.innerText || parent.textContent || '');
-      if (parentAfterLabelText) candidates.push(parentAfterLabelText);
-    }
-
-    const grandparent = parent?.parentElement;
-    if (grandparent) {
-      const grandparentAfterLabelText = getTextAfterTodayDueLabel(grandparent.innerText || grandparent.textContent || '');
-      if (grandparentAfterLabelText) candidates.push(grandparentAfterLabelText);
-    }
-
-    for (const candidate of candidates) {
-      const parsed = parseLocalizedAmount(candidate);
-      if (!parsed) continue;
-      return {
-        hasTodayDue: true,
-        amount: parsed.amount,
-        isZero: Math.abs(parsed.amount) < 0.005,
-        rawAmount: parsed.raw,
-        labelText: text.slice(0, 160),
-      };
-    }
-
-    return {
-      hasTodayDue: true,
-      amount: null,
-      isZero: false,
-      rawAmount: '',
-      labelText: text.slice(0, 160),
-    };
-  }
-
-  return {
-    hasTodayDue: false,
-    amount: null,
-    isZero: false,
-    rawAmount: '',
-    labelText: '',
-  };
-}
-
-function getActionText(el) {
-  return normalizeText([
-    el?.textContent,
-    el?.value,
-    el?.getAttribute?.('aria-label'),
-    el?.getAttribute?.('aria-labelledby'),
-    el?.getAttribute?.('title'),
-    el?.getAttribute?.('placeholder'),
-    el?.getAttribute?.('name'),
-    el?.getAttribute?.('autocomplete'),
-    el?.getAttribute?.('data-elements-stable-field-name'),
-    el?.getAttribute?.('data-field'),
-    el?.getAttribute?.('data-field-name'),
-    el?.id,
-  ].filter(Boolean).join(' '));
-}
-
-function getSearchText(el) {
-  const datasetValues = el?.dataset ? Object.values(el.dataset) : [];
-  return normalizeText([
-    getActionText(el),
-    el?.getAttribute?.('alt'),
-    el?.getAttribute?.('role'),
-    el?.getAttribute?.('data-testid'),
-    el?.getAttribute?.('src'),
-    el?.getAttribute?.('href'),
-    el?.getAttribute?.('xlink:href'),
-    typeof el?.className === 'string' ? el.className : el?.getAttribute?.('class'),
-    ...datasetValues,
-  ].filter(Boolean).join(' '));
-}
-
-function getFieldText(el) {
-  const id = el?.id || '';
-  const labels = [];
-  if (id) {
-    labels.push(...Array.from(document.querySelectorAll(`label[for="${CSS.escape(id)}"]`)).map((label) => label.textContent));
-  }
-  const wrappingLabel = el?.closest?.('label');
-  if (wrappingLabel) {
-    labels.push(wrappingLabel.textContent);
-  }
-  const container = el?.closest?.('[data-testid], [class], div, section, fieldset');
-  if (container) {
-    labels.push(container.textContent);
-  }
-  return normalizeText([
-    getActionText(el),
-    ...labels,
-  ].filter(Boolean).join(' '));
-}
-
-function getCombinedSearchText(el) {
-  return normalizeText([
-    getSearchText(el),
-    getFieldText(el),
-  ].filter(Boolean).join(' '));
-}
-
-function getVisibleControls(selector) {
-  return Array.from(document.querySelectorAll(selector)).filter(isVisibleElement);
-}
-
-function findClickableByText(patterns) {
-  const normalizedPatterns = (Array.isArray(patterns) ? patterns : [patterns])
-    .filter(Boolean);
-  const candidates = getVisibleControls('button, a, [role="button"], [role="tab"], input[type="button"], input[type="submit"], [tabindex]');
-  return candidates.find((el) => {
-    const text = getCombinedSearchText(el);
-    return normalizedPatterns.some((pattern) => pattern.test(text));
-  }) || null;
-}
-
-function isEnabledControl(el) {
-  return Boolean(el)
-    && !el.disabled
-    && el.getAttribute?.('aria-disabled') !== 'true';
-}
-
-function getVisibleTextInputs() {
-  return getVisibleControls('input, textarea')
-    .filter((el) => {
-      const type = String(el.getAttribute('type') || el.type || '').trim().toLowerCase();
-      return !['hidden', 'checkbox', 'radio', 'submit', 'button', 'file'].includes(type);
-    });
-}
-
-function findInputByFieldText(patterns, options = {}) {
-  const inputs = getVisibleTextInputs();
-  const excluded = options.exclude || (() => false);
-  return inputs.find((input) => {
-    if (excluded(input)) return false;
-    const text = getFieldText(input);
-    return patterns.some((pattern) => pattern.test(text));
-  }) || null;
-}
-
-function getDirectFieldHintText(el) {
-  const id = el?.id || '';
-  const labels = [];
-  if (id) {
-    labels.push(...Array.from(document.querySelectorAll(`label[for="${CSS.escape(id)}"]`)).map((label) => label.textContent));
-  }
-  const wrappingLabel = el?.closest?.('label');
-  if (wrappingLabel) {
-    labels.push(wrappingLabel.textContent);
-  }
-  return normalizeText([
-    getActionText(el),
-    ...labels,
-  ].filter(Boolean).join(' '));
-}
-
-function isNonAddressSearchInput(input) {
-  const directText = getDirectFieldHintText(input);
-  const type = String(input?.getAttribute?.('type') || input?.type || '').trim().toLowerCase();
-  return /name|email|e-mail|phone|tel|password|coupon|promo|country|region|postal|zip|city|state|province|card|card\s*number|expiry|expiration|security|cvc|cvv|cc-/i.test(directText)
-    || ['email', 'tel', 'password'].includes(type);
-}
-
-function isDocumentLevelContainer(el) {
-  return !el
-    || el === document.documentElement
-    || el === document.body
-    || ['HTML', 'BODY', 'MAIN'].includes(el.tagName);
-}
-
-function isPaymentCardSized(el) {
-  if (!isVisibleElement(el) || isDocumentLevelContainer(el)) return false;
-  const rect = el.getBoundingClientRect();
-  const maxWidth = Math.max(320, Math.min(window.innerWidth * 0.95, 900));
-  const maxHeight = Math.max(140, Math.min(window.innerHeight * 0.45, 320));
-  return rect.width >= 64
-    && rect.height >= 28
-    && rect.width <= maxWidth
-    && rect.height <= maxHeight;
-}
-
-function findInteractiveAncestor(el) {
-  let current = el;
-  for (let depth = 0; current && depth < 8; depth += 1, current = current.parentElement) {
-    if (!isVisibleElement(current) || isDocumentLevelContainer(current)) continue;
-    if (current.matches?.('button, a, label, [role="button"], [role="radio"], [role="tab"], input[type="radio"], [tabindex]')) {
-      return current;
-    }
-  }
-  return null;
-}
-
-function findPaymentCardAncestor(el, pattern) {
-  let current = el;
-  for (let depth = 0; current && depth < 8; depth += 1, current = current.parentElement) {
-    if (!isVisibleElement(current)) continue;
-    if (isDocumentLevelContainer(current)) break;
-    const text = getSearchText(current);
-    if (pattern.test(text) && isPaymentCardSized(current)) {
-      return current;
-    }
-  }
-  return null;
-}
-
-function normalizePlusPaymentMethod(value = '') {
-  return String(value || '').trim().toLowerCase() === PLUS_PAYMENT_METHOD_GOPAY
-    ? PLUS_PAYMENT_METHOD_GOPAY
-    : PLUS_PAYMENT_METHOD_PAYPAL;
-}
-
-function getPaymentMethodConfig(method = PLUS_PAYMENT_METHOD_PAYPAL) {
-  return PAYMENT_METHOD_CONFIGS[normalizePlusPaymentMethod(method)] || PAYMENT_METHOD_CONFIGS[PLUS_PAYMENT_METHOD_PAYPAL];
-}
-
-function getAncestorChainSummary(el, limit = 6) {
-  const chain = [];
-  let current = el;
-  for (let depth = 0; current && depth < limit; depth += 1, current = current.parentElement) {
-    if (isDocumentLevelContainer(current)) break;
-    const rect = current.getBoundingClientRect();
-    chain.push({
-      tag: String(current.tagName || '').toLowerCase(),
-      role: current.getAttribute?.('role') || '',
-      id: current.id || '',
-      className: typeof current.className === 'string' ? current.className.slice(0, 120) : '',
-      testId: current.getAttribute?.('data-testid') || '',
-      ariaLabel: current.getAttribute?.('aria-label') || '',
-      ariaChecked: current.getAttribute?.('aria-checked') || '',
-      ariaSelected: current.getAttribute?.('aria-selected') || '',
-      rect: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
-      text: getCombinedSearchText(current).slice(0, 180),
-    });
-  }
-  return chain;
-}
-
-function getPaymentMethodSearchCandidates(method = PLUS_PAYMENT_METHOD_PAYPAL) {
-  const config = getPaymentMethodConfig(method);
-  const selector = [
-    'button',
-    'a',
-    'label',
-    '[role="button"]',
-    '[role="radio"]',
-    '[role="tab"]',
-    'input[type="radio"]',
-    '[tabindex]',
-    '[data-testid]',
-    '[aria-label]',
-    '[title]',
-    'img',
-    'svg',
-    'span',
-    'div',
-  ].join(', ');
-
-  return getVisibleControls(selector)
-    .filter((el) => {
-      const text = getCombinedSearchText(el);
-      return config.patterns.some((pattern) => pattern.test(text));
-    })
-    .sort((left, right) => {
-      const leftRect = left.getBoundingClientRect();
-      const rightRect = right.getBoundingClientRect();
-      return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
-    });
-}
-
-function getPayPalSearchCandidates() {
-  return getPaymentMethodSearchCandidates(PLUS_PAYMENT_METHOD_PAYPAL);
-}
-
-function getGoPaySearchCandidates() {
-  return getPaymentMethodSearchCandidates(PLUS_PAYMENT_METHOD_GOPAY);
-}
-
-function findPaymentMethodTarget(method = PLUS_PAYMENT_METHOD_PAYPAL) {
-  const config = getPaymentMethodConfig(method);
-  const directClickable = findClickableByText(config.patterns);
-  if (directClickable) {
-    return directClickable;
-  }
-
-  const radios = getVisibleControls('input[type="radio"], [role="radio"]');
-  const matchedRadio = radios.find((el) => config.patterns.some((pattern) => pattern.test(getCombinedSearchText(el))));
-  if (matchedRadio) {
-    return matchedRadio;
-  }
-
-  const candidates = getPaymentMethodSearchCandidates(method);
-  for (const candidate of candidates) {
-    const interactive = findInteractiveAncestor(candidate);
-    if (interactive && config.patterns.some((pattern) => pattern.test(getCombinedSearchText(interactive)))) {
-      return interactive;
-    }
-    const card = config.patterns
-      .map((pattern) => findPaymentCardAncestor(candidate, pattern))
-      .find(Boolean);
-    if (card) {
-      return card;
-    }
-  }
-
-  return null;
-}
-
-function findPayPalPaymentMethodTarget() {
-  return findPaymentMethodTarget(PLUS_PAYMENT_METHOD_PAYPAL);
-}
-
-function findGoPayPaymentMethodTarget() {
-  return findPaymentMethodTarget(PLUS_PAYMENT_METHOD_GOPAY);
-}
-
-function summarizeElementForDebug(el) {
-  if (!el) return null;
-  const rect = el.getBoundingClientRect();
-  return {
-    tag: String(el.tagName || '').toLowerCase(),
-    role: el.getAttribute?.('role') || '',
-    text: getSearchText(el).slice(0, 160),
-    rect: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
-    chain: getAncestorChainSummary(el, 3),
-  };
-}
-
-function getPaymentMethodCandidateSummaries(method = PLUS_PAYMENT_METHOD_PAYPAL, limit = 6) {
-  return getPaymentMethodSearchCandidates(method)
-    .map(summarizeElementForDebug)
-    .filter(Boolean)
-    .slice(0, limit);
-}
-
-function getPayPalCandidateSummaries(limit = 6) {
-  return getPaymentMethodCandidateSummaries(PLUS_PAYMENT_METHOD_PAYPAL, limit);
-}
-
-function getGoPayCandidateSummaries(limit = 6) {
-  return getPaymentMethodCandidateSummaries(PLUS_PAYMENT_METHOD_GOPAY, limit);
-}
-
-function getPaymentTextPreview(limit = 10) {
-  const seen = new Set();
-  const pattern = /gopay|go\s*pay|paypal|card|payment|billing|subscribe|pay|银行卡|付款|支付|账单|订阅/i;
-  return getVisibleControls('button, a, label, [role="button"], [role="radio"], input[type="radio"], input[type="button"], input[type="submit"], [data-testid]')
-    .map((el) => getCombinedSearchText(el))
-    .filter((text) => text && pattern.test(text))
-    .map((text) => text.slice(0, 180))
-    .filter((text) => {
-      if (seen.has(text)) return false;
-      seen.add(text);
-      return true;
-    })
-    .slice(0, limit);
-}
-
-function getPayPalDiagnostics(reason = '') {
-  return getPaymentMethodDiagnostics(PLUS_PAYMENT_METHOD_PAYPAL, reason);
-}
-
-function getGoPayDiagnostics(reason = '') {
-  return getPaymentMethodDiagnostics(PLUS_PAYMENT_METHOD_GOPAY, reason);
-}
-
-function getPaymentMethodDiagnostics(method = PLUS_PAYMENT_METHOD_PAYPAL, reason = '') {
-  const config = getPaymentMethodConfig(method);
-  return {
-    reason,
+function inspectPlusCheckoutState(payload = {}) {
+  const result = {
     url: location.href,
     readyState: document.readyState,
-    paymentMethod: config.id,
-    paymentMethodLabel: config.label,
-    paymentCandidates: getPaymentMethodCandidateSummaries(config.id),
-    paypalCandidates: getPayPalCandidateSummaries(),
-    gopayCandidates: getGoPayCandidateSummaries(),
-    paymentTextPreview: getPaymentTextPreview(),
-    cardFieldsVisible: hasCreditCardFields(),
-    billingFieldsVisible: hasBillingAddressFields(),
   };
-}
-
-function writePaymentMethodDiagnostics(method = PLUS_PAYMENT_METHOD_PAYPAL, reason = '', level = 'info') {
-  const config = getPaymentMethodConfig(method);
-  const diagnostics = getPaymentMethodDiagnostics(config.id, reason);
-  const writer = typeof console[level] === 'function' ? console[level] : console.info;
-  writer.call(console, `[MultiPage:plus-checkout] ${config.diagnosticLabel} diagnostics`, diagnostics);
-  log(`Plus Checkout：${reason}。${config.label} 候选 ${diagnostics.paymentCandidates.length} 个，银行卡字段${diagnostics.cardFieldsVisible ? '仍可见' : '不可见'}。`, level === 'error' ? 'error' : 'warn');
-  return diagnostics;
-}
-
-function writePayPalDiagnostics(reason, level = 'info') {
-  return writePaymentMethodDiagnostics(PLUS_PAYMENT_METHOD_PAYPAL, reason, level);
-}
-
-function writeGoPayDiagnostics(reason, level = 'info') {
-  return writePaymentMethodDiagnostics(PLUS_PAYMENT_METHOD_GOPAY, reason, level);
-}
-
-function buildPlusCheckoutPayload(paymentMethod = PLUS_PAYMENT_METHOD_PAYPAL) {
-  const config = getPaymentMethodConfig(paymentMethod);
-  return {
-    ...JSON.parse(JSON.stringify(PLUS_CHECKOUT_PAYLOAD_BASE)),
-    billing_details: {
-      ...config.billingDetails,
-    },
-  };
-}
-
-function buildPlusCheckoutUrl(checkoutSessionId, paymentMethod = PLUS_PAYMENT_METHOD_PAYPAL) {
-  const sessionId = String(checkoutSessionId || '').trim();
-  if (!sessionId) {
-    throw new Error('创建 Plus Checkout 失败：未返回 checkout_session_id。');
+  if (payload.includeAccessToken || payload.includeSession) {
+    result.accessToken = ''; // resolved by createPlusCheckoutSession when needed
   }
-  const config = getPaymentMethodConfig(paymentMethod);
-  return `https://chatgpt.com/checkout/${config.checkoutMerchantPath}/${sessionId}`;
+  return result;
 }
 
-async function createPlusCheckoutSession(options = {}) {
+function extractHostedCheckoutUrl(data = {}) {
+  return String(data?.url || data?.stripe_hosted_url || data?.checkout_url || '').trim();
+}
+
+async function createPlusCheckoutSession() {
   await waitForDocumentComplete();
   log('Plus：正在读取 ChatGPT 登录会话...');
 
-  const sessionResponse = await fetch('/api/auth/session', {
-    credentials: 'include',
-  });
+  const sessionResponse = await fetch('/api/auth/session', { credentials: 'include' });
   const session = await sessionResponse.json().catch(() => ({}));
   const accessToken = session?.accessToken;
   if (!accessToken) {
     throw new Error('请先登录 ChatGPT，当前页面未返回可用 accessToken。');
   }
 
-  log('Plus：正在创建 checkout 会话...');
-  const paymentMethod = normalizePlusPaymentMethod(options.paymentMethod);
-  const checkoutPayload = buildPlusCheckoutPayload(paymentMethod);
+  log('Plus：正在创建 hosted checkout 会话...');
+  const checkoutPayload = JSON.parse(JSON.stringify(PLUS_CHECKOUT_HOSTED_DEFAULTS));
   const response = await fetch('https://chatgpt.com/backend-api/payments/checkout', {
     method: 'POST',
     credentials: 'include',
@@ -659,970 +134,317 @@ async function createPlusCheckoutSession(options = {}) {
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data?.checkout_session_id) {
+  if (!response.ok) {
     const detail = data?.detail || data?.message || `HTTP ${response.status}`;
     throw new Error(`创建 Plus Checkout 失败：${detail}`);
   }
 
+  const hostedUrl = extractHostedCheckoutUrl(data);
+  if (!hostedUrl) {
+    throw new Error('创建 Plus Checkout 失败：响应未返回 hosted 长链接（url / stripe_hosted_url / checkout_url 均为空）。');
+  }
+
   return {
-    checkoutUrl: buildPlusCheckoutUrl(data.checkout_session_id, paymentMethod),
+    checkoutUrl: hostedUrl,
+    checkoutSessionId: String(data?.checkout_session_id || '').trim(),
     country: checkoutPayload.billing_details.country,
     currency: checkoutPayload.billing_details.currency,
   };
 }
 
-async function selectPaymentMethod(method = PLUS_PAYMENT_METHOD_PAYPAL) {
-  const config = getPaymentMethodConfig(method);
-  let lastDiagnosticsAt = 0;
-  const target = await waitUntil(() => {
-    const currentTarget = findPaymentMethodTarget(config.id);
-    if (currentTarget) {
-      return currentTarget;
-    }
+// ---- Hosted Stripe page (pay.openai.com / checkout.stripe.com) ----
 
-    const now = Date.now();
-    if (!lastDiagnosticsAt || now - lastDiagnosticsAt >= PAYPAL_DIAGNOSTIC_LOG_INTERVAL_MS) {
-      lastDiagnosticsAt = now;
-      writePaymentMethodDiagnostics(config.id, `正在等待可点击的 ${config.label} 付款方式`, 'warn');
-    }
-    return null;
-  }, {
-    label: `${config.label} 付款方式`,
-    intervalMs: 250,
-  });
-  console.info(`[MultiPage:plus-checkout] ${config.label} target selected`, summarizeElementForDebug(target));
-  simulateClick(target);
-  log(`Plus Checkout：已点击 ${config.label} 付款方式，正在确认选中状态。`);
-
-  if (!await waitForPaymentMethodActive(config.id)) {
-    const diagnostics = writePaymentMethodDiagnostics(config.id, `点击 ${config.label} 后页面仍未进入 ${config.label} 账单表单`, 'error');
-    throw new Error(`Plus Checkout：已尝试点击 ${config.label}，但页面未切换到 ${config.label} 表单。请提供控制台 ${config.label} diagnostics 结构。候选数量：${diagnostics.paymentCandidates.length}，银行卡字段仍可见：${diagnostics.cardFieldsVisible ? '是' : '否'}。`);
+function setInputValue(el, val) {
+  if (!el) {
+    return false;
   }
-
-  log(`Plus Checkout：已确认 ${config.label} 付款方式生效。`);
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  if (nativeSetter) {
+    nativeSetter.call(el, String(val ?? ''));
+  } else {
+    el.value = String(val ?? '');
+  }
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new Event('blur', { bubbles: true }));
   return true;
 }
 
-async function selectPayPalPaymentMethod() {
-  return selectPaymentMethod(PLUS_PAYMENT_METHOD_PAYPAL);
-}
-
-async function selectGoPayPaymentMethod() {
-  return selectPaymentMethod(PLUS_PAYMENT_METHOD_GOPAY);
-}
-
-async function selectPlusPayPalPaymentMethod() {
-  await waitForDocumentComplete();
-  await selectPaymentMethod(PLUS_PAYMENT_METHOD_PAYPAL);
-  return {
-    paymentSelected: true,
-    paymentMethod: PLUS_PAYMENT_METHOD_PAYPAL,
-  };
-}
-
-async function selectPlusGoPayPaymentMethod() {
-  await waitForDocumentComplete();
-  await selectPaymentMethod(PLUS_PAYMENT_METHOD_GOPAY);
-  return {
-    paymentSelected: true,
-    paymentMethod: PLUS_PAYMENT_METHOD_GOPAY,
-  };
-}
-
-async function fillFullName(fullName) {
-  const value = normalizeText(fullName);
-  if (!value) return false;
-  const input = findInputByFieldText([
-    /full\s*name|name\s*on|cardholder|billing\s*name/i,
-    /姓名|全名|持卡人/i,
-  ]);
-  if (!input) {
+function fillById(id, val) {
+  const el = document.getElementById(id);
+  if (!el) {
+    log(`Plus Checkout：NOT FOUND #${id}`);
     return false;
   }
-  fillInput(input, value);
-  await sleep(300);
+  setInputValue(el, val);
+  log(`Plus Checkout：#${id} = ${el.value}`);
   return true;
 }
 
-function findContactEmailInput() {
-  const direct = [
-    document.querySelector('input#email[type="email"][name="email"]'),
-    document.querySelector('input#email[type="email"]'),
-    document.querySelector('input[type="email"][name="email"]'),
-    document.querySelector('input[type="email"][aria-labelledby="email-label"]'),
-  ].filter((el) => el && isVisibleElement(el));
-  if (direct.length) {
-    return direct[0];
-  }
-  return findInputByFieldText([
-    /\bemail\b|e-mail|联系邮件|联系邮箱|邮箱/i,
-  ]);
-}
-
-async function fillContactEmail(email) {
-  const value = normalizeText(email);
-  if (!value) return false;
-  const input = await waitUntil(() => {
-    const candidate = findContactEmailInput();
-    return candidate && isVisibleElement(candidate) ? candidate : null;
-  }, {
-    label: '联系邮件输入框',
-    intervalMs: 200,
-    timeoutMs: 4000,
-  }).catch(() => null);
-  if (!input) {
+function fillSelectById(id, text) {
+  const el = document.getElementById(id);
+  if (!el) {
+    log(`Plus Checkout：NOT FOUND #${id}`);
     return false;
   }
-  if (typeof input.focus === 'function') {
-    try {
-      input.focus({ preventScroll: true });
-    } catch {
-      input.focus();
-    }
-    await sleep(120);
-  }
-
-  fillInput(input, '');
-  await sleep(80);
-
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    'value'
-  )?.set;
-  const InputEventCtor = typeof InputEvent === 'function' ? InputEvent : Event;
-  for (const char of value) {
-    input.dispatchEvent(new InputEventCtor('beforeinput', {
-      bubbles: true,
-      cancelable: true,
-      data: char,
-      inputType: 'insertText',
-    }));
-    if (typeof nativeInputValueSetter === 'function') {
-      nativeInputValueSetter.call(input, `${input.value || ''}${char}`);
-    } else {
-      input.value = `${input.value || ''}${char}`;
-    }
-    input.dispatchEvent(new InputEventCtor('input', {
-      bubbles: true,
-      data: char,
-      inputType: 'insertText',
-    }));
-  }
-  input.dispatchEvent(new Event('change', { bubbles: true }));
-  if (typeof input.blur === 'function') {
-    input.blur();
-  }
-  await sleep(300);
-  return true;
-}
-
-async function fillPlusContactEmail(payload = {}) {
-  await waitForDocumentComplete();
-  const filled = await fillContactEmail(payload.contactEmail || '');
-  return {
-    contactEmailFilled: filled,
-  };
-}
-
-function readCountryText() {
-  const countryInput = findInputByFieldText([
-    /country|region/i,
-    /国家|地区/i,
-  ]);
-  if (countryInput?.value) {
-    return countryInput.value;
-  }
-  const countrySelect = getVisibleControls('select').find((select) => /country|region|国家|地区/i.test(getFieldText(select)));
-  if (countrySelect) {
-    const option = countrySelect.selectedOptions?.[0];
-    return option?.textContent || countrySelect.value || '';
-  }
-  const countryDropdown = findCountryDropdown();
-  if (countryDropdown) {
-    return getCountryDropdownValue(countryDropdown);
-  }
-  return '';
-}
-
-function isLikelyAddressSearchInput(input) {
-  const text = getFieldText(input);
-  if (isNonAddressSearchInput(input)) {
-    return false;
-  }
-  if (/name|email|e-mail|phone|tel|password|coupon|promo|country|region|postal|zip|city|state|province|card|card\s*number|expiry|expiration|security|cvc|cvv|cc-|全名|姓名|邮箱|电话|密码|国家|地区|邮编|城市|省|州|银行卡|卡号|有效期|安全码/i.test(text)) {
-    return false;
-  }
-  if (/address|street|billing|search|line\s*1|地址|街道|账单/i.test(text)) {
-    return true;
-  }
-  return false;
-}
-
-function hasCreditCardFields() {
-  return getVisibleTextInputs().some((input) => {
-    const text = getFieldText(input);
-    return /card\s*number|card|expiry|expiration|security\s*code|cvc|cvv|银行卡|卡号|有效期|安全码/i.test(text);
-  });
-}
-
-function hasBillingAddressFields() {
-  return getVisibleTextInputs().some((input) => {
-    const text = getFieldText(input);
-    return /address|street|billing|line\s*1|地址|街道|账单/i.test(text)
-      && !/card\s*number|card|expiry|expiration|security|cvc|cvv|银行卡|卡号|有效期|安全码/i.test(text);
-  });
-}
-
-function hasPaymentMethodSelectionMarker(el) {
-  if (!el) return false;
-  const className = typeof el.className === 'string' ? el.className : el.getAttribute?.('class') || '';
-  return el.checked === true
-    || el.getAttribute?.('aria-checked') === 'true'
-    || el.getAttribute?.('aria-selected') === 'true'
-    || el.getAttribute?.('data-state') === 'checked'
-    || el.getAttribute?.('data-selected') === 'true'
-    || /\b(selected|checked|active)\b/i.test(className);
-}
-
-function hasSelectedPaymentMethodControl(method = PLUS_PAYMENT_METHOD_PAYPAL) {
-  const config = getPaymentMethodConfig(method);
-  const candidates = getPaymentMethodSearchCandidates(config.id);
-  return candidates.some((candidate) => {
-    let current = candidate;
-    for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
-      if (isDocumentLevelContainer(current)) break;
-      const currentMatchesPayment = config.patterns.some((pattern) => pattern.test(getCombinedSearchText(current)));
-      if (currentMatchesPayment && hasPaymentMethodSelectionMarker(current)) {
-        return true;
-      }
-
-      const radio = current.querySelector?.('input[type="radio"], [role="radio"]');
-      if (
-        radio
-        && config.patterns.some((pattern) => pattern.test(getCombinedSearchText(current) || getCombinedSearchText(radio)))
-        && hasPaymentMethodSelectionMarker(radio)
-      ) {
-        return true;
-      }
-    }
-    return false;
-  });
-}
-
-function hasSelectedPayPalControl() {
-  return hasSelectedPaymentMethodControl(PLUS_PAYMENT_METHOD_PAYPAL);
-}
-
-function hasSelectedGoPayControl() {
-  return hasSelectedPaymentMethodControl(PLUS_PAYMENT_METHOD_GOPAY);
-}
-
-function isPaymentMethodActive(method = PLUS_PAYMENT_METHOD_PAYPAL) {
-  return hasSelectedPaymentMethodControl(method);
-}
-
-function isPayPalPaymentMethodActive() {
-  return isPaymentMethodActive(PLUS_PAYMENT_METHOD_PAYPAL);
-}
-
-function isGoPayPaymentMethodActive() {
-  return isPaymentMethodActive(PLUS_PAYMENT_METHOD_GOPAY);
-}
-
-async function waitForPaymentMethodActive(method = PLUS_PAYMENT_METHOD_PAYPAL, timeoutMs = 5000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    throwIfStopped();
-    if (isPaymentMethodActive(method)) {
+  const needle = String(text || '').toLowerCase();
+  for (const option of Array.from(el.options || [])) {
+    const optionText = String(option.text || '').toLowerCase();
+    const optionValue = String(option.value || '').toLowerCase();
+    if (optionText.includes(needle) || optionValue.includes(needle)) {
+      el.value = option.value;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      log(`Plus Checkout：#${id} = ${option.text}`);
       return true;
     }
-    await sleep(250);
   }
+  log(`Plus Checkout：#${id} 无匹配项「${text}」`);
   return false;
 }
 
-async function waitForPayPalPaymentMethodActive(timeoutMs = 5000) {
-  return waitForPaymentMethodActive(PLUS_PAYMENT_METHOD_PAYPAL, timeoutMs);
+function randEmail() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let local = '';
+  for (let i = 0; i < 16; i += 1) {
+    local += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `${local}@gmail.com`;
 }
 
-async function findAddressSearchInput() {
-  return waitUntil(() => {
-    const direct = findInputByFieldText([
-      /address|street|billing|search|line\s*1/i,
-      /地址|街道|账单/i,
-    ], {
-      exclude: (input) => /city|state|province|postal|zip|country|城市|省|州|邮编|国家|地区/i.test(getFieldText(input)),
-    });
-    if (direct && !isNonAddressSearchInput(direct)) return direct;
-    const candidates = getVisibleTextInputs().filter(isLikelyAddressSearchInput);
-    return candidates[0] || null;
-  }, {
-    label: '地址搜索输入框',
-    intervalMs: 250,
-  });
-}
-
-function getAddressSuggestions() {
-  const selectors = [
-    '[role="listbox"] [role="option"]',
-    '[role="option"]',
-    '.pac-container .pac-item',
-    '[data-testid*="address" i] [role="option"]',
-    'li',
+function findHostedSubmitButton() {
+  const candidates = [
+    'button[data-testid="hosted-payment-submit-button"]',
+    'button[data-testid="submit-button"]',
+    'button.SubmitButton--complete',
   ];
-  const seen = new Set();
-  const results = [];
-  for (const selector of selectors) {
-    for (const el of Array.from(document.querySelectorAll(selector))) {
-      if (!isVisibleElement(el)) continue;
-      const text = normalizeText(el.textContent || el.getAttribute?.('aria-label') || '');
-      if (!text || text.length < 3) continue;
-      const key = `${selector}:${text}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      results.push(el);
+  for (const selector of candidates) {
+    const btn = document.querySelector(selector);
+    if (btn) {
+      return btn;
     }
   }
-  return results;
-}
-
-async function selectAddressSuggestion(seed) {
-  await fillAddressQuery(seed);
-  return clickAddressSuggestion(seed);
-}
-
-async function clickAddressSuggestion(seed = {}) {
-  const suggestions = await waitUntil(() => {
-    const options = getAddressSuggestions();
-    return options.length ? options : null;
-  }, {
-    label: '地址推荐列表',
-    intervalMs: 250,
-    timeoutMs: 6000,
-  });
-
-  const suggestionIndex = Math.max(0, Math.min(
-    suggestions.length - 1,
-    Math.floor(Number(seed.suggestionIndex) || 0)
-  ));
-  const target = suggestions[suggestionIndex] || suggestions[0];
-  simulateClick(target);
-  await sleep(1200);
-  return {
-    selectedText: normalizeText(target.textContent || ''),
-    suggestionIndex,
-  };
-}
-
-async function fillAddressQuery(seed = {}) {
-  const addressInput = await findAddressSearchInput();
-  fillInput(addressInput, seed.query || 'Berlin Mitte');
-  await sleep(800);
-  return {
-    filled: true,
-  };
-}
-
-function getRegionCandidates(value) {
-  const raw = normalizeText(value);
-  if (!raw) return [];
-  const aliases = {
-    act: 'Australian Capital Territory',
-    nsw: 'New South Wales',
-    nt: 'Northern Territory',
-    qld: 'Queensland',
-    sa: 'South Australia',
-    tas: 'Tasmania',
-    vic: 'Victoria',
-    wa: 'Western Australia',
-    tokyo: '東京都',
-    osaka: '大阪府',
-  };
-  const compact = raw.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-  const candidates = [raw];
-  if (aliases[compact]) {
-    candidates.push(aliases[compact]);
-  }
-  for (const [abbr, name] of Object.entries(aliases)) {
-    const compactName = name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-    if (compact === compactName) {
-      candidates.push(abbr.toUpperCase());
+  const textCandidates = ['Subscribe', 'Pay', 'Continue', 'Agree', '下一页', 'Next'];
+  const buttons = Array.from(document.querySelectorAll('button'));
+  for (const btn of buttons) {
+    const text = (btn.textContent || '').trim();
+    if (textCandidates.includes(text)) {
+      return btn;
     }
   }
-  return Array.from(new Set(candidates.filter(Boolean)));
+  return null;
 }
 
-function getCountryCandidates(value = '') {
-  const raw = normalizeText(value);
-  const compact = raw.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-  const aliases = {
-    AR: ['Argentina', '阿根廷'],
-    AU: ['Australia', '澳大利亚'],
-    CA: ['Canada', '加拿大'],
-    CN: ['China', '中国'],
-    DE: ['Germany', 'Deutschland', '德国'],
-    ES: ['Spain', '西班牙'],
-    FR: ['France', '法国'],
-    GB: ['United Kingdom', 'UK', 'Britain', 'England', '英国'],
-    HK: ['Hong Kong', '香港'],
-    ID: ['Indonesia', '印度尼西亚', '印尼'],
-    IT: ['Italy', '意大利'],
-    JP: ['Japan', '日本', '日本国'],
-    KR: ['Korea', 'South Korea', '韩国'],
-    MY: ['Malaysia', '马来西亚'],
-    NL: ['Netherlands', 'Holland', '荷兰'],
-    PH: ['Philippines', '菲律宾'],
-    RU: ['Russia', '俄罗斯'],
-    SG: ['Singapore', '新加坡'],
-    TH: ['Thailand', '泰国'],
-    TR: ['Turkey', 'Turkiye', '土耳其'],
-    TW: ['Taiwan', '台湾'],
-    US: ['United States', 'United States of America', 'USA', '美国'],
-    VN: ['Vietnam', '越南'],
-  };
-  const indonesiaCandidates = aliases.ID || [];
-  if (compact === 'id' || compact === 'indonesia' || compact === '印度尼西亚' || compact === '印尼') {
-    return Array.from(new Set([raw, 'ID', ...indonesiaCandidates].filter(Boolean)));
+// Stripe's hosted submit button has a custom React handler bound through a
+// pointer-event pipeline; a bare `el.click()` does not always trigger it.
+// Replay the full pointer/mouse lead-up before calling `.click()` so the
+// onPointerDown/onMouseDown listeners fire and the button visibly responds.
+function performRealUserClick(el) {
+  if (!el) return false;
+  try {
+    if (typeof el.focus === 'function') el.focus();
+  } catch {
+    // ignore — focus is best-effort
   }
-  const direct = aliases[String(raw || '').trim().toUpperCase()] || [];
-  const matched = Object.entries(aliases).find(([code, names]) => {
-    if (String(code).toLowerCase() === compact) return true;
-    return names.some((name) => {
-      const normalizedName = normalizeText(name).toLowerCase();
-      const compactName = normalizedName.replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-      return compact === compactName || normalizedName === raw.toLowerCase();
-    });
-  });
-  return Array.from(new Set([raw, ...direct, ...(matched ? matched[1] : [])].filter(Boolean)));
-}
-
-function matchesCountryOption(text, desiredValue) {
-  const normalizedText = normalizeText(text).toLowerCase();
-  const compactText = normalizedText.replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-  if (!compactText) return false;
-  return getCountryCandidates(desiredValue).some((candidate) => {
-    const normalizedCandidate = normalizeText(candidate).toLowerCase();
-    const compactCandidate = normalizedCandidate.replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-    if (!compactCandidate) return false;
-    return normalizedText === normalizedCandidate
-      || compactText === compactCandidate
-      || (compactCandidate.length > 3 && compactText.includes(compactCandidate));
-  });
-}
-
-function findCountryDropdown() {
-  const controls = getVisibleControls('select, button, [role="button"], [role="combobox"], [aria-haspopup="listbox"]');
-  return controls.find((control) => {
-    if (!isEnabledControl(control) || isDocumentLevelContainer(control)) return false;
-    const text = getFieldText(control);
-    return /country/i.test(text) || /\u56fd\u5bb6|\u56fd\u5bb6\u6216\u5730\u533a/.test(text);
-  }) || null;
-}
-
-function getCountryDropdownValue(control) {
-  if (!control) return '';
-  if (String(control.tagName || '').toUpperCase() === 'SELECT') {
-    const selected = control.selectedOptions?.[0];
-    return normalizeText(selected?.textContent || control.value || '');
-  }
-  return normalizeText(
-    control.getAttribute?.('aria-valuetext')
-    || control.getAttribute?.('aria-label')
-    || control.getAttribute?.('data-value')
-    || control.textContent
-    || ''
-  );
-}
-
-function matchesRegionOption(text, desiredValue) {
-  const normalizedText = normalizeText(text).toLowerCase();
-  const compactText = normalizedText.replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-  if (!compactText) return false;
-  return getRegionCandidates(desiredValue).some((candidate) => {
-    const normalizedCandidate = normalizeText(candidate).toLowerCase();
-    const compactCandidate = normalizedCandidate.replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-    if (!compactCandidate) return false;
-    return normalizedText === normalizedCandidate
-      || compactText === compactCandidate
-      || (compactCandidate.length > 3 && compactText.includes(compactCandidate));
-  });
-}
-
-function findRegionDropdown() {
-  const controls = getVisibleControls('select, button, [role="button"], [role="combobox"], [aria-haspopup="listbox"]');
-  return controls.find((control) => {
-    if (!isEnabledControl(control) || isDocumentLevelContainer(control)) return false;
-    const text = getFieldText(control);
-    if (/country/i.test(text) || /\u56fd\u5bb6|\u5730\u533a/.test(text)) return false;
-    return /state|province|county|prefecture|administrative|administrative[_-]?area/i.test(text)
-      || /(?:^|\s)region(?:\s|$)/i.test(text)
-      || /\u5dde|\u7701|\u8f96\u533a|\u90fd\u9053\u5e9c\u53bf/.test(text);
-  }) || null;
-}
-
-function getRegionDropdownValue(control) {
-  if (!control) return '';
-  if (String(control.tagName || '').toUpperCase() === 'SELECT') {
-    const selected = control.selectedOptions?.[0];
-    return normalizeText(selected?.textContent || control.value || '');
-  }
-  return normalizeText(
-    control.getAttribute?.('aria-valuetext')
-    || control.getAttribute?.('aria-label')
-    || control.getAttribute?.('data-value')
-    || control.textContent
-    || ''
-  );
-}
-
-function getVisibleRegionOptions() {
-  const selectors = [
-    '[role="listbox"] [role="option"]',
-    '[role="option"]',
-    'li',
-  ];
-  const seen = new Set();
-  const options = [];
-  for (const selector of selectors) {
-    for (const option of Array.from(document.querySelectorAll(selector))) {
-      if (!isVisibleElement(option)) continue;
-      const text = normalizeText(getActionText(option) || option.textContent || '');
-      if (!text || seen.has(text)) continue;
-      seen.add(text);
-      options.push(option);
+  let clientX = 0;
+  let clientY = 0;
+  try {
+    const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+    if (rect) {
+      clientX = rect.left + (rect.width || 0) / 2;
+      clientY = rect.top + (rect.height || 0) / 2;
     }
+  } catch {
+    // ignore — coords are best-effort
   }
-  return options;
-}
-
-async function selectRegionDropdown(regionDropdown, value) {
-  if (!regionDropdown || !value) return false;
-  if (matchesRegionOption(getRegionDropdownValue(regionDropdown), value)) {
+  const view = typeof window !== 'undefined' ? window : null;
+  const mouseInit = { bubbles: true, cancelable: true, view, button: 0, buttons: 1, clientX, clientY };
+  const pointerInit = { ...mouseInit, pointerType: 'mouse', isPrimary: true, pointerId: 1 };
+  const root = typeof globalThis !== 'undefined' ? globalThis : window;
+  const dispatch = (Ctor, type, init) => {
+    if (typeof Ctor !== 'function') return;
+    try {
+      el.dispatchEvent(new Ctor(type, init));
+    } catch {
+      // ignore — synthetic events are best-effort
+    }
+  };
+  dispatch(root.PointerEvent, 'pointerover', pointerInit);
+  dispatch(root.PointerEvent, 'pointerenter', pointerInit);
+  dispatch(root.MouseEvent, 'mouseover', mouseInit);
+  dispatch(root.PointerEvent, 'pointerdown', pointerInit);
+  dispatch(root.MouseEvent, 'mousedown', mouseInit);
+  dispatch(root.PointerEvent, 'pointerup', pointerInit);
+  dispatch(root.MouseEvent, 'mouseup', mouseInit);
+  try {
+    el.click?.();
+  } catch {
     return false;
   }
-
-  if (String(regionDropdown.tagName || '').toUpperCase() === 'SELECT') {
-    const option = Array.from(regionDropdown.options || []).find((item) => (
-      matchesRegionOption(item.textContent || '', value)
-      || matchesRegionOption(item.value || '', value)
-    ));
-    if (!option) {
-      throw new Error(`Plus Checkout: state dropdown option "${value}" was not found.`);
-    }
-    regionDropdown.value = option.value;
-    option.selected = true;
-    regionDropdown.dispatchEvent(new Event('input', { bubbles: true }));
-    regionDropdown.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  }
-
-  simulateClick(regionDropdown);
-  await sleep(250);
-  const startedAt = Date.now();
-  let option = null;
-  while (Date.now() - startedAt < 2500) {
-    throwIfStopped();
-    option = getVisibleRegionOptions().find((item) => (
-      matchesRegionOption(getActionText(item) || item.textContent || '', value)
-    ));
-    if (option) break;
-    await sleep(100);
-  }
-  if (!option) {
-    const visibleOptions = getVisibleRegionOptions()
-      .map((item) => normalizeText(getActionText(item) || item.textContent || ''))
-      .filter(Boolean)
-      .slice(0, 12)
-      .join(' | ');
-    throw new Error(`Plus Checkout: state dropdown option "${value}" was not found. Visible options: ${visibleOptions || 'none'}.`);
-  }
-  simulateClick(option);
-  await sleep(500);
   return true;
 }
 
-async function selectCountryDropdown(countryDropdown, value) {
-  if (!countryDropdown || !value) return false;
-  if (matchesCountryOption(getCountryDropdownValue(countryDropdown), value)) {
+// Stripe's hosted submit button stays visually present but unclickable while
+// its form validator is still running — `disabled` is NOT always set; instead
+// the button carries `SubmitButton--incomplete` (or `--loading` during a
+// submission). Only `SubmitButton--complete` means React's onClick will fire.
+// Wait for that state — otherwise our pointer-event sequence lands while the
+// handler is still a no-op and the click silently drops.
+function isHostedSubmitReady(btn) {
+  if (!btn) return false;
+  if (btn.disabled) return false;
+  const rect = typeof btn.getBoundingClientRect === 'function' ? btn.getBoundingClientRect() : null;
+  if (!rect || !rect.height) return false;
+  const className = String(btn.className || '');
+  if (/\bSubmitButton--(incomplete|loading|disabled)\b/.test(className)) {
     return false;
   }
+  // If the button uses Stripe's SubmitButton family at all, require the
+  // explicit --complete marker. For non-Stripe fallbacks (plain Subscribe
+  // buttons, etc.) the !disabled + visible check above is enough.
+  if (/\bSubmitButton\b/.test(className) && !/\bSubmitButton--complete\b/.test(className)) {
+    return false;
+  }
+  return true;
+}
 
-  if (String(countryDropdown.tagName || '').toUpperCase() === 'SELECT') {
-    const option = Array.from(countryDropdown.options || []).find((item) => (
-      matchesCountryOption(item.textContent || '', value)
-      || matchesCountryOption(item.value || '', value)
-    ));
-    if (!option) {
-      throw new Error(`Plus Checkout: country dropdown option "${value}" was not found.`);
+async function clickHostedSubmit() {
+  const startedAt = Date.now();
+  let loggedWaitForReady = false;
+  while (Date.now() - startedAt < 30000) {
+    throwIfStopped();
+    const btn = findHostedSubmitButton();
+    if (!btn) {
+      await sleep(500);
+      continue;
     }
-    countryDropdown.value = option.value;
-    option.selected = true;
-    countryDropdown.dispatchEvent(new Event('input', { bubbles: true }));
-    countryDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    if (!isHostedSubmitReady(btn)) {
+      if (!loggedWaitForReady) {
+        log('Plus Checkout：订阅按钮尚未变为可点击状态（Stripe 正在校验表单），等待...');
+        loggedWaitForReady = true;
+      }
+      await sleep(1000);
+      continue;
+    }
+    await performOperationWithDelay(
+      { stepKey: 'plus-checkout-hosted', kind: 'click', label: 'hosted-submit' },
+      async () => {
+        performRealUserClick(btn);
+        // Backstop: if the button lives inside a <form>, ask the form to
+        // submit through this button so Stripe's submit handler still wins
+        // even if its pointer pipeline swallowed the click.
+        try {
+          const form = btn.form || (typeof btn.closest === 'function' ? btn.closest('form') : null);
+          if (form && typeof form.requestSubmit === 'function') {
+            form.requestSubmit(btn);
+          }
+        } catch {
+          // ignore — requestSubmit fallback is best-effort
+        }
+      }
+    );
+    log(`Plus Checkout：已点击 ${(btn.textContent || '').trim() || '订阅按钮'}`);
+    return true;
+  }
+  throw new Error('Plus Checkout：在 30 秒内订阅按钮未进入可点击状态。');
+}
+
+function findPayPalAccordionButton() {
+  return document.querySelector('[data-testid="paypal-accordion-item-button"]')
+    || document.querySelector('.paypal-accordion-item button')
+    || null;
+}
+
+async function clickPayPalAccordion() {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 15000) {
+    throwIfStopped();
+    const btn = findPayPalAccordionButton();
+    if (btn) {
+      await performOperationWithDelay(
+        { stepKey: 'plus-checkout-hosted', kind: 'click', label: 'paypal-accordion' },
+        async () => { btn.click(); }
+      );
+      log('Plus Checkout：已点击 PayPal 付款方式');
+      // Re-click after a short delay (matches reference script behaviour).
+      await sleep(500);
+      const again = findPayPalAccordionButton();
+      if (again) {
+        await performOperationWithDelay(
+          { stepKey: 'plus-checkout-hosted', kind: 'click', label: 'paypal-accordion-again' },
+          async () => { again.click(); }
+        );
+      }
+      return true;
+    }
     await sleep(500);
-    return true;
   }
-
-  simulateClick(countryDropdown);
-  await sleep(250);
-  const startedAt = Date.now();
-  let option = null;
-  while (Date.now() - startedAt < 2500) {
-    throwIfStopped();
-    option = getVisibleRegionOptions().find((item) => (
-      matchesCountryOption(getActionText(item) || item.textContent || '', value)
-    ));
-    if (option) break;
-    await sleep(100);
-  }
-  if (!option) {
-    const visibleOptions = getVisibleRegionOptions()
-      .map((item) => normalizeText(getActionText(item) || item.textContent || ''))
-      .filter(Boolean)
-      .slice(0, 12)
-      .join(' | ');
-    throw new Error(`Plus Checkout: country dropdown option "${value}" was not found. Visible options: ${visibleOptions || 'none'}.`);
-  }
-  simulateClick(option);
-  await sleep(700);
-  return true;
+  log('Plus Checkout：未找到 PayPal accordion 按钮，将继续尝试填写账单地址（页面可能已默认选中 PayPal）。');
+  return false;
 }
 
-function getStructuredAddressFields() {
-  const address1 = findInputByFieldText([
-    /address\s*(?:line)?\s*1|address[_-]?line[_-]?1|address\[(?:address_)?line1\]|line\s*1|street|street[_-]?address/i,
-    /地址\s*1|街道|详细地址|住所/i,
-  ]);
-  const address2 = findInputByFieldText([
-    /address\s*(?:line)?\s*2|address[_-]?line[_-]?2|address\[(?:address_)?line2\]|line\s*2|apt|suite|unit/i,
-    /地址\s*2|公寓|单元|门牌/i,
-  ]);
-  const city = findInputByFieldText([
-    /city|town|suburb|locality|address[_-]?level[_-]?2|address\[city\]/i,
-    /城市|市区|区市町村|市区町村|市町村/i,
-  ]);
-  const region = findInputByFieldText([
-    /state|province|region|county|prefecture|administrative|administrative[_-]?area|address[_-]?level[_-]?1|address\[state\]/i,
-    /省|州|地区|辖区|都道府县|都道府県/i,
-  ]);
-  const postalCode = findInputByFieldText([
-    /postal|zip|postcode|postal[_-]?code|zip[_-]?code|address\[postal_code\]/i,
-    /邮编|邮政|郵便番号/i,
-  ]);
-  return { address1, address2, city, region, postalCode };
-}
+// User-pinned billing address for the Stripe hosted checkout. Hardcoded per
+// product owner — do not refetch from meiguodizhi.com here.
+const HOSTED_CHECKOUT_BILLING_ADDRESS = Object.freeze({
+  street: '2671 Clayton Oaks Drive',
+  city: 'Dallas',
+  state: 'TX',
+  zip: '75227',
+});
 
-function fillIfEmpty(input, value, options = {}) {
-  if (!input || !value) return false;
-  if (!options.overwrite && String(input.value || '').trim()) return false;
-  if (options.overwrite && String(input.value || '').trim() === String(value || '').trim()) return false;
-  fillInput(input, value);
-  return true;
-}
+async function runHostedCheckoutFlow() {
+  await waitForDocumentComplete();
+  log('Plus Checkout：开始执行 hosted 页面自动填写流程...');
 
-function isDropdownStructuredAddressForm(fields = getStructuredAddressFields()) {
-  return Boolean(
-    findCountryDropdown()
-    && findRegionDropdown()
-    && fields.address1
-    && fields.city
-    && fields.postalCode
-  );
-}
-
-async function ensureStructuredAddress(seed, options = {}) {
-  const fallback = seed?.fallback || {};
-  const overwrite = Boolean(options.overwrite);
-  const countryDropdown = findCountryDropdown();
-  if (countryDropdown && seed?.countryCode) {
-    await selectCountryDropdown(countryDropdown, seed.countryCode);
+  // Hide Stripe captcha / address autocomplete overlays to avoid blocking clicks.
+  try {
+    const style = document.createElement('style');
+    style.textContent = '#captcha-standalone,.captcha-overlay,.captcha-container,.AddressAutocomplete-results{display:none!important;height:0!important;overflow:hidden!important}';
+    document.head.appendChild(style);
+  } catch {
+    // ignore
   }
-  const fields = await waitUntil(() => {
-    const currentFields = getStructuredAddressFields();
-    if (currentFields.address1 || currentFields.city || currentFields.postalCode) {
-      return currentFields;
-    }
-    return null;
-  }, {
-    label: '结构化账单地址字段',
-    intervalMs: 250,
-    timeoutMs: 6000,
-  });
 
-  fillIfEmpty(fields.address1, fallback.address1, { overwrite });
-  fillIfEmpty(fields.city, fallback.city, { overwrite });
-  await selectRegionDropdown(findRegionDropdown(), fallback.region);
-  fillIfEmpty(fields.postalCode, fallback.postalCode, { overwrite });
+  await sleep(2000);
+  await clickPayPalAccordion();
+  await sleep(3000);
+
+  const address = HOSTED_CHECKOUT_BILLING_ADDRESS;
+  log(`Plus Checkout：使用固定账单地址 ${JSON.stringify(address)}`);
+  const email = randEmail();
+
+  fillById('email', email);
+  // Country drives which states show up in billingAdministrativeArea — set it
+  // first so the state select is repopulated with US options before we try to
+  // match by address.state.
+  fillSelectById('billingCountry', 'US');
   await sleep(500);
 
-  const latest = getStructuredAddressFields();
-  const missing = [];
-  if (!String(latest.address1?.value || '').trim()) missing.push('地址1');
-  if (!String(latest.city?.value || '').trim()) missing.push('城市');
-  if (!String(latest.postalCode?.value || '').trim()) missing.push('邮编');
-  if (missing.length) {
-    throw new Error(`Plus Checkout：账单地址字段未填写完整：${missing.join('、')}。`);
+  fillById('billingAddressLine1', address.street);
+  fillById('billingLocality', address.city);
+  fillById('billingPostalCode', address.zip);
+  fillSelectById('billingAdministrativeArea', address.state);
+
+  const tos = document.getElementById('termsOfServiceConsentCheckbox');
+  if (tos && !tos.checked) {
+    try {
+      tos.click();
+      log('Plus Checkout：已勾选服务条款 checkbox');
+    } catch (error) {
+      log(`Plus Checkout：勾选服务条款失败：${error?.message || String(error || '')}`);
+    }
   }
 
+  // Give Stripe's form validator a real beat to flip the submit button from
+  // SubmitButton--incomplete to SubmitButton--complete before we try to click.
+  // clickHostedSubmit also waits for that class, but starting later means less
+  // time burned on "still validating" log spam.
+  await sleep(2500);
+  await clickHostedSubmit();
   return {
-    address1: latest.address1?.value || '',
-    city: latest.city?.value || '',
-    region: getRegionDropdownValue(findRegionDropdown()) || latest.region?.value || '',
-    postalCode: latest.postalCode?.value || '',
+    address,
+    email,
   };
 }
 
-function findSubscribeButton() {
-  const submitButtons = getVisibleControls('button[type="submit"], input[type="submit"]');
-  const exactSubmit = submitButtons.find((button) => (
-    isEnabledControl(button)
-    && /订阅|subscribe|购买\s*ChatGPT\s*Plus|start\s*subscription|place\s*order/i.test(getCombinedSearchText(button))
-  ));
-  if (exactSubmit) {
-    return exactSubmit;
-  }
-
-  return findClickableByText([
-    /订阅|继续|确认|支付/i,
-    /subscribe|continue|confirm|pay|start\s*subscription|place\s*order/i,
-  ]);
-}
-
-function isBusySubscribeButton(button) {
-  if (!button) return true;
-  const text = getActionText(button);
-  return button.disabled
-    || button.getAttribute?.('aria-disabled') === 'true'
-    || button.getAttribute?.('aria-busy') === 'true'
-    || button.closest?.('[aria-busy="true"], [data-loading="true"], [data-state="loading"]')
-    || /loading|processing|submitting|请稍候|处理中|加载中/i.test(text);
-}
-
-function getAssociatedForm(button) {
-  if (!button) return null;
-  if (button.form) return button.form;
-  const formId = String(button.getAttribute?.('form') || '').trim();
-  if (formId) {
-    return document.getElementById(formId) || null;
-  }
-  return button.closest?.('form') || null;
-}
-
-async function humanLikeClick(el) {
-  throwIfStopped();
-  if (!el) {
-    throw new Error('无法点击空元素。');
-  }
-
-  el.scrollIntoView?.({ block: 'center', inline: 'center', behavior: 'instant' });
-  await sleep(300);
-  if (typeof el.focus === 'function') {
-    el.focus({ preventScroll: true });
-    await sleep(150);
-  }
-
-  const rect = el.getBoundingClientRect();
-  const clientX = Math.floor(rect.left + rect.width / 2);
-  const clientY = Math.floor(rect.top + rect.height / 2);
-  const eventInit = {
-    bubbles: true,
-    cancelable: true,
-    composed: true,
-    view: window,
-    clientX,
-    clientY,
-    button: 0,
-    buttons: 1,
-  };
-  const pointerCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
-  const events = [
-    ['pointerover', pointerCtor],
-    ['pointerenter', pointerCtor],
-    ['mouseover', MouseEvent],
-    ['mouseenter', MouseEvent],
-    ['pointermove', pointerCtor],
-    ['mousemove', MouseEvent],
-    ['pointerdown', pointerCtor],
-    ['mousedown', MouseEvent],
-    ['pointerup', pointerCtor],
-    ['mouseup', MouseEvent],
-    ['click', MouseEvent],
-  ];
-
-  for (const [type, EventCtor] of events) {
-    throwIfStopped();
-    el.dispatchEvent(new EventCtor(type, eventInit));
-    await sleep(type === 'mousedown' || type === 'pointerdown' ? 120 : 30);
-  }
-
-  if (typeof el.click === 'function') {
-    await sleep(120);
-    el.click();
-  }
-
-  const type = String(el.getAttribute?.('type') || el.type || '').trim().toLowerCase();
-  const form = getAssociatedForm(el);
-  if (
-    form
-    && typeof form.requestSubmit === 'function'
-    && (
-      (String(el.tagName || '').toUpperCase() === 'BUTTON' && (!type || type === 'submit'))
-      || (String(el.tagName || '').toUpperCase() === 'INPUT' && type === 'submit')
-    )
-  ) {
-    await sleep(250);
-    form.requestSubmit(el);
-  }
-
-  console.log('[MultiPage:plus-checkout] 已执行拟人工点击', summarizeElementForDebug(el));
-  log(`已拟人工点击 [${el.tagName}] "${el.textContent?.trim().slice(0, 30) || ''}"`);
-}
-
-async function fillPlusBillingAndSubmit(payload = {}) {
-  await waitForDocumentComplete();
-  const paymentMethod = normalizePlusPaymentMethod(payload.paymentMethod);
-  await selectPaymentMethod(paymentMethod);
-  const billingResult = await fillPlusBillingAddress(payload);
-
-  if (payload.skipSubmit) {
-    return {
-      ...billingResult,
-      submitted: false,
-    };
-  }
-
-  await clickPlusSubscribe();
-  return {
-    ...billingResult,
-    submitted: true,
-  };
-}
-
-async function fillPlusBillingAddress(payload = {}) {
-  await waitForDocumentComplete();
-  await fillContactEmail(payload.contactEmail || '');
-  await fillFullName(payload.fullName || '');
-
-  const countryText = readCountryText();
-  const seed = payload.addressSeed || {
-    query: 'Berlin Mitte',
-    suggestionIndex: 1,
-    fallback: {
-      address1: 'Unter den Linden',
-      city: 'Berlin',
-      region: 'Berlin',
-      postalCode: '10117',
-    },
-  };
-  let selected = { selectedText: '' };
-  const fields = getStructuredAddressFields();
-  const useDirectStructuredBranch = Boolean(seed.skipAutocomplete || isDropdownStructuredAddressForm(fields));
-  if (!useDirectStructuredBranch) {
-    selected = await selectAddressSuggestion(seed);
-  }
-  const structuredAddress = await ensureStructuredAddress(seed, {
-    overwrite: useDirectStructuredBranch,
-  });
-
-  return {
-    countryText,
-    selectedAddressText: selected.selectedText,
-    structuredAddress,
-  };
-}
-
-async function fillPlusAddressQuery(payload = {}) {
-  await waitForDocumentComplete();
-  await fillContactEmail(payload.contactEmail || '');
-  await fillFullName(payload.fullName || '');
-  const seed = payload.addressSeed || {};
-  await fillAddressQuery(seed);
-  return {
-    countryText: readCountryText(),
-    queryFilled: true,
-  };
-}
-
-async function selectPlusAddressSuggestion(payload = {}) {
-  await waitForDocumentComplete();
-  const selected = await clickAddressSuggestion(payload.addressSeed || {});
-  return {
-    selectedAddressText: selected.selectedText,
-    suggestionIndex: selected.suggestionIndex,
-  };
-}
-
-async function ensurePlusStructuredBillingAddress(payload = {}) {
-  await waitForDocumentComplete();
-  const structuredAddress = await ensureStructuredAddress(payload.addressSeed || {}, {
-    overwrite: Boolean(payload.overwriteStructuredAddress),
-  });
-  return {
-    countryText: readCountryText(),
-    structuredAddress,
-  };
-}
-
-async function clickPlusSubscribe(payload = {}) {
-  const paymentMethod = normalizePlusPaymentMethod(payload.paymentMethod);
-  if ((payload.ensurePayPalActive || payload.ensurePaymentActive) && !isPaymentMethodActive(paymentMethod)) {
-    await selectPaymentMethod(paymentMethod);
-  }
-
-  const subscribeButton = await waitUntil(() => {
-    const button = findSubscribeButton();
-    return button && isEnabledControl(button) && !isBusySubscribeButton(button) ? button : null;
-  }, {
-    label: '订阅按钮',
-    intervalMs: 250,
-    timeoutMs: 10000,
-  });
-
-  await sleep(Math.max(0, Math.floor(Number(payload.beforeClickDelayMs) || 0)));
-  await humanLikeClick(subscribeButton);
-  return {
-    clicked: true,
-  };
-}
-
-async function readChatGptSessionAccessToken() {
-  const sessionResponse = await fetch('/api/auth/session', {
-    credentials: 'include',
-  });
-  const session = await sessionResponse.json().catch(() => ({}));
-  return {
-    session,
-    accessToken: String(session?.accessToken || '').trim(),
-  };
-}
-
-async function inspectPlusCheckoutState(options = {}) {
-  const structuredAddress = getStructuredAddressFields();
-  const state = {
-    url: location.href,
-    readyState: document.readyState,
-    countryText: readCountryText(),
-    hasPayPal: Boolean(findPayPalPaymentMethodTarget()),
-    hasGoPay: Boolean(findGoPayPaymentMethodTarget()),
-    paypalCandidates: getPayPalCandidateSummaries(),
-    gopayCandidates: getGoPayCandidateSummaries(),
-    paymentTextPreview: getPaymentTextPreview(),
-    cardFieldsVisible: hasCreditCardFields(),
-    billingFieldsVisible: hasBillingAddressFields(),
-    hasSubscribeButton: Boolean(findSubscribeButton()),
-    checkoutAmountSummary: getCheckoutAmountSummary(),
-    addressFieldValues: {
-      address1: structuredAddress.address1?.value || '',
-      city: structuredAddress.city?.value || '',
-      region: getRegionDropdownValue(findRegionDropdown()) || structuredAddress.region?.value || '',
-      postalCode: structuredAddress.postalCode?.value || '',
-    },
-  };
-  if (options.includeSession || options.includeAccessToken) {
-    const sessionState = await readChatGptSessionAccessToken();
-    state.session = sessionState.session;
-    state.accessToken = sessionState.accessToken;
-  }
-  return state;
-}
-})();
+}());

@@ -50,12 +50,52 @@ function getCurrentMailIds() {
   return ids;
 }
 
+function normalizeRulePatternList(patterns = []) {
+  return Array.isArray(patterns) ? patterns : [];
+}
+
+function extractCodeByRulePatterns(text, patterns = []) {
+  const normalizedText = String(text || '');
+  for (const pattern of normalizeRulePatternList(patterns)) {
+    try {
+      const source = String(pattern?.source || '').trim();
+      if (!source) {
+        continue;
+      }
+      const flags = String(pattern?.flags || '').replace(/[^dgimsuvy]/g, '');
+      const match = normalizedText.match(new RegExp(source, flags));
+      if (!match) {
+        continue;
+      }
+      for (let index = 1; index < match.length; index += 1) {
+        const candidate = String(match[index] || '').trim();
+        if (candidate) {
+          return candidate;
+        }
+      }
+      if (String(match[0] || '').trim()) {
+        return String(match[0] || '').trim();
+      }
+    } catch (_) {
+      // Ignore invalid runtime rule patterns and continue with other candidates.
+    }
+  }
+  return null;
+}
+
 // ============================================================
 // Email Polling
 // ============================================================
 
 async function handlePollEmail(step, payload) {
-  const { senderFilters, subjectFilters, maxAttempts, intervalMs, excludeCodes = [] } = payload;
+  const {
+    codePatterns = [],
+    senderFilters,
+    subjectFilters,
+    maxAttempts,
+    intervalMs,
+    excludeCodes = [],
+  } = payload;
   const excludedCodeSet = new Set(excludeCodes.filter(Boolean));
 
   log(`步骤 ${step}：开始轮询邮箱（最多 ${maxAttempts} 次，每 ${intervalMs / 1000} 秒一次）`);
@@ -103,7 +143,9 @@ async function handlePollEmail(step, payload) {
       const subjectMatch = subjectFilters.some(f => subject.includes(f.toLowerCase()));
 
       if (senderMatch || subjectMatch) {
-        const code = extractVerificationCode(subject + ' ' + digest);
+        const code = extractVerificationCode(subject + ' ' + digest, {
+          codePatterns,
+        });
         if (code) {
           if (excludedCodeSet.has(code)) {
             log(`步骤 ${step}：跳过排除的验证码：${code}`, 'info');
@@ -169,13 +211,16 @@ async function refreshInbox() {
 // Verification Code Extraction
 // ============================================================
 
-function extractVerificationCode(text) {
+function extractVerificationCode(text, options = {}) {
+  const matchedByRule = extractCodeByRulePatterns(text, options?.codePatterns);
+  if (matchedByRule) return matchedByRule;
+
   // Pattern 1: Chinese format "代码为 370794" or "验证码...370794"
   const matchCn = text.match(/(?:代码为|验证码[^0-9]*?)[\s：:]*(\d{6})/);
   if (matchCn) return matchCn[1];
 
-  const matchOpenAiLogin = text.match(/(?:chatgpt\s+log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
-  if (matchOpenAiLogin) return matchOpenAiLogin[1];
+  const matchLoginCode = text.match(/(?:log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
+  if (matchLoginCode) return matchLoginCode[1];
 
   // Pattern 2: English format "code is 370794" or "code: 370794"
   const matchEn = text.match(/code[:\s]+is[:\s]+(\d{6})|code[:\s]+(\d{6})/i);

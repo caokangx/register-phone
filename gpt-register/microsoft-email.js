@@ -1,8 +1,4 @@
 (function attachMicrosoftEmailHelpers(globalScope) {
-  const OPENAI_SENDER_PATTERNS = [
-    /openai\.com/i,
-    /auth0\.openai\.com/i,
-  ];
   const CODE_PATTERN = /\b(\d{6})\b/;
   const GRAPH_SCOPES = 'offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read';
   const GRAPH_DEFAULT_SCOPE = 'https://graph.microsoft.com/.default';
@@ -179,6 +175,57 @@
     return String(value || '').trim().toLowerCase();
   }
 
+  function normalizeRulePatternList(patterns = []) {
+    return Array.isArray(patterns) ? patterns : [];
+  }
+
+  function extractCodeByRulePatterns(text, patterns = []) {
+    const normalizedText = String(text || '');
+    for (const pattern of normalizeRulePatternList(patterns)) {
+      try {
+        const source = String(pattern?.source || '').trim();
+        if (!source) {
+          continue;
+        }
+        const flags = String(pattern?.flags || '').replace(/[^dgimsuvy]/g, '');
+        const match = normalizedText.match(new RegExp(source, flags));
+        if (!match) {
+          continue;
+        }
+        for (let index = 1; index < match.length; index += 1) {
+          const candidate = String(match[index] || '').trim();
+          if (candidate) {
+            return candidate;
+          }
+        }
+        if (String(match[0] || '').trim()) {
+          return String(match[0] || '').trim();
+        }
+      } catch (_) {
+        // Ignore invalid runtime rule patterns and continue with other candidates.
+      }
+    }
+    return null;
+  }
+
+  function extractVerificationCode(text, options = {}) {
+    const source = String(text || '');
+    const matchedByRule = extractCodeByRulePatterns(source, options?.codePatterns);
+    if (matchedByRule) return matchedByRule;
+
+    const matchCn = source.match(/(?:代码为|验证码[^0-9]*?)[\s：:]*(\d{6})/i);
+    if (matchCn) return matchCn[1];
+
+    const matchLoginCode = source.match(/(?:log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
+    if (matchLoginCode) return matchLoginCode[1];
+
+    const matchEn = source.match(/code(?:\s+is|[\s:])+(\d{6})/i);
+    if (matchEn) return matchEn[1];
+
+    const matchStandalone = source.match(CODE_PATTERN);
+    return matchStandalone?.[1] || '';
+  }
+
   function getMessageSender(message) {
     return String(
       message?.from?.emailAddress?.address
@@ -203,22 +250,13 @@
       .join('\n');
   }
 
-  function isOpenAiMessage(message) {
-    const sender = getMessageSender(message);
-    if (OPENAI_SENDER_PATTERNS.some((pattern) => pattern.test(sender))) {
-      return true;
-    }
-
-    const searchText = getMessageSearchText(message);
-    return OPENAI_SENDER_PATTERNS.some((pattern) => pattern.test(searchText));
-  }
-
   function extractVerificationCodeFromMessages(messages, options = {}) {
     const filterAfterTimestamp = Number(options.filterAfterTimestamp || 0) || 0;
     const senderFilters = (options.senderFilters || []).map(normalizeFilterValue).filter(Boolean);
     const subjectFilters = (options.subjectFilters || []).map(normalizeFilterValue).filter(Boolean);
+    const requiredKeywords = (options.requiredKeywords || []).map(normalizeFilterValue).filter(Boolean);
     const excludedCodes = new Set((options.excludeCodes || []).map((value) => String(value || '').trim()).filter(Boolean));
-    const hasExplicitFilters = senderFilters.length > 0 || subjectFilters.length > 0;
+    const hasExplicitFilters = senderFilters.length > 0 || subjectFilters.length > 0 || requiredKeywords.length > 0;
 
     const sortedMessages = (Array.isArray(messages) ? messages : [])
       .map((raw) => normalizeMessage(raw, raw?.mailbox))
@@ -234,23 +272,23 @@
       const subject = normalizeFilterValue(message?.subject);
       const preview = normalizeFilterValue(message?.bodyPreview);
       const searchText = normalizeFilterValue(getMessageSearchText(message));
-      const codeMatch = getMessageSearchText(message).match(CODE_PATTERN);
-      const code = codeMatch?.[1] || '';
+      const code = extractVerificationCode(getMessageSearchText(message), {
+        codePatterns: options.codePatterns,
+      });
       if (!code || excludedCodes.has(code)) {
         continue;
       }
 
-      if (!hasExplicitFilters && !isOpenAiMessage(message)) {
-        continue;
-      }
-
       const senderMatched = senderFilters.length === 0
-        ? true
+        ? false
         : senderFilters.some((filter) => sender.includes(filter) || preview.includes(filter) || searchText.includes(filter));
       const subjectMatched = subjectFilters.length === 0
-        ? true
+        ? false
         : subjectFilters.some((filter) => subject.includes(filter) || preview.includes(filter) || searchText.includes(filter));
-      if (!senderMatched && !subjectMatched) {
+      const keywordMatched = requiredKeywords.length === 0
+        ? false
+        : requiredKeywords.some((filter) => preview.includes(filter) || searchText.includes(filter));
+      if (hasExplicitFilters && !senderMatched && !subjectMatched && !keywordMatched) {
         continue;
       }
 
@@ -401,6 +439,8 @@
           filterAfterTimestamp,
           senderFilters,
           subjectFilters,
+          requiredKeywords: options.requiredKeywords,
+          codePatterns: options.codePatterns,
           excludeCodes,
         });
         if (match) {
@@ -437,7 +477,6 @@
     fetchOutlookMessages,
     getMessageSender,
     getMessageTimestamp,
-    isOpenAiMessage,
     normalizeMailboxId,
     normalizeMailboxLabel,
     normalizeMessage,

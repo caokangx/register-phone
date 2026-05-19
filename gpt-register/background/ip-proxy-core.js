@@ -30,6 +30,65 @@ let ipProxyLastRuntimeError = {
   fatal: false,
   at: 0,
 };
+
+function normalizeAutomationWindowId(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+}
+
+function buildAutomationWindowUnavailableError(error) {
+  const suffix = error?.message ? ` 原因：${error.message}` : '';
+  return new Error(`自动任务窗口已不可用，请在目标 Chrome 窗口重新打开侧边栏并启动任务。${suffix}`);
+}
+
+async function createAutomationScopedTab(createProperties = {}, options = {}) {
+  const windowId = normalizeAutomationWindowId(
+    options?.automationWindowId
+      ?? options?.windowId
+      ?? options?.state?.automationWindowId
+      ?? null
+  );
+  if (windowId === null) {
+    return chrome.tabs.create(createProperties || {});
+  }
+
+  try {
+    return await chrome.tabs.create({
+      ...(createProperties || {}),
+      windowId,
+    });
+  } catch (error) {
+    throw buildAutomationWindowUnavailableError(error);
+  }
+}
+
+async function queryAutomationScopedTabs(queryInfo = {}, options = {}) {
+  const windowId = normalizeAutomationWindowId(
+    options?.automationWindowId
+      ?? options?.windowId
+      ?? options?.state?.automationWindowId
+      ?? null
+  );
+  if (windowId === null) {
+    return chrome.tabs.query(queryInfo || {});
+  }
+
+  const scopedQuery = {
+    ...(queryInfo || {}),
+    windowId,
+  };
+  delete scopedQuery.currentWindow;
+  try {
+    return await chrome.tabs.query(scopedQuery);
+  } catch (error) {
+    throw buildAutomationWindowUnavailableError(error);
+  }
+}
+
+
 const IP_PROXY_EXIT_PROBE_ENDPOINTS = [
   'http://ip-api.com/json?lang=en',
   'http://ipinfo.io/json',
@@ -1974,8 +2033,8 @@ function extractProbeHostFromTabUrl(rawUrl = '') {
   }
 }
 
-async function pickExistingPageContextProbeTabId() {
-  const tabs = await chrome.tabs.query({});
+async function pickExistingPageContextProbeTabId(options = {}) {
+  const tabs = await queryAutomationScopedTabs({}, options);
   const candidates = tabs
     .filter((tab) => Number.isInteger(tab?.id))
     .filter((tab) => isPageContextProbeHost(extractProbeHostFromTabUrl(tab?.url || '')));
@@ -2345,10 +2404,10 @@ async function detectIpProxyTargetReachabilityByPageContext(options = {}) {
       const targetUrl = appendProbeCacheBuster(endpoint, '_multipage_proxy_target');
       try {
         if (!Number.isInteger(tabId)) {
-          const tab = await chrome.tabs.create({
+          const tab = await createAutomationScopedTab({
             url: targetUrl,
             active: false,
-          });
+          }, options);
           tabId = Number(tab?.id) || null;
           createdTabId = tabId;
           navigationErrorTracker.setTabId(tabId);
@@ -2424,15 +2483,15 @@ async function detectProxyExitInfoByPageContext(options = {}) {
   let createdProbeTabId = null;
   const probeUrl = `${IP_PROXY_PAGE_CONTEXT_PROBE_URL}?_multipage_proxy_probe=${Date.now()}`;
   try {
-    const tab = await chrome.tabs.create({
+    const tab = await createAutomationScopedTab({
       url: probeUrl,
       active: false,
-    });
+    }, options);
     probeTabId = Number(tab?.id) || null;
     createdProbeTabId = probeTabId;
   } catch (error) {
     errors.push(`probe:page_context:create_probe_tab_failed:${error?.message || error}`);
-    probeTabId = await pickExistingPageContextProbeTabId();
+    probeTabId = await pickExistingPageContextProbeTabId(options);
   }
 
   if (!Number.isInteger(probeTabId)) {
@@ -2544,10 +2603,10 @@ async function detectProxyExitInfoByPageContext(options = {}) {
       errors.push(`probe:page_context:script_failed:${scriptError?.message || scriptError}`);
       if (!createdProbeTabId && isProbeErrorPageExecutionError(scriptError)) {
         const retryUrl = `${IP_PROXY_PAGE_CONTEXT_PROBE_URL}?_multipage_proxy_probe=${Date.now()}&retry=1`;
-        const retryTab = await chrome.tabs.create({
+        const retryTab = await createAutomationScopedTab({
           url: retryUrl,
           active: false,
-        });
+        }, options);
         const retryTabId = Number(retryTab?.id) || 0;
         if (retryTabId > 0) {
           createdProbeTabId = retryTabId;
@@ -2635,6 +2694,9 @@ async function detectProxyExitInfo(options = {}) {
       timeoutMs,
       errors,
       probeEndpoints,
+      automationWindowId: options?.automationWindowId,
+      windowId: options?.windowId,
+      state: options?.state,
     });
     if (pageResult?.ip) {
       return pageResult;
@@ -2669,6 +2731,9 @@ async function detectProxyExitInfo(options = {}) {
       timeoutMs: Math.max(5000, Math.min(9000, timeoutMs)),
       errors,
       probeEndpoints,
+      automationWindowId: options?.automationWindowId,
+      windowId: options?.windowId,
+      state: options?.state,
     });
     errors.push(`probe:bg:abort_storm_page_fallback_result:${String(pageResult?.source || 'unknown')}`);
     if (pageResult?.ip) {
@@ -3308,6 +3373,7 @@ async function applyIpProxySettingsFromState(state = {}, options = {}) {
     // 后台探测仅作为补充兜底，避免单一路径误判。
     preferPageContext: true,
     allowBackgroundFallback: true,
+    state,
   }).catch(() => ({ ip: '', region: '' }));
   if (!exit?.ip && Boolean(status?.hasAuth)) {
     appendIpProxyAuthDiagnosticsToErrors(diagnostics);
@@ -3339,6 +3405,7 @@ async function applyIpProxySettingsFromState(state = {}, options = {}) {
     const reachability = await detectIpProxyTargetReachabilityByPageContext({
       timeoutMs: IP_PROXY_TARGET_REACHABILITY_TIMEOUT_MS,
       errors: targetDiagnostics,
+      state,
     }).catch((error) => ({
       reachable: false,
       endpoint: IP_PROXY_TARGET_REACHABILITY_ENDPOINTS[0],
@@ -3675,6 +3742,7 @@ async function probeIpProxyExit(options = {}) {
         username: String(state?.ipProxyUsername || '').trim(),
         preferPageContext: true,
         allowBackgroundFallback: true,
+        state,
       }).catch(() => ({ ip: '', region: '', endpoint: '', source: '' }));
       const status = {
         enabled: false,
@@ -3774,6 +3842,7 @@ async function probeIpProxyExit(options = {}) {
       // 手动探测与自动应用保持一致：先页面上下文，再后台补充。
       preferPageContext: true,
       allowBackgroundFallback: true,
+      state,
     }).catch(() => ({ ip: '', region: '' }));
     if (!exit?.ip && Boolean(statusSeed?.hasAuth)) {
       appendIpProxyAuthDiagnosticsToErrors(diagnostics);
@@ -3800,6 +3869,7 @@ async function probeIpProxyExit(options = {}) {
       const reachability = await detectIpProxyTargetReachabilityByPageContext({
         timeoutMs: IP_PROXY_TARGET_REACHABILITY_TIMEOUT_MS,
         errors: targetDiagnostics,
+        state,
       }).catch((error) => ({
         reachable: false,
         endpoint: IP_PROXY_TARGET_REACHABILITY_ENDPOINTS[0],

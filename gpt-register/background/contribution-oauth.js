@@ -35,6 +35,7 @@
       broadcastDataUpdate,
       chrome,
       closeLocalhostCallbackTabs,
+      createAutomationTab = null,
       getState,
       setState,
     } = deps;
@@ -437,7 +438,9 @@
       }
 
       if (!tab) {
-        tab = await chrome.tabs.create({ url: normalizedUrl, active: true });
+        tab = typeof createAutomationTab === 'function'
+          ? await createAutomationTab({ url: normalizedUrl, active: true })
+          : await chrome.tabs.create({ url: normalizedUrl, active: true });
       }
 
       await applyRuntimeUpdates({

@@ -81,6 +81,38 @@ return { detectScriptSource };
   );
 });
 
+test('detectScriptSource maps OpenAI auth hosts to canonical openai-auth source', () => {
+  const bundle = [extractFunction('detectScriptSource')].join('\n');
+  const api = new Function(`
+${bundle}
+return { detectScriptSource };
+`)();
+
+  assert.equal(
+    api.detectScriptSource({
+      url: 'https://auth.openai.com/create-account',
+      hostname: 'auth.openai.com',
+    }),
+    'openai-auth'
+  );
+});
+
+test('detectScriptSource returns unknown-source for unrecognized pages', () => {
+  const bundle = [extractFunction('detectScriptSource')].join('\n');
+  const api = new Function(`
+${bundle}
+return { detectScriptSource };
+`)();
+
+  assert.equal(
+    api.detectScriptSource({
+      url: 'https://example.com/',
+      hostname: 'example.com',
+    }),
+    'unknown-source'
+  );
+});
+
 test('shouldReportReadyForFrame suppresses noisy plus checkout child frame ready logs', () => {
   const bundle = [extractFunction('shouldReportReadyForFrame')].join('\n');
   const api = new Function(`
@@ -91,6 +123,8 @@ return { shouldReportReadyForFrame };
   assert.equal(api.shouldReportReadyForFrame('plus-checkout', true), false);
   assert.equal(api.shouldReportReadyForFrame('plus-checkout', false), true);
   assert.equal(api.shouldReportReadyForFrame('paypal-flow', true), true);
+  assert.equal(api.shouldReportReadyForFrame('unknown-source', false), true);
+  assert.equal(api.shouldReportReadyForFrame('unknown-source', true), false);
 });
 
 test('getRuntimeScriptSource follows injected source overrides after utils is already loaded', () => {

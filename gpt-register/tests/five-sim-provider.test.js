@@ -199,7 +199,7 @@ test('5sim provider rejects maxPrice with custom operator before buying', async 
       fiveSimMaxPrice: '12',
       fiveSimOperator: 'virtual21',
     }),
-    /maxPrice only works when operator is "any"/
+    /价格上限仅支持运营商为 "any"/
   );
   assert.deepStrictEqual(requests, []);
 });

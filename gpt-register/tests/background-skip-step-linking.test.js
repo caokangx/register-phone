@@ -4,6 +4,19 @@ const fs = require('node:fs');
 
 const source = fs.readFileSync('background.js', 'utf8');
 
+const OPENAI_NODE_IDS = [
+  'open-chatgpt',
+  'submit-signup-email',
+  'fill-password',
+  'fetch-signup-code',
+  'fill-profile',
+  'wait-registration-success',
+  'oauth-login',
+  'fetch-login-code',
+  'confirm-oauth',
+  'platform-verify',
+];
+
 function extractFunction(name) {
   const markers = [`async function ${name}(`, `function ${name}(`];
   const start = markers
@@ -48,113 +61,107 @@ function extractFunction(name) {
   return source.slice(start, end);
 }
 
-test('skipStep cascades from step 1 to step 5 when downstream steps are pending', async () => {
+function createApi() {
   const bundle = [
     extractFunction('isStepDoneStatus'),
-    extractFunction('skipStep'),
+    extractFunction('skipNode'),
   ].join('\n');
 
-  const statuses = {
-    1: 'pending',
-    2: 'pending',
-    3: 'pending',
-    4: 'pending',
-    5: 'pending',
-    6: 'pending',
-    7: 'pending',
-    8: 'pending',
-    9: 'pending',
-    10: 'pending',
-  };
+  return new Function(`
+const DEFAULT_STATE = { nodeStatuses: {} };
+function getNodeIdsForState() {
+  return ${JSON.stringify(OPENAI_NODE_IDS)};
+}
+function normalizeStatusMapForNodes(statuses = {}) {
+  return { ...statuses };
+}
+${bundle}
+return { skipNode };
+`)();
+}
 
+test('skipNode cascades from open-chatgpt through signup profile when downstream nodes are pending', async () => {
+  const statuses = Object.fromEntries(OPENAI_NODE_IDS.map((nodeId) => [nodeId, 'pending']));
   const events = {
-    setStepStatusCalls: [],
+    setNodeStatusCalls: [],
     logs: [],
   };
-
-  const api = new Function(`
-const STEP_IDS = [1,2,3,4,5,6,7,8,9,10];
-${bundle}
-return { skipStep };
-`)();
+  const api = createApi();
 
   globalThis.ensureManualInteractionAllowed = async () => ({
-    stepStatuses: { ...statuses },
+    nodeStatuses: { ...statuses },
   });
   globalThis.getState = async () => ({
-    stepStatuses: { ...statuses },
+    nodeStatuses: { ...statuses },
   });
-  globalThis.setStepStatus = async (step, status) => {
-    events.setStepStatusCalls.push({ step, status });
-    statuses[step] = status;
+  globalThis.setNodeStatus = async (nodeId, status) => {
+    events.setNodeStatusCalls.push({ nodeId, status });
+    statuses[nodeId] = status;
   };
   globalThis.addLog = async (message, level) => {
     events.logs.push({ message, level });
   };
 
-  const result = await api.skipStep(1);
+  const result = await api.skipNode('open-chatgpt');
 
-  assert.deepStrictEqual(result, { ok: true, step: 1, status: 'skipped' });
-  assert.deepStrictEqual(events.setStepStatusCalls, [
-    { step: 1, status: 'skipped' },
-    { step: 2, status: 'skipped' },
-    { step: 3, status: 'skipped' },
-    { step: 4, status: 'skipped' },
-    { step: 5, status: 'skipped' },
+  assert.deepStrictEqual(result, { ok: true, nodeId: 'open-chatgpt', status: 'skipped' });
+  assert.deepStrictEqual(events.setNodeStatusCalls, [
+    { nodeId: 'open-chatgpt', status: 'skipped' },
+    { nodeId: 'submit-signup-email', status: 'skipped' },
+    { nodeId: 'fill-password', status: 'skipped' },
+    { nodeId: 'fetch-signup-code', status: 'skipped' },
+    { nodeId: 'fill-profile', status: 'skipped' },
   ]);
-  assert.equal(events.logs[0]?.message, '步骤 1 已跳过');
-  assert.equal(events.logs[1]?.message, '步骤 1 已跳过，步骤 2、3、4、5 也已同时跳过。');
+  assert.equal(events.logs[0]?.message, '节点 open-chatgpt 已跳过');
+  assert.equal(
+    events.logs[1]?.message,
+    '节点 open-chatgpt 已跳过，节点 submit-signup-email、fill-password、fetch-signup-code、fill-profile 也已同时跳过。'
+  );
 });
 
-test('skipStep from step 1 skips only unfinished steps up to step 5', async () => {
-  const bundle = [
-    extractFunction('isStepDoneStatus'),
-    extractFunction('skipStep'),
-  ].join('\n');
-
+test('skipNode from open-chatgpt skips only unfinished linked signup nodes', async () => {
   const statuses = {
-    1: 'pending',
-    2: 'completed',
-    3: 'running',
-    4: 'pending',
-    5: 'manual_completed',
-    6: 'pending',
-    7: 'pending',
-    8: 'pending',
-    9: 'pending',
-    10: 'pending',
+    'open-chatgpt': 'pending',
+    'submit-signup-email': 'completed',
+    'fill-password': 'running',
+    'fetch-signup-code': 'pending',
+    'fill-profile': 'manual_completed',
+    'wait-registration-success': 'pending',
+    'oauth-login': 'pending',
+    'fetch-login-code': 'pending',
+    'confirm-oauth': 'pending',
+    'platform-verify': 'pending',
   };
-
   const events = {
-    setStepStatusCalls: [],
+    setNodeStatusCalls: [],
     logs: [],
   };
-
-  const api = new Function(`
-const STEP_IDS = [1,2,3,4,5,6,7,8,9,10];
-${bundle}
-return { skipStep };
-`)();
+  const api = createApi();
 
   globalThis.ensureManualInteractionAllowed = async () => ({
-    stepStatuses: { ...statuses },
+    nodeStatuses: { ...statuses },
   });
   globalThis.getState = async () => ({
-    stepStatuses: { ...statuses },
+    nodeStatuses: { ...statuses },
   });
-  globalThis.setStepStatus = async (step, status) => {
-    events.setStepStatusCalls.push({ step, status });
-    statuses[step] = status;
+  globalThis.setNodeStatus = async (nodeId, status) => {
+    events.setNodeStatusCalls.push({ nodeId, status });
+    statuses[nodeId] = status;
   };
   globalThis.addLog = async (message, level) => {
     events.logs.push({ message, level });
   };
 
-  await api.skipStep(1);
+  await api.skipNode('open-chatgpt');
 
-  assert.deepStrictEqual(events.setStepStatusCalls, [
-    { step: 1, status: 'skipped' },
-    { step: 4, status: 'skipped' },
+  assert.deepStrictEqual(events.setNodeStatusCalls, [
+    { nodeId: 'open-chatgpt', status: 'skipped' },
+    { nodeId: 'fetch-signup-code', status: 'skipped' },
   ]);
-  assert.equal(events.logs.some(({ message }) => message === '步骤 1 已跳过，步骤 4 也已同时跳过。'), true);
+  assert.equal(
+    events.logs.some(({ message }) => (
+      message === '节点 open-chatgpt 已跳过，节点 fetch-signup-code 也已同时跳过。'
+    )),
+    true
+  );
 });

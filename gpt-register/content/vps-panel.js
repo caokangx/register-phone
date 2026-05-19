@@ -1,4 +1,4 @@
-// content/vps-panel.js — Content script for CPA panel (steps 7, 10 / OAuth URL request)
+// content/vps-panel.js — Content script for CPA panel (OAuth URL request / platform verification node)
 // Injected on: CPA panel (user-configured URL)
 //
 // Actual DOM structure (after login click):
@@ -39,12 +39,12 @@ if (document.documentElement.getAttribute(VPS_PANEL_LISTENER_SENTINEL) !== '1') 
 
   // Listen for commands from Background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'EXECUTE_STEP' || message.type === 'REQUEST_OAUTH_URL') {
+    if (message.type === 'EXECUTE_NODE' || message.type === 'REQUEST_OAUTH_URL') {
       resetStopState();
       const startedAt = Date.now();
       const actionLabel = message.type === 'REQUEST_OAUTH_URL'
         ? 'REQUEST_OAUTH_URL'
-        : `EXECUTE_STEP received for step ${message.step}`;
+        : `EXECUTE_NODE received for node ${message.nodeId || message.payload?.nodeId || ''}`;
       console.log(LOG_PREFIX, actionLabel, {
         url: location.href,
         payloadKeys: Object.keys(message.payload || {}),
@@ -52,7 +52,7 @@ if (document.documentElement.getAttribute(VPS_PANEL_LISTENER_SENTINEL) !== '1') 
       });
       const handler = message.type === 'REQUEST_OAUTH_URL'
         ? requestOAuthUrl(message.payload)
-        : handleStep(message.step, message.payload);
+        : handleNode(message.nodeId || message.payload?.nodeId, message.payload);
       handler.then((result) => {
         console.log(LOG_PREFIX, `${actionLabel} resolved after ${Date.now() - startedAt}ms`, {
           url: location.href,
@@ -65,14 +65,14 @@ if (document.documentElement.getAttribute(VPS_PANEL_LISTENER_SENTINEL) !== '1') 
           snapshot: getVpsPanelSnapshot(),
         });
         if (isStopError(err)) {
-          if (message.step) {
-            log('已被用户停止。', 'warn', { step: message.step });
+          if (message.payload?.visibleStep || message.step) {
+            log('已被用户停止。', 'warn', { step: message.payload?.visibleStep || message.step });
           }
           sendResponse({ stopped: true, error: err.message });
           return;
         }
-        if (message.step) {
-          reportError(message.step, err.message);
+        if (message.nodeId || message.payload?.nodeId) {
+          reportError(message.nodeId || message.payload?.nodeId, err.message);
         }
         sendResponse({ error: err.message });
       });
@@ -92,6 +92,16 @@ async function handleStep(step, payload) {
       return await step9_vpsVerify({ ...(payload || {}), visibleStep: step });
     default:
       throw new Error(`vps-panel.js 不处理步骤 ${step}`);
+  }
+}
+
+async function handleNode(nodeId, payload = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  switch (normalizedNodeId) {
+    case 'platform-verify':
+      return await step9_vpsVerify(payload);
+    default:
+      throw new Error(`vps-panel.js 不处理节点 ${normalizedNodeId}`);
   }
 }
 
@@ -1078,5 +1088,5 @@ async function step9_vpsVerify(payload) {
 
   const verifiedStatus = await waitForExactSuccessBadge(STEP9_SUCCESS_BADGE_TIMEOUT_MS, visibleStep);
   log(verifiedStatus, 'ok', { step: visibleStep, stepKey: 'platform-verify' });
-  reportComplete(visibleStep, { localhostUrl, verifiedStatus });
+  reportComplete('platform-verify', { localhostUrl, verifiedStatus, visibleStep });
 }

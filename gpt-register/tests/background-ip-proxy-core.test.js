@@ -44,6 +44,8 @@ ${coreSource}
 return {
   applyExitRegionExpectation,
   buildIpProxyPacScript,
+  chrome,
+  createAutomationScopedTab,
   buildIpProxyRoutingStatePatch,
   applyTargetReachabilityExpectation,
   getAccountModeProxyPoolFromState,
@@ -51,6 +53,7 @@ return {
   normalizeProxyPoolEntries,
   parseProxyExitProbePayload,
   parseIpProxyLine,
+  queryAutomationScopedTabs,
   resolveExitProbeEndpoints,
   resolveIpProxyAutoSwitchThreshold,
   resolveTargetReachabilityEndpoints,
@@ -133,6 +136,46 @@ test('IP proxy routing state patch keeps exit probe endpoint for diagnostics', (
   assert.equal(patch.ipProxyAppliedExitIp, '219.104.171.52');
   assert.equal(patch.ipProxyAppliedExitRegion, 'JP');
   assert.equal(patch.ipProxyAppliedExitEndpoint, 'https://ipinfo.io/json');
+});
+
+test('IP proxy page probes do not fall back to other windows when the locked window is unavailable', async () => {
+  const api = loadIpProxyCore();
+  const created = [];
+  const queries = [];
+  api.chrome.tabs = {
+    create: async (payload) => {
+      created.push(payload);
+      if (payload.windowId === 77) {
+        throw new Error('No window with id: 77');
+      }
+      return { id: 12, windowId: payload.windowId, url: payload.url };
+    },
+    query: async (queryInfo) => {
+      queries.push(queryInfo);
+      if (queryInfo.windowId === 77) {
+        throw new Error('No window with id: 77');
+      }
+      return [{ id: 99, windowId: 1, url: 'https://ipinfo.io/json' }];
+    },
+  };
+
+  await assert.rejects(
+    () => api.createAutomationScopedTab(
+      { url: 'https://ipinfo.io/json', active: false },
+      { state: { automationWindowId: 77 } }
+    ),
+    /自动任务窗口已不可用/
+  );
+  await assert.rejects(
+    () => api.queryAutomationScopedTabs(
+      { url: 'https://ipinfo.io/*' },
+      { state: { automationWindowId: 77 } }
+    ),
+    /自动任务窗口已不可用/
+  );
+
+  assert.deepEqual(created, [{ url: 'https://ipinfo.io/json', active: false, windowId: 77 }]);
+  assert.deepEqual(queries, [{ url: 'https://ipinfo.io/*', windowId: 77 }]);
 });
 
 test('711 fixed-account mode applies region and sticky session parameters', () => {

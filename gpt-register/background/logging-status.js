@@ -5,20 +5,27 @@
     const {
       chrome,
       DEFAULT_STATE,
+      getStepIdByNodeIdForState,
       getState,
       isRecoverableStep9AuthFailure,
       LOG_PREFIX,
       setState,
+      sourceRegistry = null,
       STOP_ERROR_MESSAGE,
     } = deps;
 
     function getSourceLabel(source) {
+      if (sourceRegistry?.getSourceLabel) {
+        return sourceRegistry.getSourceLabel(source);
+      }
       const labels = {
+        'openai-auth': '认证页',
         'gmail-mail': 'Gmail 邮箱',
         'sidepanel': '侧边栏',
         'signup-page': '认证页',
         'vps-panel': 'CPA 面板',
         'sub2api-panel': 'SUB2API 后台',
+        'codex2api-panel': 'Codex2API 后台',
         'qq-mail': 'QQ 邮箱',
         'mail-163': '163 邮箱',
         'mail-2925': '2925 邮箱',
@@ -27,6 +34,11 @@
         'hotmail-api': 'Hotmail（API对接/本地助手）',
         'luckmail-api': 'LuckMail（API 购邮）',
         'cloudflare-temp-email': 'Cloudflare Temp Email',
+        'cloudmail': 'Cloud Mail',
+        'plus-checkout': 'Plus Checkout',
+        'paypal-flow': 'PayPal 授权页',
+        'gopay-flow': 'GoPay 授权页',
+        'unknown-source': '未知来源',
       };
       return labels[source] || source || '未知来源';
     }
@@ -40,12 +52,14 @@
       const normalizedOptions = options && typeof options === 'object' ? options : {};
       const step = normalizeLogStep(normalizedOptions.step);
       const stepKey = String(normalizedOptions.stepKey || '').trim();
+      const nodeId = String(normalizedOptions.nodeId || normalizedOptions.nodeKey || stepKey || '').trim();
       return {
         message: String(message || ''),
         level,
         timestamp: Date.now(),
         step,
         stepKey,
+        nodeId,
       };
     }
 
@@ -59,24 +73,33 @@
       chrome.runtime.sendMessage({ type: 'LOG_ENTRY', payload: entry }).catch(() => { });
     }
 
-    async function setStepStatus(step, status) {
+    async function setNodeStatus(nodeId, status) {
+      const normalizedNodeId = String(nodeId || '').trim();
+      if (!normalizedNodeId) {
+        throw new Error('setNodeStatus 缺少 nodeId。');
+      }
       const state = await getState();
-      const statuses = { ...state.stepStatuses };
-      statuses[step] = status;
-      await setState({ stepStatuses: statuses, currentStep: step });
+      const nodeStatuses = { ...(state.nodeStatuses || {}) };
+      nodeStatuses[normalizedNodeId] = status;
+      await setState({
+        nodeStatuses,
+        currentNodeId: normalizedNodeId,
+      });
       chrome.runtime.sendMessage({
-        type: 'STEP_STATUS_CHANGED',
-        payload: { step, status },
+        type: 'NODE_STATUS_CHANGED',
+        payload: { nodeId: normalizedNodeId, status },
       }).catch(() => { });
     }
 
     function getErrorMessage(error) {
-      return String(typeof error === 'string' ? error : error?.message || '');
+      return String(typeof error === 'string' ? error : error?.message || '')
+        .replace(/^GPC_TASK_ENDED::/i, '')
+        .replace(/^AUTO_RUN_STEP_IDLE_RESTART::/i, '');
     }
 
     function isVerificationMailPollingError(error) {
       const message = getErrorMessage(error);
-      return /未在 .*邮箱中找到新的匹配邮件|未在 Hotmail 收件箱中找到新的匹配验证码|邮箱轮询结束，但未获取到验证码|无法获取新的(?:注册|登录)验证码|页面未能重新就绪|页面通信异常|did not respond in \d+s|405\s+method\s+not\s+allowed|route\s+error.*405|did\s+not\s+provide\s+an?\s+[`'"]?action|post\s+request\s+to\s+["']?\/(?:email|phone)-verification/i.test(message);
+      return /未在 .*邮箱中找到新的匹配邮件|未在 Hotmail 收件箱中找到新的匹配验证码|邮箱轮询结束，但未获取到验证码|无法获取新的(?:注册|登录)验证码|页面未能重新就绪|页面通信异常|内容脚本\s+\d+(?:\.\d+)?\s*秒内未响应|did not respond in \d+s|405\s+method\s+not\s+allowed|route\s+error.*405|did\s+not\s+provide\s+an?\s+[`'"]?action|post\s+request\s+to\s+["']?\/(?:email|phone)-verification/i.test(message);
     }
 
     function isAddPhoneAuthFailure(error) {
@@ -112,7 +135,7 @@
 
     function isRestartCurrentAttemptError(error) {
       const message = String(typeof error === 'string' ? error : error?.message || '');
-      return /当前邮箱已存在，需要重新开始新一轮/.test(message);
+      return /当前邮箱已存在，需要重新开始新一轮|SIGNUP_PHONE_PASSWORD_MISMATCH::/i.test(message);
     }
 
     function isSignupUserAlreadyExistsFailure(error) {
@@ -136,27 +159,48 @@
     }
 
     function getFirstUnfinishedStep(statuses = {}) {
-      const stepIds = Object.keys(DEFAULT_STATE.stepStatuses || {})
-        .map((step) => Number(step))
-        .filter(Number.isFinite)
-        .sort((left, right) => left - right);
-      for (const step of stepIds) {
-        if (!isStepDoneStatus(statuses[step] || 'pending')) {
-          return step;
+      const nodeStatuses = statuses && typeof statuses === 'object' ? statuses : {};
+      const nodeIds = Object.keys(DEFAULT_STATE.nodeStatuses || {});
+      for (const nodeId of nodeIds) {
+        if (!isStepDoneStatus(nodeStatuses[nodeId] || 'pending')) {
+          return typeof getStepIdByNodeIdForState === 'function'
+            ? getStepIdByNodeIdForState(nodeId, {})
+            : null;
         }
       }
       return null;
     }
 
     function hasSavedProgress(statuses = {}) {
-      return Object.values({ ...DEFAULT_STATE.stepStatuses, ...statuses }).some((status) => status !== 'pending');
+      return Object.values({ ...DEFAULT_STATE.nodeStatuses, ...statuses }).some((status) => status !== 'pending');
     }
 
     function getRunningSteps(statuses = {}) {
-      return Object.entries({ ...DEFAULT_STATE.stepStatuses, ...statuses })
+      return Object.entries({ ...DEFAULT_STATE.nodeStatuses, ...statuses })
         .filter(([, status]) => status === 'running')
-        .map(([step]) => Number(step))
+        .map(([nodeId]) => (typeof getStepIdByNodeIdForState === 'function' ? getStepIdByNodeIdForState(nodeId, {}) : null))
+        .filter((step) => Number.isInteger(step) && step > 0)
         .sort((a, b) => a - b);
+    }
+
+    function getFirstUnfinishedNode(statuses = {}) {
+      const nodeIds = Object.keys(DEFAULT_STATE.nodeStatuses || {});
+      for (const nodeId of nodeIds) {
+        if (!isStepDoneStatus(statuses[nodeId] || 'pending')) {
+          return nodeId;
+        }
+      }
+      return '';
+    }
+
+    function hasSavedNodeProgress(statuses = {}) {
+      return Object.values({ ...DEFAULT_STATE.nodeStatuses, ...statuses }).some((status) => status !== 'pending');
+    }
+
+    function getRunningNodes(statuses = {}) {
+      return Object.entries({ ...DEFAULT_STATE.nodeStatuses, ...statuses })
+        .filter(([, status]) => status === 'running')
+        .map(([nodeId]) => nodeId);
     }
 
     function getAutoRunStatusPayload(phase, payload = {}) {
@@ -182,12 +226,15 @@
     return {
       addLog,
       getAutoRunStatusPayload,
+      getFirstUnfinishedNode,
       isAddPhoneAuthFailure,
       getErrorMessage,
       getFirstUnfinishedStep,
       getLoginAuthStateLabel,
+      getRunningNodes,
       getRunningSteps,
       getSourceLabel,
+      hasSavedNodeProgress,
       hasSavedProgress,
       isLegacyStep9RecoverableAuthError,
       isRestartCurrentAttemptError,
@@ -195,7 +242,7 @@
       isStep9RecoverableAuthError,
       isStepDoneStatus,
       isVerificationMailPollingError,
-      setStepStatus,
+      setNodeStatus,
     };
   }
 

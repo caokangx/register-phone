@@ -21,19 +21,25 @@
       success: {
         label: '成',
         className: 'is-success',
-        matches: (record) => record.finalStatus === 'success',
+        matches: (record) => getRecordDisplayStatus(record) === 'success',
         metaLabel: '成功',
+      },
+      running: {
+        label: '运行',
+        className: 'is-running',
+        matches: (record) => getRecordDisplayStatus(record) === 'running',
+        metaLabel: '运行中',
       },
       failed: {
         label: '失',
         className: 'is-failed',
-        matches: (record) => record.finalStatus === 'failed',
+        matches: (record) => getRecordDisplayStatus(record) === 'failed',
         metaLabel: '失败',
       },
       stopped: {
         label: '停',
         className: 'is-stopped',
-        matches: (record) => record.finalStatus === 'stopped',
+        matches: (record) => getRecordDisplayStatus(record) === 'stopped',
         metaLabel: '停止',
       },
       retry: {
@@ -94,6 +100,58 @@
       return identifierType === 'phone'
         ? `phone:${identifier.toLowerCase()}`
         : identifier.toLowerCase();
+    }
+
+    function getRecordDisplayStatus(record = {}) {
+      return String(record.displayStatus || record.finalStatus || '').trim().toLowerCase();
+    }
+
+    function isAutoRunRecordDisplayRunning(currentState = {}) {
+      const phase = String(currentState.autoRunPhase || '').trim().toLowerCase();
+      return Boolean(currentState.autoRunning)
+        && ['running', 'waiting_step', 'waiting_email', 'retrying'].includes(phase);
+    }
+
+    function buildCurrentAccountRecordId(currentState = {}) {
+      const accountIdentifierType = String(currentState.accountIdentifierType || '').trim().toLowerCase();
+      const email = String(currentState.email || '').trim();
+      const phoneNumber = String(
+        currentState.signupPhoneNumber
+        || currentState.phoneNumber
+        || currentState.phone
+        || ''
+      ).trim();
+      const accountIdentifier = String(
+        currentState.accountIdentifier
+        || (accountIdentifierType === 'phone' ? phoneNumber : email)
+        || ''
+      ).trim();
+      return buildRecordId({
+        accountIdentifierType,
+        accountIdentifier,
+        email,
+        phoneNumber,
+      });
+    }
+
+    function applyRunningDisplayState(record = {}, currentState = {}) {
+      if (!isAutoRunRecordDisplayRunning(currentState)) {
+        return record;
+      }
+      if (getRecordDisplayStatus(record) === 'success') {
+        return record;
+      }
+
+      const currentRecordId = buildCurrentAccountRecordId(currentState);
+      if (!currentRecordId || buildRecordId(record) !== currentRecordId) {
+        return record;
+      }
+
+      return {
+        ...record,
+        displayStatus: 'running',
+        displaySummary: '正在运行',
+      };
     }
 
     function getRecordIdentifierType(record = {}) {
@@ -167,18 +225,22 @@
       return (Array.isArray(currentState?.accountRunHistory) ? currentState.accountRunHistory : [])
         .filter((item) => item && typeof item === 'object')
         .slice()
-        .sort((left, right) => normalizeTimestamp(right.finishedAt) - normalizeTimestamp(left.finishedAt));
+        .sort((left, right) => normalizeTimestamp(right.finishedAt) - normalizeTimestamp(left.finishedAt))
+        .map((record) => applyRunningDisplayState(record, currentState));
     }
 
     function summarizeAccountRunHistory(records = []) {
       return records.reduce((summary, record) => {
         const retryCount = normalizeRetryCount(record.retryCount);
+        const status = getRecordDisplayStatus(record);
         summary.total += 1;
-        if (record.finalStatus === 'success') {
+        if (status === 'success') {
           summary.success += 1;
-        } else if (record.finalStatus === 'failed') {
+        } else if (status === 'running') {
+          summary.running += 1;
+        } else if (status === 'failed') {
           summary.failed += 1;
-        } else if (record.finalStatus === 'stopped') {
+        } else if (status === 'stopped') {
           summary.stopped += 1;
         }
         if (retryCount > 0) {
@@ -189,6 +251,7 @@
       }, {
         total: 0,
         success: 0,
+        running: 0,
         failed: 0,
         stopped: 0,
         retryRecordCount: 0,
@@ -227,21 +290,44 @@
     }
 
     function getStatusMeta(record = {}) {
-      if (record.finalStatus === 'success') {
+      const status = getRecordDisplayStatus(record);
+      if (status === 'success') {
         return { kind: 'success', label: '成功' };
       }
-      if (record.finalStatus === 'stopped') {
+      if (status === 'running') {
+        return { kind: 'running', label: '正在运行' };
+      }
+      if (status === 'stopped') {
         return { kind: 'stopped', label: '停止' };
       }
       return { kind: 'failed', label: '失败' };
     }
 
     function getRecordSummaryText(record = {}) {
-      if (record.finalStatus === 'success') {
+      const status = getRecordDisplayStatus(record);
+      if (record.displaySummary) {
+        return String(record.displaySummary || '').trim();
+      }
+      if (status === 'success') {
         return '流程完成';
       }
+      if (status === 'running') {
+        return '正在运行';
+      }
 
-      return String(record.failureLabel || '').trim() || '流程失败';
+      return String(record.failureDetail || record.reason || '').trim()
+        || String(record.failureLabel || '').trim()
+        || '流程失败';
+    }
+
+    function getRecordTooltipText(record = {}, summaryText = '') {
+      const recordTitle = getRecordTitle(record);
+      const status = getRecordDisplayStatus(record);
+      const detail = String(record.displaySummary || record.failureDetail || record.reason || '').trim();
+      if (status === 'success' || status === 'running' || !detail || detail === recordTitle) {
+        return recordTitle;
+      }
+      return `${recordTitle}\n${detail}`;
     }
 
     function getFilterConfig(filterKey = activeFilter) {
@@ -378,6 +464,7 @@
       const summary = summarizeAccountRunHistory(allRecords);
       dom.accountRecordsStats.innerHTML = [
         createStatChip('all', summary.total),
+        createStatChip('running', summary.running),
         createStatChip('success', summary.success),
         createStatChip('failed', summary.failed),
         createStatChip('stopped', summary.stopped),
@@ -449,9 +536,9 @@
         const recordId = buildRecordId(record);
         const primaryIdentifier = getRecordPrimaryIdentifier(record) || '(空账号)';
         const secondaryIdentifier = getRecordSecondaryIdentifier(record);
-        const recordTitle = getRecordTitle(record);
         const statusMeta = getStatusMeta(record);
         const summaryText = getRecordSummaryText(record);
+        const recordTitle = getRecordTooltipText(record, summaryText);
         const retryCount = normalizeRetryCount(record.retryCount);
         const isSelected = selectedRecordIds.has(recordId);
         const itemClassNames = [

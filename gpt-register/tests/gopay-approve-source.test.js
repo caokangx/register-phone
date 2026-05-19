@@ -41,34 +41,11 @@ function extractFunction(name) {
   return source.slice(start, end);
 }
 
-test('GoPay OTP is fetched from the WhatsApp OTP API instead of a sidepanel prompt', () => {
-  const body = extractFunction('fetchGoPayOtpFromApi');
-  assert.match(body, /gopayOtpClient\.pollOtp\(state/);
-  assert.match(body, /label: 'GoPay 验证码'/);
-  assert.match(body, /stepLabel,/);
-  assert.match(body, /WhatsApp 接口返回的 GoPay 验证码为空/);
-  assert.doesNotMatch(source, /requestGoPayOtpInput\s*\(/);
-  assert.match(source, /await fetchGoPayOtpFromApi\(state\)/);
-});
-
-test('executeGoPayApprove accepts a stepId option and labels logs dynamically', () => {
-  const body = extractFunction('executeGoPayApprove');
-  assert.match(body, /options = \{\}/);
-  assert.match(body, /stepId = Number\.isFinite\(requestedStepId\) && requestedStepId > 0 \? requestedStepId : 8/);
-  assert.match(body, /stepLabel = `步骤 \$\{stepId\}`/);
-  assert.match(body, /completeStepFromBackground\(stepId,/);
-});
-
-test('isReturnUrl does not treat the chatgpt checkout page as the post-payment return', () => {
-  const body = extractFunction('isReturnUrl');
-  assert.match(body, /\\\/checkout/);
-  // eslint-disable-next-line no-new-func
-  const isReturnUrl = new Function(`${body}; return isReturnUrl;`)();
-  assert.equal(isReturnUrl('https://chatgpt.com/checkout/openai_llc/session?id=abc'), false);
-  assert.equal(isReturnUrl('https://chatgpt.com/checkout?foo=1'), false);
-  assert.equal(isReturnUrl('https://chatgpt.com/account/manage'), true);
-  assert.equal(isReturnUrl('https://chatgpt.com/'), true);
-  assert.equal(isReturnUrl('https://gopayapi.com/auth/pin'), false);
+test('GoPay OTP always requests manual confirmation even when a previous code exists', () => {
+  const body = extractFunction('requestManualGoPayOtp');
+  assert.doesNotMatch(body, /if\s*\(existingCode\)\s*\{\s*return existingCode;\s*\}/);
+  assert.match(body, /requestGoPayOtpInput\(\{ code: existingCode \}\)/);
+  assert.match(body, /检测到上次保存的 GoPay 验证码/);
 });
 
 
@@ -92,18 +69,6 @@ test('GoPay approve handles final payment details iframe as an action frame', ()
   assert.match(source, /最终 Bayar 确认/);
 });
 
-test('GoPay approve does not treat Midtrans as paid while any frame still has Pay now', () => {
-  assert.match(source, /async function tabAnyFrameHasPayNowButton\(tabId\)/);
-  assert.match(source, /isMidtransCheckoutUrl\(currentUrl\) && await tabAnyFrameHasPayNowButton\(tabId\)/);
-  assert.match(source, /Midtrans 仍能在子 frame 检测到 Pay now/);
-  const fnStart = source.indexOf('function buildGoPayDebuggerStateExpression');
-  assert.ok(fnStart >= 0);
-  const fnEnd = source.indexOf('function buildGoPayDebuggerClickPayExpression', fnStart);
-  assert.ok(fnEnd > fnStart);
-  const fnBody = source.slice(fnStart, fnEnd);
-  assert.match(fnBody, /const completed = \/success[\s\S]+&& !hasPayNowButton;/);
-});
-
 test('GoPay debugger click does not reuse iframe-relative rects as top-level coordinates', () => {
   const body = extractFunction('clickGoPayTargetWithDebugger');
   assert.match(body, /Number\.isInteger\(frameId\)/);
@@ -125,34 +90,16 @@ test('GoPay approve closes terminal checkout but does not restart on top-level P
   assert.match(source, /GOPAY_RESTART_FROM_STEP6::/);
   assert.match(source, /restartGoPayCheckoutFromStep6/);
   assert.match(source, /chrome\?\.tabs\?\.remove/);
-  assert.match(source, /handleGoPayTerminalError\(pageState, tabId, \{/);
+  assert.match(source, /handleGoPayTerminalError\(pageState, tabId\)/);
   assert.match(source, /nextState\.hasTerminalError/);
   assert.doesNotMatch(source, /GoPay 顶层 Pay now 兜底点击后仍未进入下一步，当前支付会话需要重新创建/);
-});
-
-test('GoPay technical error refreshes current page and retries before manual fallback', () => {
-  assert.match(source, /GOPAY_TECHNICAL_ERROR_REFRESH_MAX_ATTEMPTS/);
-  assert.match(source, /refreshGoPayPageForTechnicalError/);
-  assert.match(source, /terminalCode === 'technical-error'/);
-  assert.match(source, /attemptMidtransLinkingTechnicalRecovery/);
-  assert.match(source, /已停止 Midtrans 自动刷新/);
-  assert.match(source, /world:\s*['"]MAIN['"]/);
-  assert.match(source, /__MULTIPAGE_midtransReplayLinkingWithoutAuth__/);
-  assert.match(source, /skipWindowOpen:\s*true/);
-  assert.match(source, /chrome\?\.tabs\?\.reload/);
-  assert.match(source, /自动刷新 GoPay 页面后重试/);
-  assert.match(source, /自动刷新重试已达上限/);
-  assert.match(source, /terminalResolution\?\.reloaded/);
 });
 
 test('GoPay approve falls back to clicking Bayar inside any iframe before top-level Pay now retry', () => {
   assert.match(source, /clickGoPayPayButtonInAnyFrame/);
   assert.match(source, /data-testid/);
   assert.match(source, /pay-button/);
-  assert.match(source, /bayar\\b/);
   assert.match(source, /已在 GoPay iframe 中点击 Bayar 按钮/);
-  assert.match(source, /const framePayResult = await clickGoPayPayButtonInAnyFrame\(tabId\);\n\s+if \(framePayResult\?\.clicked\)/);
-  assert.doesNotMatch(source, /if \(!Number\.isInteger\(actionFrameId\)\) \{\n\s+const framePayResult = await clickGoPayPayButtonInAnyFrame\(tabId\);/);
   assert.match(source, /不再自动回退步骤 6/);
 });
 
@@ -174,21 +121,13 @@ test('GoPay approve waits and retries slowly on Hubungkan linking page', () => {
 });
 
 
-test('background auto-run routes GoPay restart sentinel back to step 6', () => {
+test('background auto-run routes GoPay restart sentinel back to checkout-create node', () => {
   const backgroundSource = fs.readFileSync('background.js', 'utf8');
   assert.match(backgroundSource, /isGoPayCheckoutRestartRequiredFailure/);
   assert.match(backgroundSource, /GOPAY_RESTART_FROM_STEP6::/);
-  assert.match(backgroundSource, /isGoPayApproveStep && isGoPayCheckoutRestartRequiredFailure\(err\)/);
-  assert.match(backgroundSource, /step === 8 && failingStepKey === 'gopay-subscription-confirm'/);
-  assert.match(backgroundSource, /step = 6/);
-  assert.match(backgroundSource, /invalidateDownstreamAfterStepRestart\(5/);
-});
-
-test('background auto-run stops on GoPay manual intervention sentinel', () => {
-  const backgroundSource = fs.readFileSync('background.js', 'utf8');
-  assert.match(backgroundSource, /isGoPayManualInterventionRequiredFailure/);
-  assert.match(backgroundSource, /GOPAY_MANUAL_INTERVENTION_REQUIRED::/);
-  assert.match(backgroundSource, /isGoPayApproveStep && isGoPayManualInterventionRequiredFailure\(err\)/);
+  assert.match(backgroundSource, /nodeId === 'paypal-approve' && isGoPayCheckoutRestartRequiredFailure\(err\)/);
+  assert.match(backgroundSource, /getNodeIndex\(await getState\(\), 'plus-checkout-create'\)/);
+  assert.match(backgroundSource, /invalidateDownstreamAfterAutoRunNodeRestart\(getPreviousNodeId\('plus-checkout-create'/);
 });
 
 test('GoPay approve gives PIN precedence over OTP on ambiguous second PIN pages', () => {
@@ -196,12 +135,4 @@ test('GoPay approve gives PIN precedence over OTP on ambiguous second PIN pages'
   assert.match(source, /pageState\.hasOtpInput && !pageState\.hasPinInput && !otpSubmitted/);
   assert.ok(source.indexOf('pageState.hasPinInput && !pinSubmitted') < source.indexOf('pageState.hasOtpInput && !pageState.hasPinInput && !otpSubmitted'));
   assert.doesNotMatch(source, /otp\|one\[-\\s\]\*time\|kode\|verification\|whatsapp\|code\|pin-input-field/);
-});
-
-test('GoPay approve retries WhatsApp OTP when GoPay reports invalid OTP', () => {
-  assert.match(source, /otpInvalid/);
-  assert.match(source, /kode\\s\*otp|mohon\\s\+cek\\s\+ulang/i);
-  assert.match(source, /GoPay 提示验证码错误，准备重新读取 WhatsApp 验证码/);
-  assert.match(source, /otpSubmitted = false;\n\s+credentials\.otp = '';/);
-  assert.match(source, /authorization 页面提示 OTP 错误，重新读取 WhatsApp 验证码/);
 });

@@ -6,7 +6,7 @@ const source = fs.readFileSync('background/steps/gopay-manual-confirm.js', 'utf8
 const globalScope = {};
 const api = new Function('self', `${source}; return self.MultiPageBackgroundGoPayManualConfirm;`)(globalScope);
 
-test('GoPay manual confirm executor publishes pending manual confirmation state for step 8', async () => {
+test('GoPay manual confirm executor publishes pending manual confirmation state for step 7', async () => {
   const stateUpdates = [];
   const broadcasts = [];
   const events = [];
@@ -37,7 +37,7 @@ test('GoPay manual confirm executor publishes pending manual confirmation state 
   assert.equal(stateUpdates.length, 1);
   assert.equal(stateUpdates[0].plusManualConfirmationPending, true);
   assert.equal(stateUpdates[0].plusManualConfirmationMethod, 'gopay');
-  assert.equal(stateUpdates[0].plusManualConfirmationStep, 8);
+  assert.equal(stateUpdates[0].plusManualConfirmationStep, 7);
   assert.match(String(stateUpdates[0].plusManualConfirmationRequestId || ''), /^gopay-/);
   assert.equal(broadcasts.length, 1);
   assert.equal(broadcasts[0].plusManualConfirmationPending, true);

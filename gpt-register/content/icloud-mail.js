@@ -43,6 +43,39 @@ if (shouldHandlePollEmailInCurrentFrame) {
     return String(value || '').replace(/\s+/g, ' ').trim();
   }
 
+  function normalizeRulePatternList(patterns = []) {
+    return Array.isArray(patterns) ? patterns : [];
+  }
+
+  function extractCodeByRulePatterns(text, patterns = []) {
+    const normalizedText = String(text || '');
+    for (const pattern of normalizeRulePatternList(patterns)) {
+      try {
+        const source = String(pattern?.source || '').trim();
+        if (!source) {
+          continue;
+        }
+        const flags = String(pattern?.flags || '').replace(/[^dgimsuvy]/g, '');
+        const match = normalizedText.match(new RegExp(source, flags));
+        if (!match) {
+          continue;
+        }
+        for (let index = 1; index < match.length; index += 1) {
+          const candidate = String(match[index] || '').trim();
+          if (candidate) {
+            return candidate;
+          }
+        }
+        if (String(match[0] || '').trim()) {
+          return String(match[0] || '').trim();
+        }
+      } catch (_) {
+        // Ignore invalid runtime rule patterns and continue with other candidates.
+      }
+    }
+    return null;
+  }
+
   function isVisibleElement(node) {
     return Boolean(node instanceof HTMLElement)
       && (Boolean(node.offsetParent) || getComputedStyle(node).position === 'fixed');
@@ -82,12 +115,15 @@ if (shouldHandlePollEmailInCurrentFrame) {
     ].join('::')).slice(0, 240);
   }
 
-  function extractVerificationCode(text) {
+  function extractVerificationCode(text, options = {}) {
+    const matchedByRule = extractCodeByRulePatterns(text, options?.codePatterns);
+    if (matchedByRule) return matchedByRule;
+
     const matchCn = text.match(/(?:代码为|验证码[^0-9]*?)[\s：:]*(\d{6})/);
     if (matchCn) return matchCn[1];
 
-    const matchOpenAiLogin = text.match(/(?:chatgpt\s+log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
-    if (matchOpenAiLogin) return matchOpenAiLogin[1];
+    const matchLoginCode = text.match(/(?:log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
+    if (matchLoginCode) return matchLoginCode[1];
 
     const matchEn = text.match(/code[:\s]+is[:\s]+(\d{6})|code[:\s]+(\d{6})/i);
     if (matchEn) return matchEn[1] || matchEn[2];
@@ -276,7 +312,14 @@ if (shouldHandlePollEmailInCurrentFrame) {
   }
 
   async function handlePollEmail(step, payload) {
-    const { senderFilters, subjectFilters, maxAttempts, intervalMs, excludeCodes = [] } = payload;
+    const {
+      codePatterns = [],
+      senderFilters,
+      subjectFilters,
+      maxAttempts,
+      intervalMs,
+      excludeCodes = [],
+    } = payload;
     const excludedCodeSet = new Set(excludeCodes.filter(Boolean));
     const FALLBACK_AFTER = 3;
     const pollSessionKey = normalizePollSessionKey(payload);
@@ -307,9 +350,13 @@ if (shouldHandlePollEmailInCurrentFrame) {
       const items = collectThreadItems();
       const useFallback = (fallbackCarry + attempt) > FALLBACK_AFTER;
 
-      for (const item of items) {
+      for (const [index, item] of items.entries()) {
         const signature = buildItemSignature(item);
-        if (!useFallback && existingSignatures.has(signature)) {
+        const allowInitialStep8VisibleCode = Number(step) === 8
+          && attempt === 1
+          && index === 0
+          && !sessionBaseline.fromCache;
+        if (!useFallback && existingSignatures.has(signature) && !allowInitialStep8VisibleCode) {
           continue;
         }
 
@@ -323,7 +370,7 @@ if (shouldHandlePollEmailInCurrentFrame) {
           continue;
         }
 
-        let code = extractVerificationCode(meta.combinedText);
+        let code = extractVerificationCode(meta.combinedText, { codePatterns });
         let opened = null;
 
         if (!code) {
@@ -335,7 +382,7 @@ if (shouldHandlePollEmailInCurrentFrame) {
           if (!openedSenderMatch && !openedSubjectMatch && !senderMatch && !subjectMatch) {
             continue;
           }
-          code = extractVerificationCode(opened.combinedText);
+          code = extractVerificationCode(opened.combinedText, { codePatterns });
         }
 
         if (!code) {

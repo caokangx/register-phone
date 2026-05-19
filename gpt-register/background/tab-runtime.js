@@ -11,6 +11,7 @@
       isRetryableContentScriptTransportError,
       LOG_PREFIX,
       matchesSourceUrlFamily,
+      sourceRegistry = null,
       setState,
       sleepWithStop,
       STOP_ERROR_MESSAGE,
@@ -18,6 +19,150 @@
     } = deps;
 
     const pendingCommands = new Map();
+
+    function resolveCanonicalSource(source) {
+      if (sourceRegistry?.resolveCanonicalSource) {
+        return sourceRegistry.resolveCanonicalSource(source);
+      }
+      return String(source || '').trim();
+    }
+
+    function getSourceKeys(source) {
+      if (sourceRegistry?.getSourceKeys) {
+        const registryKeys = sourceRegistry.getSourceKeys(source);
+        if (Array.isArray(registryKeys) && registryKeys.length) {
+          return registryKeys;
+        }
+      }
+      const normalized = String(source || '').trim();
+      return normalized ? [normalized] : [];
+    }
+
+    function getSourceCommandKey(source) {
+      const keys = getSourceKeys(source);
+      return keys[0] || String(source || '').trim();
+    }
+
+    function sourcesMatch(leftSource, rightSource) {
+      const left = resolveCanonicalSource(leftSource);
+      const right = resolveCanonicalSource(rightSource);
+      return Boolean(left && right && left === right);
+    }
+
+    function getSourceMapValue(record, source) {
+      const map = record && typeof record === 'object' ? record : {};
+      for (const key of getSourceKeys(source)) {
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+          return map[key];
+        }
+      }
+      return undefined;
+    }
+
+    function setSourceMapValue(record, source, value) {
+      const nextRecord = { ...(record || {}) };
+      const keys = getSourceKeys(source);
+      const canonicalKey = keys[0] || String(source || '').trim();
+      for (const key of keys.slice(1)) {
+        delete nextRecord[key];
+      }
+      if (canonicalKey) {
+        nextRecord[canonicalKey] = value;
+      }
+      return nextRecord;
+    }
+
+    function getCleanupOwnerSource(cleanupScope) {
+      if (sourceRegistry?.getCleanupOwnerSource) {
+        return sourceRegistry.getCleanupOwnerSource(cleanupScope);
+      }
+      return cleanupScope === 'oauth-localhost-callback' ? 'signup-page' : '';
+    }
+
+    function normalizeAutomationWindowId(value) {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      const numeric = Number(value);
+      return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+    }
+
+    function buildAutomationWindowUnavailableError(error) {
+      const suffix = error?.message ? ` 原因：${error.message}` : '';
+      return new Error(`自动任务窗口已不可用，请在目标 Chrome 窗口重新打开侧边栏并启动任务。${suffix}`);
+    }
+
+    async function getAutomationWindowId(options = {}) {
+      const directWindowId = normalizeAutomationWindowId(
+        options.automationWindowId ?? options.windowId ?? null
+      );
+      if (directWindowId !== null) {
+        return directWindowId;
+      }
+
+      const state = await getState();
+      return normalizeAutomationWindowId(state?.automationWindowId);
+    }
+
+    async function withAutomationWindowScope(queryInfo = {}, options = {}) {
+      const windowId = await getAutomationWindowId(options);
+      if (windowId === null) {
+        return { ...(queryInfo || {}) };
+      }
+      const scoped = {
+        ...(queryInfo || {}),
+        windowId,
+      };
+      delete scoped.currentWindow;
+      return scoped;
+    }
+
+    async function queryTabsInAutomationWindow(queryInfo = {}, options = {}) {
+      const scopedQuery = await withAutomationWindowScope(queryInfo, options);
+      try {
+        return await chrome.tabs.query(scopedQuery);
+      } catch (error) {
+        if (Object.prototype.hasOwnProperty.call(scopedQuery, 'windowId')) {
+          throw buildAutomationWindowUnavailableError(error);
+        }
+        throw error;
+      }
+    }
+
+    async function createAutomationTab(createProperties = {}, options = {}) {
+      const windowId = await getAutomationWindowId(options);
+      const properties = {
+        ...(createProperties || {}),
+        ...(windowId !== null ? { windowId } : {}),
+      };
+
+      try {
+        return await chrome.tabs.create(properties);
+      } catch (error) {
+        if (windowId !== null) {
+          throw buildAutomationWindowUnavailableError(error);
+        }
+        throw error;
+      }
+    }
+
+    async function isTabInAutomationWindow(tabOrId, options = {}) {
+      const windowId = await getAutomationWindowId(options);
+      if (windowId === null) {
+        return true;
+      }
+
+      let tab = tabOrId;
+      if (Number.isInteger(tabOrId)) {
+        if (typeof chrome?.tabs?.get !== 'function') {
+          return true;
+        }
+        tab = await chrome.tabs.get(tabOrId).catch(() => null);
+      }
+
+      const tabWindowId = normalizeAutomationWindowId(tab?.windowId);
+      return tabWindowId === null || tabWindowId === windowId;
+    }
 
     async function sleepOrStop(ms) {
       if (typeof sleepWithStop === 'function') {
@@ -85,36 +230,62 @@
     }
 
     async function registerTab(source, tabId) {
-      const registry = await getTabRegistry();
-      registry[source] = { tabId, ready: true };
+      let registry = await getTabRegistry();
+      let windowId = null;
+      if (chrome?.tabs?.get && Number.isInteger(tabId)) {
+        const tab = await chrome.tabs.get(tabId).catch(() => null);
+        if (tab && !(await isTabInAutomationWindow(tab))) {
+          console.log(LOG_PREFIX, `Ignored tab registration outside automation window: ${source} -> ${tabId}`);
+          return;
+        }
+        windowId = normalizeAutomationWindowId(tab?.windowId);
+      }
+      registry = setSourceMapValue(registry, source, {
+        tabId,
+        ready: true,
+        ...(windowId !== null ? { windowId } : {}),
+      });
       await setState({ tabRegistry: registry });
       console.log(LOG_PREFIX, `Tab registered: ${source} -> ${tabId}`);
     }
 
     async function isTabAlive(source) {
-      const registry = await getTabRegistry();
-      const entry = registry[source];
+      let registry = await getTabRegistry();
+      const entry = getSourceMapValue(registry, source);
       if (!entry) return false;
       try {
-        await chrome.tabs.get(entry.tabId);
+        const tab = await chrome.tabs.get(entry.tabId);
+        if (!(await isTabInAutomationWindow(tab))) {
+          registry = setSourceMapValue(registry, source, null);
+          await setState({ tabRegistry: registry });
+          return false;
+        }
         return true;
       } catch {
-        registry[source] = null;
+        registry = setSourceMapValue(registry, source, null);
         await setState({ tabRegistry: registry });
         return false;
       }
     }
 
     async function getTabId(source) {
-      const registry = await getTabRegistry();
-      return registry[source]?.tabId || null;
+      let registry = await getTabRegistry();
+      const tabId = getSourceMapValue(registry, source)?.tabId || null;
+      if (!Number.isInteger(tabId)) {
+        return null;
+      }
+      if (!(await isTabInAutomationWindow(tabId))) {
+        registry = setSourceMapValue(registry, source, null);
+        await setState({ tabRegistry: registry });
+        return null;
+      }
+      return tabId;
     }
 
     async function rememberSourceLastUrl(source, url) {
       if (!source || !url) return;
       const state = await getState();
-      const sourceLastUrls = { ...(state.sourceLastUrls || {}) };
-      sourceLastUrls[source] = url;
+      const sourceLastUrls = setSourceMapValue(state.sourceLastUrls, source, url);
       await setState({ sourceLastUrls });
     }
 
@@ -122,12 +293,12 @@
       const { excludeTabIds = [] } = options;
       const excluded = new Set(excludeTabIds.filter((id) => Number.isInteger(id)));
       const state = await getState();
-      const lastUrl = state.sourceLastUrls?.[source];
+      const lastUrl = getSourceMapValue(state.sourceLastUrls, source);
       const referenceUrls = [currentUrl, lastUrl].filter(Boolean);
 
       if (!referenceUrls.length) return;
 
-      const tabs = await chrome.tabs.query({});
+      const tabs = await queryTabsInAutomationWindow({});
       const matchedIds = tabs
         .filter((tab) => Number.isInteger(tab.id) && !excluded.has(tab.id))
         .filter((tab) => referenceUrls.some((refUrl) => matchesSourceUrlFamily(source, tab.url, refUrl)))
@@ -137,9 +308,10 @@
 
       await chrome.tabs.remove(matchedIds).catch(() => { });
 
-      const registry = await getTabRegistry();
-      if (registry[source]?.tabId && matchedIds.includes(registry[source].tabId)) {
-        registry[source] = null;
+      let registry = await getTabRegistry();
+      const sourceEntry = getSourceMapValue(registry, source);
+      if (sourceEntry?.tabId && matchedIds.includes(sourceEntry.tabId)) {
+        registry = setSourceMapValue(registry, source, null);
         await setState({ tabRegistry: registry });
       }
 
@@ -162,9 +334,9 @@
     async function closeLocalhostCallbackTabs(callbackUrl, options = {}) {
       if (!isLocalhostOAuthCallbackUrl(callbackUrl)) return 0;
 
-      const { excludeTabIds = [] } = options;
+      const { excludeTabIds = [], ownerSource = getCleanupOwnerSource('oauth-localhost-callback') } = options;
       const excluded = new Set(excludeTabIds.filter((id) => Number.isInteger(id)));
-      const tabs = await chrome.tabs.query({});
+      const tabs = await queryTabsInAutomationWindow({});
       const matchedIds = tabs
         .filter((tab) => Number.isInteger(tab.id) && !excluded.has(tab.id))
         .filter((tab) => isLocalhostOAuthCallbackTabMatch(callbackUrl, tab.url))
@@ -174,9 +346,10 @@
 
       await chrome.tabs.remove(matchedIds).catch(() => { });
 
-      const registry = await getTabRegistry();
-      if (registry['signup-page']?.tabId && matchedIds.includes(registry['signup-page'].tabId)) {
-        registry['signup-page'] = null;
+      let registry = await getTabRegistry();
+      const ownerEntry = getSourceMapValue(registry, ownerSource);
+      if (ownerEntry?.tabId && matchedIds.includes(ownerEntry.tabId)) {
+        registry = setSourceMapValue(registry, ownerSource, null);
         await setState({ tabRegistry: registry });
       }
 
@@ -198,7 +371,7 @@
       const { excludeTabIds = [], excludeUrls = [], excludeLocalhostCallbacks = false } = options;
       const excluded = new Set(excludeTabIds.filter((id) => Number.isInteger(id)));
       const excludedUrls = new Set((Array.isArray(excludeUrls) ? excludeUrls : []).filter(Boolean));
-      const tabs = await chrome.tabs.query({});
+      const tabs = await queryTabsInAutomationWindow({});
       const matchedIds = tabs
         .filter((tab) => Number.isInteger(tab.id) && !excluded.has(tab.id))
         .filter((tab) => typeof tab.url === 'string' && !excludedUrls.has(tab.url))
@@ -356,7 +529,7 @@
       while (Date.now() - start < timeoutMs) {
         attempt += 1;
         const pong = await pingContentScriptOnTab(tabId);
-        if (pong?.ok && (!pong.source || pong.source === source)) {
+        if (pong?.ok && (!pong.source || sourcesMatch(pong.source, source))) {
           console.log(LOG_PREFIX, `[ensureContentScriptReadyOnTab] ready ${source} tab=${tabId} on attempt ${attempt} after ${Date.now() - start}ms`);
           await registerTab(source, tabId);
           return;
@@ -366,9 +539,13 @@
           throw new Error(`${getSourceLabel(source)} 内容脚本未就绪，且未提供可用的注入文件。`);
         }
 
-        const registry = await getTabRegistry();
-        if (registry[source]) {
-          registry[source].ready = false;
+        let registry = await getTabRegistry();
+        const sourceEntry = getSourceMapValue(registry, source);
+        if (sourceEntry) {
+          registry = setSourceMapValue(registry, source, {
+            ...sourceEntry,
+            ready: false,
+          });
           await setState({ tabRegistry: registry });
         }
 
@@ -393,7 +570,7 @@
         }
 
         const pongAfterInject = await pingContentScriptOnTab(tabId);
-        if (pongAfterInject?.ok && (!pongAfterInject.source || pongAfterInject.source === source)) {
+        if (pongAfterInject?.ok && (!pongAfterInject.source || sourcesMatch(pongAfterInject.source, source))) {
           console.log(LOG_PREFIX, `[ensureContentScriptReadyOnTab] ready after inject ${source} tab=${tabId} on attempt ${attempt} after ${Date.now() - start}ms`);
           await registerTab(source, tabId);
           return;
@@ -416,7 +593,8 @@
 
     function getContentScriptResponseTimeoutMs(message) {
       if (!message || typeof message !== 'object') return 30000;
-      if (message.type === 'EXECUTE_STEP' && Number(message.step) === 6) return 75000;
+      if (message.type === 'EXECUTE_NODE' && String(message.nodeId || message.payload?.nodeId || '').trim() === 'fill-profile') return 150000;
+      if (message.type === 'EXECUTE_NODE' && String(message.nodeId || message.payload?.nodeId || '').trim() === 'wait-registration-success') return 75000;
       if (message.type === 'POLL_EMAIL') {
         const maxAttempts = Math.max(1, Number(message.payload?.maxAttempts) || 1);
         const intervalMs = Math.max(0, Number(message.payload?.intervalMs) || 0);
@@ -472,7 +650,7 @@
           settled = true;
           const seconds = Math.ceil(responseTimeoutMs / 1000);
           console.warn(LOG_PREFIX, `[sendTabMessageWithTimeout] timeout ${debugLabel} after ${Date.now() - startedAt}ms`);
-          reject(new Error(`Content script on ${source} did not respond in ${seconds}s. Try refreshing the tab and retry.`));
+          reject(new Error(`${getSourceLabel(source)} 内容脚本 ${seconds} 秒内未响应，请刷新页面后重试。`));
         }, responseTimeoutMs);
 
         chrome.tabs.sendMessage(tabId, message)
@@ -497,14 +675,16 @@
 
     function queueCommand(source, message, timeout = 15000) {
       return new Promise((resolve, reject) => {
+        const commandKey = getSourceCommandKey(source);
         const timer = setTimeout(() => {
-          pendingCommands.delete(source);
-          reject(new Error(`Content script on ${source} did not respond in ${timeout / 1000}s. Try refreshing the tab and retry.`));
+          pendingCommands.delete(commandKey);
+          reject(new Error(`${getSourceLabel(source)} 内容脚本 ${timeout / 1000} 秒内未响应，请刷新页面后重试。`));
         }, timeout);
-        pendingCommands.set(source, {
+        pendingCommands.set(commandKey, {
           message,
           resolve,
           reject,
+          source,
           timer,
           responseTimeoutMs: timeout,
         });
@@ -513,11 +693,16 @@
     }
 
     function flushCommand(source, tabId) {
-      const pending = pendingCommands.get(source);
+      const pending = pendingCommands.get(getSourceCommandKey(source));
       if (pending) {
         clearTimeout(pending.timer);
-        pendingCommands.delete(source);
-        sendTabMessageWithTimeout(tabId, source, pending.message, pending.responseTimeoutMs).then(pending.resolve).catch(pending.reject);
+        pendingCommands.delete(getSourceCommandKey(source));
+        sendTabMessageWithTimeout(
+          tabId,
+          pending.source || source,
+          pending.message,
+          pending.responseTimeoutMs
+        ).then(pending.resolve).catch(pending.reject);
         console.log(LOG_PREFIX, `Flushed queued command to ${source} (tab ${tabId})`);
       }
     }
@@ -534,7 +719,7 @@
     async function reuseOrCreateTab(source, url, options = {}) {
       if (options.forceNew) {
         await closeConflictingTabsForSource(source, url);
-        const tab = await chrome.tabs.create({ url, active: true });
+        const tab = await createAutomationTab({ url, active: true }, options);
 
         if (options.inject) {
           await waitForTabUpdateComplete(tab.id);
@@ -565,18 +750,29 @@
         const sameUrl = currentTab.url === url;
         const shouldReloadOnReuse = sameUrl && options.reloadIfSameUrl;
 
-        const registry = await getTabRegistry();
+        let registry = await getTabRegistry();
+        const sourceEntry = getSourceMapValue(registry, source);
         if (sameUrl) {
           await chrome.tabs.update(tabId, { active: true });
           if (shouldReloadOnReuse) {
-            if (registry[source]) registry[source].ready = false;
+            if (sourceEntry) {
+              registry = setSourceMapValue(registry, source, {
+                ...sourceEntry,
+                ready: false,
+              });
+            }
             await setState({ tabRegistry: registry });
             await chrome.tabs.reload(tabId);
             await waitForTabUpdateComplete(tabId);
           }
 
           if (options.inject) {
-            if (registry[source]) registry[source].ready = false;
+            if (sourceEntry) {
+              registry = setSourceMapValue(registry, source, {
+                ...sourceEntry,
+                ready: false,
+              });
+            }
             await setState({ tabRegistry: registry });
             if (options.injectSource) {
               await chrome.scripting.executeScript({
@@ -598,7 +794,12 @@
           return tabId;
         }
 
-        if (registry[source]) registry[source].ready = false;
+        if (sourceEntry) {
+          registry = setSourceMapValue(registry, source, {
+            ...sourceEntry,
+            ready: false,
+          });
+        }
         await setState({ tabRegistry: registry });
         await chrome.tabs.update(tabId, { url, active: true });
 
@@ -626,7 +827,7 @@
       }
 
       await closeConflictingTabsForSource(source, url);
-      const tab = await chrome.tabs.create({ url, active: true });
+      const tab = await createAutomationTab({ url, active: true }, options);
 
       if (options.inject) {
         await waitForTabUpdateComplete(tab.id);
@@ -653,7 +854,7 @@
       throwIfStopped();
       const { responseTimeoutMs = getContentScriptResponseTimeoutMs(message) } = options;
       const registry = await getTabRegistry();
-      const entry = registry[source];
+      const entry = getSourceMapValue(registry, source);
 
       if (!entry || !entry.ready) {
         throwIfStopped();
@@ -787,16 +988,20 @@
       closeConflictingTabsForSource,
       closeLocalhostCallbackTabs,
       closeTabsByUrlPrefix,
+      createAutomationTab,
       ensureContentScriptReadyOnTab,
       flushCommand,
+      getAutomationWindowId,
       getContentScriptResponseTimeoutMs,
       getMessageDebugLabel,
       getTabId,
       getTabRegistry,
       isLocalhostOAuthCallbackTabMatch,
       isTabAlive,
+      isTabInAutomationWindow,
       pingContentScriptOnTab,
       queueCommand,
+      queryTabsInAutomationWindow,
       registerTab,
       rememberSourceLastUrl,
       resolveResponseTimeoutMs,

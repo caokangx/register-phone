@@ -1,6 +1,8 @@
 // background.js — Service Worker: orchestration, state, tab management, message routing
 
 importScripts(
+  'shared/source-registry.js',
+  'shared/flow-capabilities.js',
   'managed-alias-utils.js',
   'mail2925-utils.js',
   'paypal-utils.js',
@@ -15,16 +17,21 @@ importScripts(
   'background/paypal-account-store.js',
   'background/ip-proxy-provider-711proxy.js',
   'background/ip-proxy-core.js',
+  'background/sub2api-api.js',
   'background/panel-bridge.js',
+  'background/registration-email-state.js',
+  'background/workflow-engine.js',
+  'background/runtime-state.js',
   'background/generated-email-helpers.js',
   'background/signup-flow-helpers.js',
+  'background/mail-rule-registry.js',
+  'flows/openai/mail-rules.js',
   'background/message-router.js',
   'background/verification-flow.js',
   'background/auto-run-controller.js',
   'background/tab-runtime.js',
   'background/navigation-utils.js',
   'background/logging-status.js',
-  'background/whatsapp-otp.js',
   'background/steps/registry.js',
   'data/step-definitions.js',
   'data/address-sources.js',
@@ -33,7 +40,7 @@ importScripts(
   'background/steps/fill-password.js',
   'background/steps/fetch-signup-code.js',
   'background/steps/fill-profile.js',
-  'background/steps/clear-login-cookies.js',
+  'background/steps/wait-registration-success.js',
   'background/steps/create-plus-checkout.js',
   'background/steps/fill-plus-checkout.js',
   'background/steps/gopay-manual-confirm.js',
@@ -44,42 +51,114 @@ importScripts(
   'background/steps/fetch-login-code.js',
   'background/steps/confirm-oauth.js',
   'background/steps/platform-verify.js',
-  'background/steps/unlink-whatsapp.js',
-  'background/steps/check-balance.js',
   'data/names.js',
   'hotmail-utils.js',
   'microsoft-email.js',
   'luckmail-utils.js',
   'cloudflare-temp-email-utils.js',
+  'cloudmail-utils.js',
+  'background/cloudmail-provider.js',
   'icloud-utils.js',
   'mail-provider-utils.js',
   'content/activation-utils.js'
 );
 
-const NORMAL_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({ plusModeEnabled: false }) || [];
+const DEFAULT_ACTIVE_FLOW_ID = 'openai';
+const NORMAL_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: false,
+}) || [];
+const NORMAL_PHONE_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: false,
+  signupMethod: 'phone',
+}) || NORMAL_STEP_DEFINITIONS;
+const NORMAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: false,
+  signupMethod: 'phone',
+  phoneSignupReloginAfterBindEmailEnabled: true,
+}) || NORMAL_PHONE_STEP_DEFINITIONS;
 const PLUS_PAYPAL_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
   plusModeEnabled: true,
   plusPaymentMethod: 'paypal',
 }) || NORMAL_STEP_DEFINITIONS;
+const PLUS_PAYPAL_PHONE_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'paypal',
+  signupMethod: 'phone',
+}) || PLUS_PAYPAL_STEP_DEFINITIONS;
+const PLUS_PAYPAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'paypal',
+  signupMethod: 'phone',
+  phoneSignupReloginAfterBindEmailEnabled: true,
+}) || PLUS_PAYPAL_PHONE_STEP_DEFINITIONS;
 const PLUS_GOPAY_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
   plusModeEnabled: true,
   plusPaymentMethod: 'gopay',
 }) || PLUS_PAYPAL_STEP_DEFINITIONS;
+const PLUS_GOPAY_PHONE_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'gopay',
+  signupMethod: 'phone',
+}) || PLUS_GOPAY_STEP_DEFINITIONS;
+const PLUS_GOPAY_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'gopay',
+  signupMethod: 'phone',
+  phoneSignupReloginAfterBindEmailEnabled: true,
+}) || PLUS_GOPAY_PHONE_STEP_DEFINITIONS;
 const PLUS_GPC_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
   plusModeEnabled: true,
   plusPaymentMethod: 'gpc-helper',
 }) || PLUS_GOPAY_STEP_DEFINITIONS;
+const PLUS_GPC_PHONE_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'gpc-helper',
+  signupMethod: 'phone',
+}) || PLUS_GPC_STEP_DEFINITIONS;
+const PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'gpc-helper',
+  signupMethod: 'phone',
+  phoneSignupReloginAfterBindEmailEnabled: true,
+}) || PLUS_GPC_PHONE_STEP_DEFINITIONS;
 const PLUS_STEP_DEFINITIONS = PLUS_PAYPAL_STEP_DEFINITIONS;
-const ALL_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getAllSteps?.() || [
+const ALL_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getAllSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+}) || [
   ...NORMAL_STEP_DEFINITIONS,
+  ...NORMAL_PHONE_STEP_DEFINITIONS,
+  ...NORMAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
   ...PLUS_PAYPAL_STEP_DEFINITIONS,
+  ...PLUS_PAYPAL_PHONE_STEP_DEFINITIONS,
+  ...PLUS_PAYPAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
   ...PLUS_GOPAY_STEP_DEFINITIONS,
+  ...PLUS_GOPAY_PHONE_STEP_DEFINITIONS,
+  ...PLUS_GOPAY_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
   ...PLUS_GPC_STEP_DEFINITIONS,
+  ...PLUS_GPC_PHONE_STEP_DEFINITIONS,
+  ...PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
 ];
 const STEP_IDS = Array.from(new Set(ALL_STEP_DEFINITIONS
   .map((definition) => Number(definition?.id))
   .filter(Number.isFinite)))
   .sort((left, right) => left - right);
+const DEFAULT_STEP_STATUSES = Object.fromEntries(STEP_IDS.map((stepId) => [stepId, 'pending']));
+const DEFAULT_NODE_IDS = Array.from(new Set(ALL_STEP_DEFINITIONS
+  .map((definition) => String(definition?.key || '').trim())
+  .filter(Boolean)));
+const DEFAULT_NODE_STATUSES = Object.fromEntries(DEFAULT_NODE_IDS.map((nodeId) => [nodeId, 'pending']));
 const NORMAL_STEP_IDS = NORMAL_STEP_DEFINITIONS
   .map((definition) => Number(definition?.id))
   .filter(Number.isFinite)
@@ -172,6 +251,17 @@ const {
   normalizeCloudflareTempEmailMailApiMessages,
 } = self.CloudflareTempEmailUtils;
 const {
+  DEFAULT_MAIL_PAGE_SIZE: CLOUD_MAIL_DEFAULT_PAGE_SIZE,
+  buildCloudMailHeaders,
+  getCloudMailTokenFromResponse,
+  joinCloudMailUrl,
+  normalizeCloudMailAddress,
+  normalizeCloudMailBaseUrl,
+  normalizeCloudMailDomain,
+  normalizeCloudMailDomains,
+  normalizeCloudMailMailApiMessages,
+} = self.CloudMailUtils;
+const {
   findIcloudAliasByEmail,
   getConfiguredIcloudHostPreference,
   getIcloudHostHintFromMessage,
@@ -193,6 +283,92 @@ const {
 const {
   isRecoverableStep9AuthFailure,
 } = self.MultiPageActivationUtils;
+const registrationEmailStateHelpers = self.MultiPageRegistrationEmailState?.createRegistrationEmailStateHelpers?.() || null;
+const runtimeStateHelpers = self.MultiPageBackgroundRuntimeState?.createRuntimeStateHelpers?.({
+  DEFAULT_ACTIVE_FLOW_ID,
+  defaultNodeStatuses: DEFAULT_NODE_STATUSES,
+}) || null;
+const DEFAULT_REGISTRATION_EMAIL_STATE = registrationEmailStateHelpers?.DEFAULT_REGISTRATION_EMAIL_STATE || {
+  current: '',
+  previous: '',
+  source: '',
+  updatedAt: 0,
+};
+
+function getRegistrationEmailState(state = {}) {
+  if (registrationEmailStateHelpers?.getRegistrationEmailState) {
+    return registrationEmailStateHelpers.getRegistrationEmailState(state);
+  }
+  const fallbackEmail = String(state?.email || '').trim();
+  return {
+    current: fallbackEmail,
+    previous: fallbackEmail,
+    source: '',
+    updatedAt: 0,
+  };
+}
+
+function buildRegistrationEmailStateUpdates(state = {}, options = {}) {
+  if (registrationEmailStateHelpers?.buildRegistrationEmailStateUpdates) {
+    return registrationEmailStateHelpers.buildRegistrationEmailStateUpdates(state, options);
+  }
+  const currentEmail = String(options?.currentEmail || '').trim();
+  const preservePrevious = Boolean(options?.preservePrevious);
+  const currentState = getRegistrationEmailState(state);
+  return {
+    email: currentEmail || null,
+    registrationEmailState: {
+      current: currentEmail,
+      previous: currentEmail || (preservePrevious ? currentState.previous : ''),
+      source: currentEmail
+        ? String(options?.source || '').trim()
+        : (preservePrevious ? currentState.source : ''),
+      updatedAt: currentEmail || (preservePrevious && currentState.previous) ? Date.now() : 0,
+    },
+  };
+}
+
+function getRegistrationEmailBaseline(state = {}, options = {}) {
+  if (registrationEmailStateHelpers?.getRegistrationEmailBaseline) {
+    return registrationEmailStateHelpers.getRegistrationEmailBaseline(state, options);
+  }
+  const preferredEmail = String(options?.preferredEmail || '').trim();
+  const fallbackEmail = String(options?.fallbackEmail || '').trim();
+  const currentState = getRegistrationEmailState(state);
+  return preferredEmail || currentState.current || currentState.previous || fallbackEmail || '';
+}
+
+function buildFlowRegistrationEmailStateUpdates(state = {}, options = {}) {
+  if (registrationEmailStateHelpers?.buildFlowRegistrationEmailStateUpdates) {
+    return registrationEmailStateHelpers.buildFlowRegistrationEmailStateUpdates(state, options);
+  }
+  return buildRegistrationEmailStateUpdates(state, options);
+}
+
+function getPreservedPhoneIdentity(state = {}) {
+  if (registrationEmailStateHelpers?.getPreservedPhoneIdentity) {
+    return registrationEmailStateHelpers.getPreservedPhoneIdentity(state);
+  }
+  return null;
+}
+
+function buildStateViewWithRuntimeState(state = {}) {
+  if (runtimeStateHelpers?.buildStateView) {
+    return runtimeStateHelpers.buildStateView(state);
+  }
+  return state;
+}
+
+function buildStatePatchWithRuntimeState(currentState = {}, updates = {}) {
+  if (runtimeStateHelpers?.buildSessionStatePatch) {
+    return runtimeStateHelpers.buildSessionStatePatch(currentState, updates);
+  }
+  return updates;
+}
+
+function statePatchHasChanges(state = {}, patch = {}) {
+  return Object.keys(patch).some((key) => JSON.stringify(state?.[key] ?? null) !== JSON.stringify(patch[key] ?? null));
+}
 
 const LOG_PREFIX = '[MultiPage:bg]';
 const DUCK_AUTOFILL_URL = 'https://duckduckgo.com/email/settings/autofill';
@@ -227,6 +403,8 @@ const HOTMAIL_PROVIDER = 'hotmail-api';
 const LUCKMAIL_PROVIDER = 'luckmail-api';
 const CLOUDFLARE_TEMP_EMAIL_PROVIDER = 'cloudflare-temp-email';
 const CLOUDFLARE_TEMP_EMAIL_GENERATOR = 'cloudflare-temp-email';
+const CLOUD_MAIL_PROVIDER = 'cloudmail';
+const CLOUD_MAIL_GENERATOR = 'cloudmail';
 const CUSTOM_EMAIL_POOL_GENERATOR = 'custom-pool';
 const HOTMAIL_MAILBOXES = ['INBOX', 'Junk'];
 const STOP_ERROR_MESSAGE = '流程已被用户停止。';
@@ -240,11 +418,12 @@ const STEP7_MAIL_POLLING_RECOVERY_MAX_ATTEMPTS = 8;
 const OAUTH_FLOW_TIMEOUT_MS = 5 * 60 * 1000;
 const SUB2API_STEP1_RESPONSE_TIMEOUT_MS = 90000;
 const SUB2API_STEP9_RESPONSE_TIMEOUT_MS = 120000;
-const DEFAULT_SUB2API_URL = 'https://sub2api.hisence.fun/admin/accounts';
+const DEFAULT_SUB2API_URL = '';
 const DEFAULT_CODEX2API_URL = 'http://localhost:8080/admin/accounts';
-const DEFAULT_GPC_HELPER_API_URL = 'https://gopay.hwork.pro';
+const DEFAULT_GPC_HELPER_API_URL = 'https://gpc.qlhazycoder.top';
 const DEFAULT_SUB2API_GROUP_NAME = 'codex';
 const DEFAULT_SUB2API_PROXY_NAME = '';
+const DEFAULT_SUB2API_ACCOUNT_PRIORITY = 1;
 const CONTRIBUTION_SOURCE_CPA = 'cpa';
 const CONTRIBUTION_SOURCE_SUB2API = 'sub2api';
 const CONTRIBUTION_SUB2API_DEFAULT_GROUP_NAME = 'codex号池';
@@ -341,6 +520,9 @@ const DEFAULT_LOCAL_CPA_STEP9_MODE = 'submit';
 const MAIL_2925_MODE_PROVIDE = 'provide';
 const MAIL_2925_MODE_RECEIVE = 'receive';
 const DEFAULT_MAIL_2925_MODE = MAIL_2925_MODE_PROVIDE;
+const CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_RECEIVE_MAILBOX = 'receive-mailbox';
+const CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL = 'registration-email';
+const DEFAULT_CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE = CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_RECEIVE_MAILBOX;
 const HOTMAIL_SERVICE_MODE_REMOTE = 'remote';
 const HOTMAIL_SERVICE_MODE_LOCAL = 'local';
 const DEFAULT_HOTMAIL_REMOTE_BASE_URL = '';
@@ -380,8 +562,18 @@ const FIVE_SIM_COUNTRY_ID = 'vietnam';
 const FIVE_SIM_COUNTRY_LABEL = '越南 (Vietnam)';
 const FIVE_SIM_SUPPORTED_COUNTRY_IDS = ['indonesia', 'thailand', 'vietnam'];
 const FIVE_SIM_SUPPORTED_COUNTRY_ID_SET = new Set(FIVE_SIM_SUPPORTED_COUNTRY_IDS);
-const HERO_SMS_SUPPORTED_COUNTRY_IDS = [6, 52, 10];
+const HERO_SMS_SUPPORTED_COUNTRY_IDS = [6, 52, 187, 16, 151, 43, 73, 10];
 const HERO_SMS_SUPPORTED_COUNTRY_ID_SET = new Set(HERO_SMS_SUPPORTED_COUNTRY_IDS.map(String));
+const HERO_SMS_COUNTRY_BY_PHONE_PREFIX = Object.freeze([
+  { prefix: '84', id: 10, label: 'Vietnam' },
+  { prefix: '66', id: 52, label: 'Thailand' },
+  { prefix: '62', id: 6, label: 'Indonesia' },
+  { prefix: '44', id: 16, label: 'United Kingdom' },
+  { prefix: '81', id: 151, label: 'Japan' },
+  { prefix: '49', id: 43, label: 'Germany' },
+  { prefix: '33', id: 73, label: 'France' },
+  { prefix: '1', id: 187, label: 'USA' },
+]);
 const FIVE_SIM_OPERATOR = DEFAULT_FIVE_SIM_OPERATOR;
 const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
 const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
@@ -398,7 +590,7 @@ const PERSISTENT_ALIAS_STATE_KEYS = [
 const ACCOUNT_RUN_HISTORY_STORAGE_KEY = 'accountRunHistory';
 const SIGNUP_METHOD_EMAIL = 'email';
 const SIGNUP_METHOD_PHONE = 'phone';
-const DEFAULT_SIGNUP_METHOD = SIGNUP_METHOD_EMAIL;
+const DEFAULT_SIGNUP_METHOD = SIGNUP_METHOD_PHONE;
 const CONTRIBUTION_RUNTIME_DEFAULTS = self.MultiPageBackgroundContributionOAuth?.RUNTIME_DEFAULTS || {
   contributionMode: false,
   contributionModeExpected: false,
@@ -431,6 +623,11 @@ function normalizePlusPaymentMethod(value = '') {
     return PLUS_PAYMENT_METHOD_GPC_HELPER;
   }
   return normalized === PLUS_PAYMENT_METHOD_GOPAY ? PLUS_PAYMENT_METHOD_GOPAY : PLUS_PAYMENT_METHOD_PAYPAL;
+}
+
+function normalizeGpcHelperPhoneMode(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'auto' || normalized === 'builtin' ? 'auto' : 'manual';
 }
 
 function normalizeContributionModeSource(value = '') {
@@ -474,11 +671,22 @@ function getSignupMethodForStepDefinitions(state = {}) {
 function getStepDefinitionsForState(state = {}) {
   const rootScope = typeof self !== 'undefined' ? self : globalThis;
   if (rootScope.MultiPageStepDefinitions?.getSteps) {
-    return rootScope.MultiPageStepDefinitions.getSteps({
+    const defaultFlowId = typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai';
+    const activeFlowId = String(state?.activeFlowId || '').trim().toLowerCase() || defaultFlowId;
+    const definitions = rootScope.MultiPageStepDefinitions.getSteps({
+      activeFlowId,
       plusModeEnabled: isPlusModeState(state),
       plusPaymentMethod: normalizePlusPaymentMethod(state?.plusPaymentMethod),
       signupMethod: getSignupMethodForStepDefinitions(state),
+      phoneSignupReloginAfterBindEmailEnabled: Boolean(state?.phoneSignupReloginAfterBindEmailEnabled),
     });
+    if (Array.isArray(definitions)) {
+      return definitions;
+    }
+  }
+  const activeFlowId = String(state?.activeFlowId || '').trim().toLowerCase();
+  if (activeFlowId && activeFlowId !== DEFAULT_ACTIVE_FLOW_ID) {
+    return [];
   }
   if (!isPlusModeState(state)) {
     return NORMAL_STEP_DEFINITIONS;
@@ -510,10 +718,19 @@ function getStepIdsForState(state = {}) {
 
 function getLastStepIdForState(state = {}) {
   const ids = getStepIdsForState(state);
-  return ids[ids.length - 1] || 10;
+  if (ids.length) {
+    return ids[ids.length - 1];
+  }
+  return String(state?.activeFlowId || '').trim().toLowerCase() === DEFAULT_ACTIVE_FLOW_ID ? 10 : 0;
 }
 
 function getAuthChainStartStepId(state = {}) {
+  const authStepId = typeof getStepIdByKeyForState === 'function'
+    ? getStepIdByKeyForState('oauth-login', state)
+    : null;
+  if (Number.isInteger(authStepId) && authStepId > 0) {
+    return authStepId;
+  }
   return isPlusModeState(state) ? 10 : FINAL_OAUTH_CHAIN_START_STEP;
 }
 
@@ -532,6 +749,74 @@ function getStepIdByKeyForState(stepKey, state = {}) {
     }
   }
   return null;
+}
+
+function getNodeDefinitionsForState(state = {}) {
+  if (workflowEngine?.getNodesForState) {
+    return workflowEngine.getNodesForState(state);
+  }
+  if (self.MultiPageStepDefinitions?.getNodes) {
+    return self.MultiPageStepDefinitions.getNodes({
+      ...state,
+      activeFlowId: state?.activeFlowId || state?.flowId || DEFAULT_ACTIVE_FLOW_ID,
+      flowId: state?.flowId || state?.activeFlowId || DEFAULT_ACTIVE_FLOW_ID,
+    });
+  }
+  return getStepDefinitionsForState(state)
+    .map((definition) => ({
+      legacyStepId: Number(definition?.id),
+      nodeId: String(definition?.key || '').trim(),
+      displayOrder: Number.isFinite(Number(definition?.order)) ? Number(definition.order) : Number(definition?.id),
+      title: String(definition?.title || '').trim(),
+      executeKey: String(definition?.key || '').trim(),
+    }))
+    .filter((definition) => definition.nodeId);
+}
+
+function getNodeIdsForState(state = {}) {
+  if (workflowEngine?.getNodeIdsForState) {
+    return workflowEngine.getNodeIdsForState(state);
+  }
+  return getNodeDefinitionsForState(state).map((definition) => definition.nodeId).filter(Boolean);
+}
+
+function getNodeDefinitionForState(nodeId, state = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) return null;
+  if (workflowEngine?.getNodeById) {
+    return workflowEngine.getNodeById(normalizedNodeId, state);
+  }
+  return getNodeDefinitionsForState(state).find((definition) => definition.nodeId === normalizedNodeId) || null;
+}
+
+function getLastNodeIdForState(state = {}) {
+  const nodeIds = getNodeIdsForState(state);
+  return nodeIds[nodeIds.length - 1] || '';
+}
+
+function getNodeIdByStepForState(step, state = {}) {
+  const definition = getStepDefinitionForState(step, state);
+  return String(definition?.key || '').trim();
+}
+
+function getStepIdByNodeIdForState(nodeId, state = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) return null;
+  const node = getNodeDefinitionForState(normalizedNodeId, state);
+  const legacyStepId = Number(node?.legacyStepId);
+  if (Number.isInteger(legacyStepId) && legacyStepId > 0) {
+    return legacyStepId;
+  }
+  return getStepIdByKeyForState(normalizedNodeId, state);
+}
+
+function getNodeTitleForState(nodeId, state = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) return '';
+  if (workflowEngine?.getNodeTitle) {
+    return workflowEngine.getNodeTitle(normalizedNodeId, state);
+  }
+  return getNodeDefinitionForState(normalizedNodeId, state)?.title || normalizedNodeId;
 }
 
 initializeSessionStorageAccess();
@@ -577,6 +862,8 @@ const PERSISTED_SETTING_DEFAULTS = {
   sub2apiPassword: '',
   sub2apiGroupName: DEFAULT_SUB2API_GROUP_NAME,
   sub2apiGroupNames: DEFAULT_SUB2API_GROUP_NAMES,
+  sub2apiSelectedGroupNames: [DEFAULT_SUB2API_GROUP_NAME],
+  sub2apiAccountPriority: DEFAULT_SUB2API_ACCOUNT_PRIORITY,
   sub2apiDefaultProxyName: DEFAULT_SUB2API_PROXY_NAME,
   ipProxyEnabled: false,
   ipProxyService: DEFAULT_IP_PROXY_SERVICE,
@@ -603,16 +890,25 @@ const PERSISTED_SETTING_DEFAULTS = {
   paypalEmail: '',
   paypalPassword: '',
   currentPayPalAccountId: '',
+  paypalSmsPhone: '',
+  paypalSmsApiUrl: '',
+  bindCardNumber: '',
   gopayCountryCode: '+86',
   gopayPhone: '',
   gopayOtp: '',
   gopayPin: '',
   gopayHelperApiUrl: DEFAULT_GPC_HELPER_API_URL,
-  gopayOtpApiBaseUrl: self.MultiPageWhatsappOtpClient?.DEFAULT_BASE_URL || 'http://192.168.3.123:8000',
+  gopayHelperApiKey: '',
   gopayHelperCardKey: '',
+  gopayHelperPhoneMode: 'manual',
   gopayHelperPhoneNumber: '',
   gopayHelperCountryCode: '+86',
   gopayHelperPin: '',
+  gopayHelperOtpChannel: 'whatsapp',
+  gopayHelperLocalSmsHelperEnabled: false,
+  gopayHelperLocalSmsHelperUrl: 'http://127.0.0.1:18767',
+  gopayHelperLocalSmsTimeoutSeconds: 90,
+  gopayHelperLocalSmsPollIntervalSeconds: 2,
   gopayHelperReferenceId: '',
   gopayHelperGoPayGuid: '',
   gopayHelperRedirectUrl: '',
@@ -620,17 +916,41 @@ const PERSISTED_SETTING_DEFAULTS = {
   gopayHelperFlowId: '',
   gopayHelperChallengeId: '',
   gopayHelperStartPayload: null,
+  gopayHelperTaskId: '',
+  gopayHelperTaskStatus: '',
+  gopayHelperStatusText: '',
+  gopayHelperRemoteStage: '',
+  gopayHelperApiWaitingFor: '',
+  gopayHelperApiInputDeadlineAt: '',
+  gopayHelperApiInputWaitSeconds: 0,
+  gopayHelperLastInputError: '',
+  gopayHelperOtpInvalidCount: 0,
+  gopayHelperFailureStage: '',
+  gopayHelperFailureDetail: '',
+  gopayHelperTaskPayload: null,
+  gopayHelperTaskProgressSignature: '',
+  gopayHelperTaskProgressAt: 0,
+  gopayHelperTaskProgressTaskId: '',
   gopayHelperBalance: '',
   gopayHelperBalancePayload: null,
   gopayHelperBalanceUpdatedAt: 0,
   gopayHelperBalanceError: '',
+  gopayHelperRemainingUses: 0,
+  gopayHelperAutoModeEnabled: false,
+  gopayHelperApiKeyStatus: '',
   autoRunSkipFailures: false,
   autoRunFallbackThreadIntervalMinutes: 0,
   oauthFlowTimeoutEnabled: true,
   autoRunDelayEnabled: false,
+  operationDelayEnabled: true,
   autoRunDelayMinutes: 30,
   autoStepDelaySeconds: null,
-  phoneVerificationEnabled: false,
+  step6CookieCleanupEnabled: false,
+  phoneVerificationEnabled: true,
+  phoneSignupReloginAfterBindEmailEnabled: false,
+  phoneSmsReuseEnabled: DEFAULT_HERO_SMS_REUSE_ENABLED,
+  freePhoneReuseEnabled: true,
+  freePhoneReuseAutoEnabled: true,
   signupMethod: DEFAULT_SIGNUP_METHOD,
   phoneSmsProvider: DEFAULT_PHONE_SMS_PROVIDER,
   phoneSmsProviderOrder: [],
@@ -675,10 +995,18 @@ const PERSISTED_SETTING_DEFAULTS = {
   cloudflareTempEmailBaseUrl: '',
   cloudflareTempEmailAdminAuth: '',
   cloudflareTempEmailCustomAuth: '',
+  cloudflareTempEmailLookupMode: DEFAULT_CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE,
   cloudflareTempEmailReceiveMailbox: '',
   cloudflareTempEmailUseRandomSubdomain: false,
   cloudflareTempEmailDomain: '',
   cloudflareTempEmailDomains: [],
+  cloudMailBaseUrl: '',
+  cloudMailAdminEmail: '',
+  cloudMailAdminPassword: '',
+  cloudMailToken: '',
+  cloudMailReceiveMailbox: '',
+  cloudMailDomain: '',
+  cloudMailDomains: [],
   hotmailAccounts: [],
   mail2925Accounts: [],
   paypalAccounts: [],
@@ -686,6 +1014,7 @@ const PERSISTED_SETTING_DEFAULTS = {
   heroSmsApiKey: '',
   heroSmsReuseEnabled: DEFAULT_HERO_SMS_REUSE_ENABLED,
   heroSmsAcquirePriority: DEFAULT_HERO_SMS_ACQUIRE_PRIORITY,
+  heroSmsMinPrice: '',
   heroSmsMaxPrice: '',
   heroSmsPreferredPrice: '',
   heroSmsCountryId: HERO_SMS_COUNTRY_ID,
@@ -697,6 +1026,7 @@ const PERSISTED_SETTING_DEFAULTS = {
   fiveSimCountryLabel: FIVE_SIM_COUNTRY_LABEL,
   fiveSimCountryFallback: [],
   fiveSimCountryOrder: [...DEFAULT_FIVE_SIM_COUNTRY_ORDER],
+  fiveSimMinPrice: '',
   fiveSimMaxPrice: '',
   fiveSimOperator: FIVE_SIM_OPERATOR,
   nexSmsApiKey: '',
@@ -708,32 +1038,22 @@ const PERSISTED_SETTING_DEFAULTS = {
 const PERSISTED_SETTING_KEYS = Object.keys(PERSISTED_SETTING_DEFAULTS);
 const SETTINGS_EXPORT_SCHEMA_VERSION = 1;
 const SETTINGS_EXPORT_FILENAME_PREFIX = 'multipage-settings';
-const STEP6_PRE_LOGIN_COOKIE_CLEAR_DELAY_MS = 25000;
-const PRE_LOGIN_COOKIE_CLEAR_DOMAINS = [
-  'chatgpt.com',
-  'chat.openai.com',
-  'openai.com',
-  'auth.openai.com',
-  'auth0.openai.com',
-  'accounts.openai.com',
-];
-const PRE_LOGIN_COOKIE_CLEAR_ORIGINS = [
-  'https://chatgpt.com',
-  'https://chat.openai.com',
-  'https://auth.openai.com',
-  'https://auth0.openai.com',
-  'https://accounts.openai.com',
-  'https://openai.com',
-];
+const STEP6_REGISTRATION_SUCCESS_WAIT_MS = 20000;
 
 const DEFAULT_STATE = {
-  currentStep: 0, // 当前流程执行到的步骤编号。
-  stepStatuses: Object.fromEntries(STEP_IDS.map((stepId) => [stepId, 'pending'])),
+  flowId: DEFAULT_ACTIVE_FLOW_ID,
+  runId: '',
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  activeRunId: '',
+  currentNodeId: '',
+  nodeStatuses: { ...DEFAULT_NODE_STATUSES },
+  runtimeState: runtimeStateHelpers?.buildDefaultRuntimeState?.() || null,
   ...CONTRIBUTION_RUNTIME_DEFAULTS,
   oauthUrl: null, // 运行时抓取到的 OAuth 地址，不要手动预填。
   resolvedSignupMethod: null, // 当前自动轮次冻结后的实际注册方式。
   accountIdentifierType: null,
   accountIdentifier: '',
+  registrationEmailState: { ...DEFAULT_REGISTRATION_EMAIL_STATE },
   email: null, // 运行时邮箱，由程序自动获取并写入，不能手动预填。
   password: null, // 运行时实际密码，由 customPassword 或程序自动生成后写入。
   accounts: [], // 已生成账号记录：{ email, password, createdAt }。
@@ -751,11 +1071,13 @@ const DEFAULT_STATE = {
   sub2apiSessionId: null, // SUB2API OpenAI Auth 会话 ID。
   sub2apiOAuthState: null, // SUB2API OpenAI Auth state。
   sub2apiGroupId: null, // SUB2API 目标分组 ID。
+  sub2apiGroupIds: [], // SUB2API 多目标分组 ID。
   sub2apiDraftName: null, // SUB2API 本轮预生成的账号名称。
   sub2apiProxyId: null, // SUB2API 本轮使用的代理 ID。
   codex2apiSessionId: null, // Codex2API OAuth 会话 ID。
   codex2apiOAuthState: null, // Codex2API OAuth state。
   plusCheckoutTabId: null, // Plus checkout / PayPal 标签页 ID。
+  automationWindowId: null, // 当前任务锁定的浏览器窗口 ID，避免新标签页跑到其它窗口。
   plusCheckoutUrl: null, // Plus checkout 运行时短链，不写入持久配置。
   plusCheckoutCountry: 'DE',
   plusCheckoutCurrency: 'EUR',
@@ -764,11 +1086,6 @@ const DEFAULT_STATE = {
   plusBillingAddress: null,
   plusPaypalApprovedAt: null,
   plusGoPayApprovedAt: null,
-  plusWhatsappUnlinkedAt: null,
-  plusWhatsappUnlinkTimedOut: false,
-  plusBalanceRaw: '',
-  plusBalanceValue: null,
-  plusBalanceConfirmedAt: null,
   plusReturnUrl: '',
   plusManualConfirmationPending: false,
   plusManualConfirmationRequestId: '',
@@ -783,6 +1100,22 @@ const DEFAULT_STATE = {
   gopayHelperFlowId: '',
   gopayHelperChallengeId: '',
   gopayHelperStartPayload: null,
+  gopayHelperTaskId: '',
+  gopayHelperTaskStatus: '',
+  gopayHelperStatusText: '',
+  gopayHelperRemoteStage: '',
+  gopayHelperApiWaitingFor: '',
+  gopayHelperApiInputDeadlineAt: '',
+  gopayHelperApiInputWaitSeconds: 0,
+  gopayHelperLastInputError: '',
+  gopayHelperOtpInvalidCount: 0,
+  gopayHelperFailureStage: '',
+  gopayHelperFailureDetail: '',
+  gopayHelperTaskPayload: null,
+  gopayHelperOrderCreatedAt: 0,
+  gopayHelperTaskProgressSignature: '',
+  gopayHelperTaskProgressAt: 0,
+  gopayHelperTaskProgressTaskId: '',
   gopayHelperPinPayload: null,
   gopayHelperResolvedOtp: '',
   gopayHelperOtpRequestId: '',
@@ -817,6 +1150,7 @@ const DEFAULT_STATE = {
   currentPhoneVerificationCountdownWindowIndex: 0,
   currentPhoneVerificationCountdownWindowTotal: 0,
   reusablePhoneActivation: null,
+  freeReusablePhoneActivation: null,
   phoneReusableActivationPool: [],
   signupPhoneNumber: '',
   signupPhoneActivation: null,
@@ -1024,6 +1358,38 @@ function normalizePhoneCodePollMaxRounds(value, fallback = DEFAULT_PHONE_CODE_PO
   );
 }
 
+function normalizeBoundedIntegerSetting(value, fallback, min, max) {
+  const rawValue = String(value ?? '').trim();
+  const numeric = Number(rawValue);
+  const fallbackNumeric = Number(fallback);
+  const normalizedFallback = Number.isFinite(fallbackNumeric)
+    ? Math.min(max, Math.max(min, Math.floor(fallbackNumeric)))
+    : min;
+  if (!rawValue || !Number.isFinite(numeric)) {
+    return normalizedFallback;
+  }
+  return Math.min(max, Math.max(min, Math.floor(numeric)));
+}
+
+function normalizeLocalHttpBaseUrl(value = '', fallback = 'http://127.0.0.1:18767') {
+  const rawValue = String(value || fallback).trim();
+  try {
+    const parsed = new URL(rawValue);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return fallback;
+    }
+    const endpointPath = parsed.pathname.replace(/\/+$/g, '') || '/';
+    if (['/otp', '/latest-otp', '/health'].includes(endpointPath)) {
+      parsed.pathname = '';
+      parsed.search = '';
+      parsed.hash = '';
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return fallback;
+  }
+}
+
 function normalizeHeroSmsMaxPrice(value = '') {
   const rawValue = String(value ?? '').trim();
   if (!rawValue) {
@@ -1106,12 +1472,15 @@ function normalizePhoneSmsProvider(value = '') {
   }
   return PHONE_SMS_PROVIDER_HERO_SMS;
 }
-
 function normalizePhoneSmsProviderOrder(value = [], fallbackOrder = []) {
+  const rootScope = typeof self !== 'undefined' ? self : globalThis;
+  if (rootScope.PhoneSmsProviderRegistry?.normalizeProviderOrder) {
+    return rootScope.PhoneSmsProviderRegistry.normalizeProviderOrder(value, fallbackOrder);
+  }
   const source = Array.isArray(value)
     ? value
     : String(value || '')
-      .split(/[\r\n,，;；]+/)
+      .split(/[\r\n,]+/)
       .map((entry) => String(entry || '').trim())
       .filter(Boolean);
   const normalized = [];
@@ -1150,14 +1519,87 @@ function normalizePhoneSmsProviderOrder(value = [], fallbackOrder = []) {
 
   return normalized.slice(0, DEFAULT_PHONE_SMS_PROVIDER_ORDER.length);
 }
-
 function normalizeSignupMethod(value = '') {
   return String(value || '').trim().toLowerCase() === 'phone'
     ? 'phone'
     : 'email';
 }
 
+function getFlowCapabilityRegistry() {
+  const rootScope = typeof self !== 'undefined' ? self : globalThis;
+  if (typeof flowCapabilityRegistry !== 'undefined' && flowCapabilityRegistry) {
+    return flowCapabilityRegistry;
+  }
+  return rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+    defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+  }) || null;
+}
+
+function resolveCurrentFlowCapabilities(state = {}, options = {}) {
+  const registry = getFlowCapabilityRegistry();
+  if (!registry?.resolveSidepanelCapabilities) {
+    return null;
+  }
+  return registry.resolveSidepanelCapabilities({
+    activeFlowId: options?.activeFlowId ?? state?.activeFlowId,
+    panelMode: options?.panelMode ?? state?.panelMode,
+    signupMethod: options?.signupMethod ?? state?.signupMethod,
+    state,
+  });
+}
+
+function validateAutoRunStartState(state = {}, options = {}) {
+  const registry = getFlowCapabilityRegistry();
+  if (!registry?.validateAutoRunStart) {
+    return { ok: true, errors: [] };
+  }
+  return registry.validateAutoRunStart({
+    activeFlowId: options?.activeFlowId ?? state?.activeFlowId,
+    panelMode: options?.panelMode ?? state?.panelMode,
+    signupMethod: options?.signupMethod ?? state?.signupMethod,
+    state,
+  });
+}
+
+function validateModeSwitchState(state = {}, options = {}) {
+  const registry = getFlowCapabilityRegistry();
+  if (!registry?.validateModeSwitch) {
+    return {
+      ok: true,
+      changedKeys: Array.isArray(options?.changedKeys) ? options.changedKeys : [],
+      errors: [],
+      normalizedUpdates: {},
+    };
+  }
+  return registry.validateModeSwitch({
+    activeFlowId: options?.activeFlowId ?? state?.activeFlowId,
+    changedKeys: options?.changedKeys,
+    panelMode: options?.panelMode ?? state?.panelMode,
+    signupMethod: options?.signupMethod ?? state?.signupMethod,
+    state,
+  });
+}
+
 function canUsePhoneSignup(state = {}) {
+  const capabilityState = typeof resolveCurrentFlowCapabilities === 'function'
+    ? resolveCurrentFlowCapabilities(state)
+    : (() => {
+      const rootScope = typeof self !== 'undefined' ? self : globalThis;
+      const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+        defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+      }) || null;
+      return registry?.resolveSidepanelCapabilities
+        ? registry.resolveSidepanelCapabilities({
+          activeFlowId: state?.activeFlowId,
+          panelMode: state?.panelMode,
+          signupMethod: state?.signupMethod,
+          state,
+        })
+        : null;
+    })();
+  if (capabilityState && typeof capabilityState.canUsePhoneSignup === 'boolean') {
+    return capabilityState.canUsePhoneSignup;
+  }
   return Boolean(state?.phoneVerificationEnabled)
     && !Boolean(state?.contributionMode);
 }
@@ -1168,9 +1610,53 @@ function resolveSignupMethod(state = {}) {
     return normalizeSignupMethod(frozenMethod);
   }
   const method = normalizeSignupMethod(state?.signupMethod);
-  return method === SIGNUP_METHOD_PHONE && canUsePhoneSignup(state)
-    ? SIGNUP_METHOD_PHONE
-    : SIGNUP_METHOD_EMAIL;
+  const capabilityState = typeof resolveCurrentFlowCapabilities === 'function'
+    ? resolveCurrentFlowCapabilities(state, { signupMethod: method })
+    : (() => {
+      const rootScope = typeof self !== 'undefined' ? self : globalThis;
+      const registry = rootScope.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+        defaultFlowId: typeof DEFAULT_ACTIVE_FLOW_ID === 'string' ? DEFAULT_ACTIVE_FLOW_ID : 'openai',
+      }) || null;
+      return registry?.resolveSidepanelCapabilities
+        ? registry.resolveSidepanelCapabilities({
+          activeFlowId: state?.activeFlowId,
+          panelMode: state?.panelMode,
+          signupMethod: method,
+          state,
+        })
+        : null;
+    })();
+  if (capabilityState?.effectiveSignupMethod) {
+    return normalizeSignupMethod(capabilityState.effectiveSignupMethod);
+  }
+  return method === SIGNUP_METHOD_PHONE && canUsePhoneSignup(state) ? SIGNUP_METHOD_PHONE : SIGNUP_METHOD_EMAIL;
+}
+
+function hasSignupPhoneActivationState(state = {}) {
+  return Boolean(
+    state?.signupPhoneActivation
+    || state?.signupPhoneCompletedActivation
+    || String(state?.signupPhoneNumber || '').trim()
+  );
+}
+
+function isPhoneSignupIdentityStateForReuse(state = {}) {
+  if (resolveSignupMethod(state) === SIGNUP_METHOD_PHONE) {
+    return true;
+  }
+
+  const runtimeActive = (
+    (typeof isAutoRunLockedState === 'function' && isAutoRunLockedState(state))
+    || (typeof isAutoRunPausedState === 'function' && isAutoRunPausedState(state))
+    || (typeof isAutoRunScheduledState === 'function' && isAutoRunScheduledState(state))
+    || Boolean(state?.autoRunning)
+  );
+  if (!runtimeActive) {
+    return false;
+  }
+
+  const identifierType = String(state?.accountIdentifierType || '').trim().toLowerCase();
+  return identifierType === 'phone' || hasSignupPhoneActivationState(state);
 }
 
 async function ensureResolvedSignupMethodForRun(options = {}) {
@@ -1645,6 +2131,7 @@ function normalizeEmailGenerator(value = '') {
   }
   if (normalized === 'cloudflare') return 'cloudflare';
   if (normalized === CLOUDFLARE_TEMP_EMAIL_GENERATOR) return CLOUDFLARE_TEMP_EMAIL_GENERATOR;
+  if (normalized === 'cloudmail') return 'cloudmail';
   return 'duck';
 }
 
@@ -1878,6 +2365,7 @@ function normalizeMailProvider(value = '') {
     case HOTMAIL_PROVIDER:
     case LUCKMAIL_PROVIDER:
     case CLOUDFLARE_TEMP_EMAIL_PROVIDER:
+    case CLOUD_MAIL_PROVIDER:
     case '163':
     case '163-vip':
     case '126':
@@ -1936,6 +2424,12 @@ function normalizeMail2925Mode(value = '') {
   return String(value || '').trim().toLowerCase() === MAIL_2925_MODE_RECEIVE
     ? MAIL_2925_MODE_RECEIVE
     : DEFAULT_MAIL_2925_MODE;
+}
+
+function normalizeCloudflareTempEmailLookupMode(value = '') {
+  return String(value || '').trim().toLowerCase() === CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL
+    ? CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL
+    : DEFAULT_CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE;
 }
 
 function normalizeLocalCpaStep9Mode(value = '') {
@@ -2042,6 +2536,7 @@ function getCloudflareTempEmailConfig(state = {}) {
     baseUrl: normalizeCloudflareTempEmailBaseUrl(state.cloudflareTempEmailBaseUrl),
     adminAuth: String(state.cloudflareTempEmailAdminAuth || ''),
     customAuth: String(state.cloudflareTempEmailCustomAuth || ''),
+    lookupMode: normalizeCloudflareTempEmailLookupMode(state.cloudflareTempEmailLookupMode),
     receiveMailbox: normalizeCloudflareTempEmailReceiveMailbox(state.cloudflareTempEmailReceiveMailbox),
     useRandomSubdomain: Boolean(state.cloudflareTempEmailUseRandomSubdomain),
     domain: normalizeCloudflareTempEmailDomain(state.cloudflareTempEmailDomain),
@@ -2061,17 +2556,53 @@ function resolveCloudflareTempEmailPollTargetEmail(state = {}, pollPayload = {},
   const emailGenerator = String(state?.emailGenerator || '').trim().toLowerCase();
   const shouldPreferConfiguredReceiveMailbox = mailProvider === 'cloudflare-temp-email'
     && emailGenerator !== 'cloudflare-temp-email';
+  const requestedTarget = normalizeCloudflareTempEmailReceiveMailbox(pollPayload.targetEmail);
+  if (
+    shouldPreferConfiguredReceiveMailbox
+    && normalizeCloudflareTempEmailLookupMode(config.lookupMode) === CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL
+  ) {
+    return requestedTarget || normalizeCloudflareTempEmailReceiveMailbox(state.email);
+  }
+
   if (shouldPreferConfiguredReceiveMailbox && configuredReceiveMailbox) {
     return configuredReceiveMailbox;
   }
 
-  const requestedTarget = normalizeCloudflareTempEmailReceiveMailbox(pollPayload.targetEmail);
   if (requestedTarget) {
     return requestedTarget;
   }
 
   return normalizeCloudflareTempEmailReceiveMailbox(state.email);
 }
+
+const cloudMailProvider = self.MultiPageBackgroundCloudMailProvider.createCloudMailProvider({
+  addLog,
+  buildCloudMailHeaders,
+  CLOUD_MAIL_DEFAULT_PAGE_SIZE,
+  CLOUD_MAIL_GENERATOR,
+  CLOUD_MAIL_PROVIDER,
+  getCloudMailTokenFromResponse,
+  getState,
+  joinCloudMailUrl,
+  normalizeCloudMailAddress,
+  normalizeCloudMailBaseUrl,
+  normalizeCloudMailDomain,
+  normalizeCloudMailDomains,
+  normalizeCloudMailMailApiMessages,
+  persistRegistrationEmailState,
+  pickVerificationMessageWithTimeFallback,
+  setEmailState,
+  setPersistentSettings,
+  sleepWithStop,
+  throwIfStopped,
+});
+const {
+  getCloudMailConfig,
+  normalizeCloudMailReceiveMailbox,
+  fetchCloudMailAddress,
+  pollCloudMailVerificationCode,
+  resolveCloudMailPollTargetEmail,
+} = cloudMailProvider;
 
 function normalizeSub2ApiGroupNames(value = '') {
   const source = Array.isArray(value)
@@ -2089,6 +2620,18 @@ function normalizeSub2ApiGroupNames(value = '') {
     names.push(name);
   }
   return names;
+}
+
+function normalizeSub2ApiAccountPriority(value, fallback = DEFAULT_SUB2API_ACCOUNT_PRIORITY) {
+  const rawValue = String(value ?? '').trim();
+  const numeric = Number(rawValue);
+  if (!rawValue || !Number.isSafeInteger(numeric) || numeric < 1) {
+    const fallbackNumber = Number(fallback);
+    return Number.isSafeInteger(fallbackNumber) && fallbackNumber >= 1
+      ? fallbackNumber
+      : DEFAULT_SUB2API_ACCOUNT_PRIORITY;
+  }
+  return numeric;
 }
 
 function normalizePersistentSettingValue(key, value) {
@@ -2111,6 +2654,16 @@ function normalizePersistentSettingValue(key, value) {
       return String(value || '').trim();
     case 'sub2apiGroupNames':
       return normalizeSub2ApiGroupNames(value);
+    case 'sub2apiSelectedGroupNames':
+      return normalizeSub2ApiGroupNames(value);
+    case 'paypalSmsPhone':
+      return String(value || '').trim();
+    case 'paypalSmsApiUrl':
+      return String(value || '').trim();
+    case 'bindCardNumber':
+      return String(value || '').trim();
+    case 'sub2apiAccountPriority':
+      return normalizeSub2ApiAccountPriority(value);
     case 'sub2apiDefaultProxyName':
       return String(value || '').trim();
     case 'ipProxyEnabled':
@@ -2209,6 +2762,10 @@ function normalizePersistentSettingValue(key, value) {
       return self.GoPayUtils?.normalizeGoPayPin
         ? self.GoPayUtils.normalizeGoPayPin(value)
         : String(value || '');
+    case 'gopayHelperPhoneMode':
+      return self.GoPayUtils?.normalizeGpcHelperPhoneMode
+        ? self.GoPayUtils.normalizeGpcHelperPhoneMode(value)
+        : (String(value || '').trim().toLowerCase() === 'auto' || String(value || '').trim().toLowerCase() === 'builtin' ? 'auto' : 'manual');
     case 'gopayHelperPhoneNumber':
       return self.GoPayUtils?.normalizeGoPayPhone
         ? self.GoPayUtils.normalizeGoPayPhone(value)
@@ -2221,22 +2778,50 @@ function normalizePersistentSettingValue(key, value) {
       return self.GoPayUtils?.normalizeGoPayCountryCode
         ? self.GoPayUtils.normalizeGoPayCountryCode(value)
         : String(value || '+86').trim();
+    case 'gopayHelperOtpChannel':
+      return self.GoPayUtils?.normalizeGpcOtpChannel
+        ? self.GoPayUtils.normalizeGpcOtpChannel(value)
+        : (String(value || '').trim().toLowerCase() === 'sms' ? 'sms' : 'whatsapp');
+    case 'gopayHelperLocalSmsHelperUrl':
+      return normalizeLocalHttpBaseUrl(
+        value,
+        PERSISTED_SETTING_DEFAULTS.gopayHelperLocalSmsHelperUrl || 'http://127.0.0.1:18767'
+      );
+    case 'gopayHelperLocalSmsTimeoutSeconds':
+      return normalizeBoundedIntegerSetting(
+        value,
+        PERSISTED_SETTING_DEFAULTS.gopayHelperLocalSmsTimeoutSeconds,
+        10,
+        300
+      );
+    case 'gopayHelperLocalSmsPollIntervalSeconds':
+      return normalizeBoundedIntegerSetting(
+        value,
+        PERSISTED_SETTING_DEFAULTS.gopayHelperLocalSmsPollIntervalSeconds,
+        1,
+        30
+      );
     case 'gopayHelperApiUrl':
       {
         const defaultGpcHelperApiUrl = PERSISTED_SETTING_DEFAULTS.gopayHelperApiUrl
-          || (typeof DEFAULT_GPC_HELPER_API_URL !== 'undefined' ? DEFAULT_GPC_HELPER_API_URL : 'https://gopay.hwork.pro');
-        return self.GoPayUtils?.normalizeGpcHelperBaseUrl
+          || (typeof DEFAULT_GPC_HELPER_API_URL !== 'undefined' ? DEFAULT_GPC_HELPER_API_URL : 'https://gpc.qlhazycoder.top');
+        const normalizedGpcHelperApiUrl = self.GoPayUtils?.normalizeGpcHelperBaseUrl
           ? self.GoPayUtils.normalizeGpcHelperBaseUrl(value || defaultGpcHelperApiUrl)
           : String(value || defaultGpcHelperApiUrl).trim().replace(/\/+$/g, '');
+        if (!self.GoPayUtils?.normalizeGpcHelperBaseUrl) {
+          try {
+            const parsed = new URL(normalizedGpcHelperApiUrl);
+            const hostname = parsed.hostname.toLowerCase();
+            if (hostname !== 'gpc.qlhazycoder.top' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+              return defaultGpcHelperApiUrl;
+            }
+          } catch {
+            return defaultGpcHelperApiUrl;
+          }
+        }
+        return normalizedGpcHelperApiUrl;
       }
-    case 'gopayOtpApiBaseUrl':
-      {
-        const defaultOtpApi = PERSISTED_SETTING_DEFAULTS.gopayOtpApiBaseUrl
-          || self.MultiPageWhatsappOtpClient?.DEFAULT_BASE_URL
-          || 'http://192.168.3.123:8000';
-        const trimmed = String(value || defaultOtpApi).trim().replace(/\/+$/g, '');
-        return trimmed || defaultOtpApi;
-      }
+    case 'gopayHelperApiKey':
     case 'gopayHelperCardKey':
     case 'gopayHelperReferenceId':
     case 'gopayHelperGoPayGuid':
@@ -2244,18 +2829,42 @@ function normalizePersistentSettingValue(key, value) {
     case 'gopayHelperNextAction':
     case 'gopayHelperFlowId':
     case 'gopayHelperChallengeId':
+    case 'gopayHelperTaskId':
+    case 'gopayHelperTaskStatus':
+    case 'gopayHelperStatusText':
+    case 'gopayHelperRemoteStage':
+    case 'gopayHelperApiWaitingFor':
+    case 'gopayHelperApiInputDeadlineAt':
+    case 'gopayHelperLastInputError':
+    case 'gopayHelperFailureStage':
+    case 'gopayHelperFailureDetail':
     case 'gopayHelperBalance':
     case 'gopayHelperBalanceError':
+    case 'gopayHelperApiKeyStatus':
       return String(value || '').trim();
     case 'gopayHelperBalancePayload':
     case 'gopayHelperStartPayload':
+    case 'gopayHelperTaskPayload':
       return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
     case 'gopayHelperBalanceUpdatedAt':
+    case 'gopayHelperApiInputWaitSeconds':
+    case 'gopayHelperOtpInvalidCount':
+    case 'gopayHelperRemainingUses':
       return Math.max(0, Number(value) || 0);
     case 'autoRunSkipFailures':
     case 'oauthFlowTimeoutEnabled':
+    case 'gopayHelperLocalSmsHelperEnabled':
+    case 'gopayHelperAutoModeEnabled':
     case 'autoRunDelayEnabled':
+      return Boolean(value);
+    case 'operationDelayEnabled':
+      return typeof value === 'boolean' ? value : true;
+    case 'step6CookieCleanupEnabled':
     case 'phoneVerificationEnabled':
+    case 'phoneSignupReloginAfterBindEmailEnabled':
+    case 'phoneSmsReuseEnabled':
+    case 'freePhoneReuseEnabled':
+    case 'freePhoneReuseAutoEnabled':
     case 'plusModeEnabled':
       return Boolean(value);
     case 'phoneSmsProvider':
@@ -2345,12 +2954,27 @@ function normalizePersistentSettingValue(key, value) {
     case 'cloudflareTempEmailAdminAuth':
     case 'cloudflareTempEmailCustomAuth':
       return String(value || '');
+    case 'cloudflareTempEmailLookupMode':
+      return normalizeCloudflareTempEmailLookupMode(value);
     case 'cloudflareTempEmailReceiveMailbox':
       return normalizeCloudflareTempEmailReceiveMailbox(value);
     case 'cloudflareTempEmailDomain':
       return normalizeCloudflareTempEmailDomain(value);
     case 'cloudflareTempEmailDomains':
       return normalizeCloudflareTempEmailDomains(value);
+    case 'cloudMailBaseUrl':
+      return normalizeCloudMailBaseUrl(value);
+    case 'cloudMailAdminEmail':
+      return String(value || '').trim();
+    case 'cloudMailAdminPassword':
+    case 'cloudMailToken':
+      return String(value || '');
+    case 'cloudMailReceiveMailbox':
+      return normalizeCloudMailReceiveMailbox(value);
+    case 'cloudMailDomain':
+      return normalizeCloudMailDomain(value);
+    case 'cloudMailDomains':
+      return normalizeCloudMailDomains(value);
     case 'hotmailAccounts':
       return normalizeHotmailAccounts(value);
     case 'mail2925Accounts':
@@ -2365,6 +2989,7 @@ function normalizePersistentSettingValue(key, value) {
       return Boolean(value);
     case 'heroSmsAcquirePriority':
       return normalizeHeroSmsAcquirePriority(value);
+    case 'heroSmsMinPrice':
     case 'heroSmsMaxPrice':
       return normalizeHeroSmsMaxPrice(value);
     case 'heroSmsPreferredPrice':
@@ -2392,6 +3017,7 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeFiveSimCountryFallback(value);
     case 'fiveSimCountryOrder':
       return normalizeFiveSimCountryOrder(value);
+    case 'fiveSimMinPrice':
     case 'fiveSimMaxPrice':
       return normalizeFiveSimMaxPrice(value);
     case 'fiveSimOperator':
@@ -2415,6 +3041,13 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
     throw new Error('\u914d\u7f6e\u5185\u5bb9\u683c\u5f0f\u65e0\u6548\u3002');
   }
 
+  const persistedSettingDefaults = typeof PERSISTED_SETTING_DEFAULTS !== 'undefined' && PERSISTED_SETTING_DEFAULTS
+    ? PERSISTED_SETTING_DEFAULTS
+    : {};
+  const persistedSettingKeys = Array.isArray(typeof PERSISTED_SETTING_KEYS !== 'undefined' ? PERSISTED_SETTING_KEYS : null)
+    ? PERSISTED_SETTING_KEYS
+    : Object.keys(persistedSettingDefaults);
+
   const normalizedInput = { ...input };
   if (normalizedInput.autoStepDelaySeconds === undefined) {
     const legacyAutoStepDelaySeconds = resolveLegacyAutoStepDelaySeconds(normalizedInput);
@@ -2433,13 +3066,27 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
 
   const payload = {};
   let matchedKeyCount = 0;
-  for (const key of PERSISTED_SETTING_KEYS) {
+  for (const key of persistedSettingKeys) {
     if (normalizedInput[key] !== undefined) {
       payload[key] = normalizePersistentSettingValue(key, normalizedInput[key]);
       matchedKeyCount += 1;
     } else if (fillDefaults) {
-      payload[key] = normalizePersistentSettingValue(key, PERSISTED_SETTING_DEFAULTS[key]);
+      payload[key] = normalizePersistentSettingValue(key, persistedSettingDefaults[key]);
     }
+  }
+
+  const hasPhoneSmsReuseEnabled = Object.prototype.hasOwnProperty.call(normalizedInput, 'phoneSmsReuseEnabled');
+  const hasHeroSmsReuseEnabled = Object.prototype.hasOwnProperty.call(normalizedInput, 'heroSmsReuseEnabled');
+  const hasFiveSimReuseEnabled = Object.prototype.hasOwnProperty.call(normalizedInput, 'fiveSimReuseEnabled');
+  if (hasPhoneSmsReuseEnabled || hasHeroSmsReuseEnabled || hasFiveSimReuseEnabled) {
+    const reuseSource = hasPhoneSmsReuseEnabled
+      ? normalizedInput.phoneSmsReuseEnabled
+      : (hasHeroSmsReuseEnabled
+        ? normalizedInput.heroSmsReuseEnabled
+        : normalizedInput.fiveSimReuseEnabled);
+    const normalizedReuseEnabled = normalizePersistentSettingValue('phoneSmsReuseEnabled', reuseSource);
+    payload.phoneSmsReuseEnabled = normalizedReuseEnabled;
+    payload.heroSmsReuseEnabled = normalizedReuseEnabled;
   }
 
   if (requireKnownKeys && matchedKeyCount === 0) {
@@ -2460,17 +3107,36 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
     }
     payload.cloudflareTempEmailDomains = domains;
   }
+  if (payload.cloudMailDomains) {
+    const domains = normalizeCloudMailDomains(payload.cloudMailDomains);
+    if (payload.cloudMailDomain && !domains.includes(payload.cloudMailDomain)) {
+      domains.unshift(payload.cloudMailDomain);
+    }
+    payload.cloudMailDomains = domains;
+  }
   if (
     Object.prototype.hasOwnProperty.call(payload, 'sub2apiGroupName')
     || Object.prototype.hasOwnProperty.call(payload, 'sub2apiGroupNames')
+    || Object.prototype.hasOwnProperty.call(payload, 'sub2apiSelectedGroupNames')
   ) {
+    const selectedNames = normalizeSub2ApiGroupNames([
+      ...(Array.isArray(payload.sub2apiSelectedGroupNames) ? payload.sub2apiSelectedGroupNames : []),
+      payload.sub2apiGroupName,
+    ]);
     const groupNames = normalizeSub2ApiGroupNames([
       ...(Array.isArray(payload.sub2apiGroupNames) ? payload.sub2apiGroupNames : []),
+      ...selectedNames,
       payload.sub2apiGroupName,
     ]);
     payload.sub2apiGroupNames = groupNames.length
       ? groupNames
       : [...DEFAULT_SUB2API_GROUP_NAMES];
+    const groupNameSet = new Set(payload.sub2apiGroupNames.map((name) => name.toLowerCase()));
+    const filteredSelected = selectedNames.filter((name) => groupNameSet.has(name.toLowerCase()));
+    payload.sub2apiSelectedGroupNames = filteredSelected.length
+      ? filteredSelected
+      : [payload.sub2apiGroupNames[0]];
+    payload.sub2apiGroupName = payload.sub2apiSelectedGroupNames[0];
   }
   const nextSignupConstraintState = {
     ...PERSISTED_SETTING_DEFAULTS,
@@ -2479,7 +3145,9 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
   };
   if (Object.prototype.hasOwnProperty.call(payload, 'phoneVerificationEnabled')
     || Object.prototype.hasOwnProperty.call(payload, 'plusModeEnabled')
-    || Object.prototype.hasOwnProperty.call(payload, 'signupMethod')) {
+    || Object.prototype.hasOwnProperty.call(payload, 'signupMethod')
+    || Object.prototype.hasOwnProperty.call(payload, 'panelMode')
+    || Object.prototype.hasOwnProperty.call(payload, 'activeFlowId')) {
     payload.signupMethod = resolveSignupMethod(nextSignupConstraintState);
   }
   if (payload.ipProxyServiceProfiles) {
@@ -2555,7 +3223,13 @@ async function getState() {
     getPersistedAliasState(),
     accountRunHistoryHelpers?.getPersistedAccountRunHistory?.() || [],
   ]);
-  return { ...DEFAULT_STATE, ...persistedSettings, ...persistedAliasState, ...state, accountRunHistory };
+  return buildStateViewWithRuntimeState({
+    ...DEFAULT_STATE,
+    ...persistedSettings,
+    ...persistedAliasState,
+    ...state,
+    accountRunHistory,
+  });
 }
 
 async function initializeSessionStorageAccess() {
@@ -2574,19 +3248,24 @@ async function initializeSessionStorageAccess() {
 async function setState(updates) {
   console.log(LOG_PREFIX, 'storage.set:', JSON.stringify(updates).slice(0, 200));
   if (Object.keys(updates || {}).length > 0) {
-    await chrome.storage.session.set(updates);
+    const currentSessionState = await chrome.storage.session.get(null);
+    const sessionUpdates = buildStatePatchWithRuntimeState({
+      ...DEFAULT_STATE,
+      ...currentSessionState,
+    }, updates);
+    await chrome.storage.session.set(sessionUpdates);
     const persistentAliasUpdates = {};
-    if (Object.prototype.hasOwnProperty.call(updates, 'manualAliasUsage')) {
-      persistentAliasUpdates.manualAliasUsage = normalizeBooleanMap(updates.manualAliasUsage);
+    if (Object.prototype.hasOwnProperty.call(sessionUpdates, 'manualAliasUsage')) {
+      persistentAliasUpdates.manualAliasUsage = normalizeBooleanMap(sessionUpdates.manualAliasUsage);
     }
-    if (Object.prototype.hasOwnProperty.call(updates, 'preservedAliases')) {
-      persistentAliasUpdates.preservedAliases = normalizeBooleanMap(updates.preservedAliases);
+    if (Object.prototype.hasOwnProperty.call(sessionUpdates, 'preservedAliases')) {
+      persistentAliasUpdates.preservedAliases = normalizeBooleanMap(sessionUpdates.preservedAliases);
     }
-    if (Object.prototype.hasOwnProperty.call(updates, 'icloudAliasCache')) {
-      persistentAliasUpdates.icloudAliasCache = normalizeIcloudAliasCacheList(updates.icloudAliasCache);
+    if (Object.prototype.hasOwnProperty.call(sessionUpdates, 'icloudAliasCache')) {
+      persistentAliasUpdates.icloudAliasCache = normalizeIcloudAliasCacheList(sessionUpdates.icloudAliasCache);
     }
-    if (Object.prototype.hasOwnProperty.call(updates, 'icloudAliasCacheAt')) {
-      persistentAliasUpdates.icloudAliasCacheAt = Math.max(0, Number(updates.icloudAliasCacheAt) || 0);
+    if (Object.prototype.hasOwnProperty.call(sessionUpdates, 'icloudAliasCacheAt')) {
+      persistentAliasUpdates.icloudAliasCacheAt = Math.max(0, Number(sessionUpdates.icloudAliasCacheAt) || 0);
     }
     if (Object.keys(persistentAliasUpdates).length > 0) {
       await chrome.storage.local.set(persistentAliasUpdates);
@@ -2624,7 +3303,7 @@ async function exportSettingsBundle() {
 
 async function importSettingsBundle(configBundle) {
   const state = await ensureManualInteractionAllowed('\u5bfc\u5165\u914d\u7f6e');
-  if (Object.values(state.stepStatuses || {}).some((status) => status === 'running')) {
+  if (Object.values(state.nodeStatuses || {}).some((status) => status === 'running')) {
     throw new Error('\u5f53\u524d\u6709\u6b65\u9aa4\u6b63\u5728\u6267\u884c\uff0c\u65e0\u6cd5\u5bfc\u5165\u914d\u7f6e\u3002');
   }
   if (!configBundle || typeof configBundle !== 'object' || Array.isArray(configBundle)) {
@@ -2643,6 +3322,30 @@ async function importSettingsBundle(configBundle) {
     fillDefaults: true,
     requireKnownKeys: true,
   });
+  const importModeValidation = validateModeSwitchState({
+    ...state,
+    ...importedSettings,
+    resolvedSignupMethod: null,
+  }, {
+    changedKeys: Object.keys(importedSettings),
+  });
+  if (importModeValidation?.normalizedUpdates && Object.keys(importModeValidation.normalizedUpdates).length > 0) {
+    Object.assign(importedSettings, importModeValidation.normalizedUpdates);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(importedSettings, 'phoneVerificationEnabled')
+    || Object.prototype.hasOwnProperty.call(importedSettings, 'plusModeEnabled')
+    || Object.prototype.hasOwnProperty.call(importedSettings, 'signupMethod')
+    || Object.prototype.hasOwnProperty.call(importedSettings, 'panelMode')
+    || Object.prototype.hasOwnProperty.call(importedSettings, 'activeFlowId')
+    || Object.prototype.hasOwnProperty.call(importedSettings, 'contributionMode')
+  ) {
+    importedSettings.signupMethod = resolveSignupMethod({
+      ...state,
+      ...importedSettings,
+      resolvedSignupMethod: null,
+    });
+  }
 
   await setPersistentSettings(importedSettings);
 
@@ -2650,6 +3353,7 @@ async function importSettingsBundle(configBundle) {
     ...importedSettings,
     currentHotmailAccountId: null,
     email: null,
+    registrationEmailState: { ...DEFAULT_REGISTRATION_EMAIL_STATE },
   };
 
   await setState(sessionUpdates);
@@ -2657,6 +3361,7 @@ async function importSettingsBundle(configBundle) {
     ...importedSettings,
     currentHotmailAccountId: null,
     ...(sessionUpdates.email !== undefined ? { email: sessionUpdates.email } : {}),
+    registrationEmailState: sessionUpdates.registrationEmailState,
   });
 
   return getState();
@@ -2706,14 +3411,24 @@ function isPhoneActivationForNumber(activation, phoneNumber) {
   return Boolean(activationDigits && targetDigits && activationDigits === targetDigits);
 }
 
-async function setEmailStateSilently(email) {
-  const normalizedEmail = String(email || '').trim() || null;
+async function setEmailStateSilently(email, options = {}) {
   const currentState = await getState();
-  const updates = {
-    email: normalizedEmail,
-  };
+  const preserveAccountIdentity = Boolean(options?.preserveAccountIdentity);
+  const updates = preserveAccountIdentity
+    ? buildFlowRegistrationEmailStateUpdates(currentState, {
+        currentEmail: email,
+        preservePrevious: Boolean(options?.preservePrevious),
+        preserveAccountIdentity: true,
+        source: options?.source || '',
+      })
+    : buildRegistrationEmailStateUpdates(currentState, {
+        currentEmail: email,
+        preservePrevious: Boolean(options?.preservePrevious),
+        source: options?.source || '',
+      });
+  const normalizedEmail = updates.email;
 
-  if (normalizedEmail) {
+  if (!preserveAccountIdentity && normalizedEmail) {
     updates.accountIdentifierType = 'email';
     updates.accountIdentifier = normalizedEmail;
     updates.phoneNumber = '';
@@ -2722,7 +3437,7 @@ async function setEmailStateSilently(email) {
     updates.signupPhoneCompletedActivation = null;
     updates.signupPhoneVerificationRequestedAt = null;
     updates.signupPhoneVerificationPurpose = '';
-  } else if (String(currentState?.accountIdentifierType || '').trim().toLowerCase() === 'email') {
+  } else if (!preserveAccountIdentity && String(currentState?.accountIdentifierType || '').trim().toLowerCase() === 'email') {
     updates.accountIdentifierType = null;
     updates.accountIdentifier = '';
   }
@@ -2731,12 +3446,53 @@ async function setEmailStateSilently(email) {
   broadcastDataUpdate(updates);
 }
 
-async function setEmailState(email) {
-  await setEmailStateSilently(email);
+async function setEmailState(email, options = {}) {
+  await setEmailStateSilently(email, options);
   if (email) {
-    await appendManualAccountRunRecordIfNeeded('step2_stopped', null, '步骤 2 已使用邮箱，流程尚未完成。');
+    const latestState = await getState();
+    const recordStatus = shouldMarkAccountRunRecordRunning(latestState) ? 'running' : 'node:submit-signup-email:stopped';
+    const recordReason = recordStatus === 'running' ? '正在运行' : '节点 submit-signup-email 已使用邮箱，流程尚未完成。';
+    await appendManualAccountRunRecordIfNeeded(recordStatus, latestState, recordReason);
     await resumeAutoRunIfWaitingForEmail();
   }
+}
+
+async function persistRegistrationEmailState(state = null, email, options = {}) {
+  const currentState = state && typeof state === 'object' && !Array.isArray(state)
+    ? state
+    : await getState();
+  const normalizedEmail = String(email || '').trim() || null;
+  const currentEmail = String(currentState?.email || '').trim() || null;
+  if (!Boolean(options?.preserveAccountIdentity)) {
+    if (normalizedEmail === currentEmail) {
+      return;
+    }
+    await setEmailState(normalizedEmail, options);
+    return;
+  }
+
+  const updates = normalizedEmail === currentEmail
+    ? (() => {
+        const preservedPhoneIdentity = getPreservedPhoneIdentity(currentState);
+        return preservedPhoneIdentity
+          ? {
+              phoneNumber: '',
+              ...preservedPhoneIdentity,
+            }
+          : {};
+      })()
+    : buildFlowRegistrationEmailStateUpdates(currentState, {
+        currentEmail: normalizedEmail,
+        preservePrevious: Boolean(options?.preservePrevious),
+        preserveAccountIdentity: true,
+        source: options?.source || '',
+      });
+
+  if (!Object.keys(updates).length || !statePatchHasChanges(currentState, updates)) {
+    return;
+  }
+  await setState(updates);
+  broadcastDataUpdate(updates);
 }
 
 async function setSignupPhoneStateSilently(phoneNumber) {
@@ -2774,8 +3530,17 @@ async function setSignupPhoneStateSilently(phoneNumber) {
 async function setSignupPhoneState(phoneNumber) {
   await setSignupPhoneStateSilently(phoneNumber);
   if (String(phoneNumber || '').trim()) {
-    await appendManualAccountRunRecordIfNeeded('step2_stopped', null, '步骤 2 已使用手机号，流程尚未完成。');
+    const latestState = await getState();
+    const recordStatus = shouldMarkAccountRunRecordRunning(latestState) ? 'running' : 'node:submit-signup-email:stopped';
+    const recordReason = recordStatus === 'running' ? '正在运行' : '节点 submit-signup-email 已使用手机号，流程尚未完成。';
+    await appendManualAccountRunRecordIfNeeded(recordStatus, latestState, recordReason);
   }
+}
+
+function shouldMarkAccountRunRecordRunning(state = {}) {
+  const phase = String(state.autoRunPhase || '').trim().toLowerCase();
+  return Boolean(state.autoRunning)
+    && ['running', 'waiting_step', 'waiting_email', 'retrying'].includes(phase);
 }
 
 async function setPasswordState(password) {
@@ -3063,6 +3828,7 @@ async function resetState() {
       'tabRegistry',
       'sourceLastUrls',
       'reusablePhoneActivation',
+      'freeReusablePhoneActivation',
       'phoneReusableActivationPool',
       'luckmailApiKey',
       'luckmailBaseUrl',
@@ -3072,6 +3838,7 @@ async function resetState() {
       'luckmailPreserveTagId',
       'luckmailPreserveTagName',
       'preferredIcloudHost',
+      'automationWindowId',
       ...CONTRIBUTION_RUNTIME_KEYS,
     ]),
     getPersistedSettings(),
@@ -3102,8 +3869,21 @@ async function resetState() {
       .map((entry) => normalizePhonePreferredActivation(entry))
       .filter(Boolean)
     : [];
+  const freeReusablePhoneActivation = (
+    prev.freeReusablePhoneActivation
+    && typeof prev.freeReusablePhoneActivation === 'object'
+    && !Array.isArray(prev.freeReusablePhoneActivation)
+    && String(
+      prev.freeReusablePhoneActivation.phoneNumber
+      ?? prev.freeReusablePhoneActivation.number
+      ?? prev.freeReusablePhoneActivation.phone
+      ?? ''
+    ).trim()
+  )
+    ? prev.freeReusablePhoneActivation
+    : null;
   await chrome.storage.session.clear();
-  await chrome.storage.session.set({
+  const resetPayload = buildStatePatchWithRuntimeState({}, {
     ...DEFAULT_STATE,
     ...persistedSettings,
     ...persistedAliasState,
@@ -3124,9 +3904,16 @@ async function resetState() {
     currentLuckmailMailCursor: null,
     // Keep reusable phone activation across round resets so the same number can be reactivated up to maxUses.
     reusablePhoneActivation,
+    // Keep free reuse phone activation until the user clears or the flow retires it.
+    freeReusablePhoneActivation,
     phoneReusableActivationPool,
     preferredIcloudHost: prev.preferredIcloudHost || '',
+    automationWindowId: Number.isInteger(Number(prev.automationWindowId))
+      && Number(prev.automationWindowId) >= 0
+      ? Number(prev.automationWindowId)
+      : null,
   });
+  await chrome.storage.session.set(resetPayload);
 }
 
 /**
@@ -3689,6 +4476,8 @@ async function requestHotmailLocalCode(account, pollPayload = {}) {
         top: 5,
         senderFilters: pollPayload.senderFilters || [],
         subjectFilters: pollPayload.subjectFilters || [],
+        requiredKeywords: pollPayload.requiredKeywords || [],
+        codePatterns: pollPayload.codePatterns || [],
         excludeCodes: pollPayload.excludeCodes || [],
         filterAfterTimestamp: Number(pollPayload.filterAfterTimestamp || 0) || 0,
       }),
@@ -3965,6 +4754,8 @@ async function pollHotmailVerificationCode(step, state, pollPayload = {}) {
         afterTimestamp: pollPayload.filterAfterTimestamp || 0,
         senderFilters: pollPayload.senderFilters || [],
         subjectFilters: pollPayload.subjectFilters || [],
+        requiredKeywords: pollPayload.requiredKeywords || [],
+        codePatterns: pollPayload.codePatterns || [],
         excludeCodes: pollPayload.excludeCodes || [],
       });
       const match = matchResult.match;
@@ -5101,32 +5892,59 @@ async function deleteCloudflareTempEmailMail(config, mailId) {
 async function listCloudflareTempEmailMessages(state, options = {}) {
   const config = ensureCloudflareTempEmailConfig(state, { requireAdminAuth: true });
   const address = normalizeCloudflareTempEmailAddress(options.address);
+  const lookupMode = normalizeCloudflareTempEmailLookupMode(options.lookupMode || config.lookupMode);
+  const originalRecipient = normalizeCloudflareTempEmailReceiveMailbox(options.originalRecipient);
+  const useRegistrationLookup = lookupMode === CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL
+    && Boolean(originalRecipient);
+  const queryAddress = useRegistrationLookup ? '' : address;
   const payload = await requestCloudflareTempEmailJson(config, '/admin/mails', {
     method: 'GET',
     searchParams: {
       limit: Number(options.limit) || CLOUDFLARE_TEMP_EMAIL_DEFAULT_PAGE_SIZE,
       offset: Number(options.offset) || 0,
-      address,
+      address: queryAddress,
     },
   });
 
-  const messages = normalizeCloudflareTempEmailMailApiMessages(payload).filter((message) => {
+  const normalizedMessages = normalizeCloudflareTempEmailMailApiMessages(payload);
+  const hasOriginalRecipient = normalizedMessages.some((message) => normalizeCloudflareTempEmailReceiveMailbox(message.originalRecipient));
+  const messages = normalizedMessages.filter((message) => {
+    if (useRegistrationLookup) {
+      return normalizeCloudflareTempEmailReceiveMailbox(message.originalRecipient) === originalRecipient;
+    }
     if (!address) return true;
     return !message.address || normalizeCloudflareTempEmailAddress(message.address) === address;
   });
 
-  return { config, messages };
+  return {
+    config,
+    messages,
+    lookupMode,
+    originalRecipient,
+    missingOriginalRecipient: useRegistrationLookup && normalizedMessages.length > 0 && !hasOriginalRecipient,
+  };
 }
 
 async function pollCloudflareTempEmailVerificationCode(step, state, pollPayload = {}) {
   const config = ensureCloudflareTempEmailConfig(state, { requireAdminAuth: true });
   const targetEmail = resolveCloudflareTempEmailPollTargetEmail(state, pollPayload, config);
   const registrationEmail = normalizeCloudflareTempEmailReceiveMailbox(state.email);
+  const lookupMode = normalizeCloudflareTempEmailLookupMode(config.lookupMode);
+  const mailProvider = String(state?.mailProvider || '').trim().toLowerCase();
+  const emailGenerator = String(state?.emailGenerator || '').trim().toLowerCase();
+  const useRegistrationLookup = mailProvider === 'cloudflare-temp-email'
+    && emailGenerator !== 'cloudflare-temp-email'
+    && lookupMode === CLOUDFLARE_TEMP_EMAIL_LOOKUP_MODE_REGISTRATION_EMAIL;
+  const originalRecipient = normalizeCloudflareTempEmailReceiveMailbox(pollPayload.targetEmail)
+    || registrationEmail
+    || targetEmail;
   if (!targetEmail) {
     throw new Error('Cloudflare Temp Email 轮询前缺少目标邮箱地址，请先填写注册邮箱或“邮件接收”邮箱。');
   }
 
-  if (registrationEmail && registrationEmail !== targetEmail) {
+  if (useRegistrationLookup) {
+    await addLog(`步骤 ${step}：正在按注册邮箱筛选 Cloudflare Temp Email 邮件（${originalRecipient}）...`, 'info');
+  } else if (registrationEmail && registrationEmail !== targetEmail) {
     await addLog(`步骤 ${step}：正在轮询 Cloudflare Temp Email 收件邮箱（${targetEmail}），注册邮箱为 ${registrationEmail}...`, 'info');
   } else {
     await addLog(`步骤 ${step}：正在轮询 Cloudflare Temp Email 邮件（${targetEmail}）...`, 'info');
@@ -5138,15 +5956,22 @@ async function pollCloudflareTempEmailVerificationCode(step, state, pollPayload 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     throwIfStopped();
     try {
-      const { messages } = await listCloudflareTempEmailMessages(state, {
-        address: targetEmail,
+      const { messages, missingOriginalRecipient } = await listCloudflareTempEmailMessages(state, {
+        address: useRegistrationLookup ? '' : targetEmail,
+        lookupMode,
+        originalRecipient,
         limit: pollPayload.limit || CLOUDFLARE_TEMP_EMAIL_DEFAULT_PAGE_SIZE,
         offset: pollPayload.offset || 0,
       });
+      if (useRegistrationLookup && missingOriginalRecipient) {
+        throw new Error('Cloudflare Temp Email 当前接口未返回 original_recipient，注册邮箱查信需要部署本扩展作者修改后的 Cloudflare Temp Email，或切回“邮件接收”。');
+      }
       const matchResult = pickVerificationMessageWithTimeFallback(messages, {
         afterTimestamp: pollPayload.filterAfterTimestamp || 0,
         senderFilters: pollPayload.senderFilters || [],
         subjectFilters: pollPayload.subjectFilters || [],
+        requiredKeywords: pollPayload.requiredKeywords || [],
+        codePatterns: pollPayload.codePatterns || [],
         excludeCodes: pollPayload.excludeCodes || [],
       });
       const match = matchResult.match;
@@ -5190,7 +6015,7 @@ async function pollCloudflareTempEmailVerificationCode(step, state, pollPayload 
 
 async function getOpenIcloudHostPreference() {
   try {
-    const tabs = await chrome.tabs.query({
+    const tabs = await queryTabsInAutomationWindow({
       url: ICLOUD_TAB_URL_PATTERNS,
     });
 
@@ -5338,7 +6163,7 @@ function shouldEmitIcloudTransientLog(key, windowMs = 1500) {
 }
 
 async function openIcloudLoginPage(preferredUrl) {
-  const tabs = await chrome.tabs.query({
+  const tabs = await queryTabsInAutomationWindow({
     url: ICLOUD_TAB_URL_PATTERNS,
   });
   const preferredHost = new URL(preferredUrl).host;
@@ -5362,7 +6187,7 @@ async function openIcloudLoginPage(preferredUrl) {
     return existingAnyIcloudTab.id;
   }
 
-  const created = await chrome.tabs.create({ url: preferredUrl, active: true });
+  const created = await createAutomationTab({ url: preferredUrl, active: true });
   return created.id;
 }
 
@@ -5418,7 +6243,6 @@ async function withIcloudLoginHelp(actionLabel, action) {
         if (shouldEmitIcloudTransientLog(`${safeActionLabel}:final`)) {
           await addLog(`iCloud：${safeActionLabel}受网络/上下文波动影响：${getErrorMessage(err)}`, 'warn');
         }
-        const safeActionLabel = String(actionLabel || '操作').trim() || '操作';
         const transientError = new Error(`iCloud：${safeActionLabel}受网络/上下文波动影响，请稍后重试。`);
         transientError.code = 'ICLOUD_TRANSIENT_CONTEXT';
         transientError.actionLabel = safeActionLabel;
@@ -5579,7 +6403,7 @@ async function ensureIcloudMailContextTab(tabs = [], targetHost = '', preferredH
           await chrome.tabs.update(mailTabs[0].id, { url: fallbackMailUrl, active: false });
           await waitForIcloudMailTabReady(mailTabs[0].id, 9000);
           try {
-            return await chrome.tabs.query({
+            return await queryTabsInAutomationWindow({
               url: ICLOUD_TAB_URL_PATTERNS,
             });
           } catch {
@@ -5604,13 +6428,13 @@ async function ensureIcloudMailContextTab(tabs = [], targetHost = '', preferredH
       await chrome.tabs.update(anyIcloudTab.id, { url: fallbackMailUrl, active: false });
       await waitForIcloudMailTabReady(anyIcloudTab.id, 9000);
     } else {
-      const created = await chrome.tabs.create({ url: fallbackMailUrl, active: false });
+      const created = await createAutomationTab({ url: fallbackMailUrl, active: false });
       await waitForIcloudMailTabReady(created?.id, 9000);
     }
   } catch {}
 
   try {
-    return await chrome.tabs.query({
+    return await queryTabsInAutomationWindow({
       url: ICLOUD_TAB_URL_PATTERNS,
     });
   } catch {
@@ -5653,7 +6477,7 @@ async function icloudRequestViaPageContext(method, url, options = {}) {
   const targetHost = configuredHost || normalizeIcloudHost(new URL(url).hostname);
   const preferredHost = configuredHost || normalizeIcloudHost(state?.preferredIcloudHost);
 
-  let tabs = await chrome.tabs.query({
+  let tabs = await queryTabsInAutomationWindow({
     url: ICLOUD_TAB_URL_PATTERNS,
   });
   tabs = await ensureIcloudMailContextTab(tabs, targetHost, preferredHost);
@@ -6036,7 +6860,7 @@ async function resolveIcloudPremiumMailServiceViaPageContext(setupUrls, state, o
   const errors = [];
   let tabs = [];
   try {
-    tabs = await chrome.tabs.query({
+    tabs = await queryTabsInAutomationWindow({
       url: ICLOUD_TAB_URL_PATTERNS,
     });
   } catch (err) {
@@ -6351,6 +7175,16 @@ async function fetchIcloudHideMyEmail(options = {}) {
     throwIfStopped();
     const generateNew = Boolean(options?.generateNew);
     const preferredHost = String(options?.hostPreference || options?.preferredHost || '').trim();
+    const persistSelectedIcloudEmail = async (email) => {
+      if (typeof persistRegistrationEmailState === 'function') {
+        await persistRegistrationEmailState(options?.state || null, email, {
+          source: options?.source || '',
+          preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+        });
+        return;
+      }
+      await setEmailState(email, options?.source ? { source: options.source } : {});
+    };
     await addLog('iCloud：正在加载别名列表并校验当前浏览器登录状态...', 'info');
 
     const { serviceUrl, setupUrl } = await resolveIcloudPremiumMailService(
@@ -6370,7 +7204,7 @@ async function fetchIcloudHideMyEmail(options = {}) {
     if (!generateNew) {
       const reusableAlias = pickReusableIcloudAlias(existingAliases);
       if (reusableAlias) {
-        await setEmailState(reusableAlias.email);
+        await persistSelectedIcloudEmail(reusableAlias.email);
         await addLog(`iCloud：复用未使用别名 ${reusableAlias.email}`, 'ok');
         broadcastIcloudAliasesChanged({ reason: 'selected', email: reusableAlias.email });
         return reusableAlias.email;
@@ -6433,7 +7267,7 @@ async function fetchIcloudHideMyEmail(options = {}) {
           : {}),
         hme: generatedAlias,
         label: getIcloudAliasLabel(),
-        note: 'Generated through Multi-Page Automation',
+        note: 'Generated through FlowPilot',
       };
 
       let alias = '';
@@ -6496,7 +7330,7 @@ async function fetchIcloudHideMyEmail(options = {}) {
         }
       }
 
-      await setEmailState(alias);
+      await persistSelectedIcloudEmail(alias);
       await addLog(`iCloud：已创建并保留新别名 ${alias}`, 'ok');
       broadcastIcloudAliasesChanged({ reason: 'created', email: alias });
       return alias;
@@ -6507,7 +7341,7 @@ async function fetchIcloudHideMyEmail(options = {}) {
 
       const reusableAlias = pickReusableIcloudAlias(existingAliases);
       if (reusableAlias) {
-        await setEmailState(reusableAlias.email);
+        await persistSelectedIcloudEmail(reusableAlias.email);
         await addLog(
           `iCloud：当前网络/上下文波动，暂无法创建新别名，已临时回退复用 ${reusableAlias.email}。`,
           'warn'
@@ -6583,6 +7417,158 @@ async function finalizePhoneActivationAfterSuccessfulFlow(state) {
   return phoneVerificationHelpers.finalizePendingPhoneActivationConfirmation(state);
 }
 
+async function clearFreeReusablePhoneActivation() {
+  const state = await getState();
+  if (isPhoneSignupIdentityStateForReuse(state)) {
+    throw new Error('\u624b\u673a\u53f7\u6ce8\u518c\u6a21\u5f0f\u4e0b\u4e0d\u80fd\u4fee\u6539\u767d\u5ad6\u590d\u7528\u624b\u673a\u53f7\uff0c\u8bf7\u5207\u6362\u90ae\u7bb1\u6ce8\u518c\u540e\u518d\u4f7f\u7528\u3002');
+  }
+  await setState({ freeReusablePhoneActivation: null });
+  broadcastDataUpdate({ freeReusablePhoneActivation: null });
+  await addLog('已清除白嫖复用手机号记录。', 'ok');
+  return { ok: true, freeReusablePhoneActivation: null };
+}
+
+function inferHeroSmsCountryFromPhoneNumber(phoneNumber = '') {
+  const digits = String(phoneNumber || '').replace(/\D+/g, '');
+  if (!digits) {
+    return null;
+  }
+  const match = HERO_SMS_COUNTRY_BY_PHONE_PREFIX.find((entry) => digits.startsWith(entry.prefix));
+  if (!match) {
+    return null;
+  }
+  return {
+    id: Math.max(1, Math.floor(Number(match.id) || 0)),
+    label: String(match.label || '').trim() || `Country #${match.id}`,
+  };
+}
+
+function normalizePhoneDigits(value = '') {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function phoneNumbersMatch(left = '', right = '') {
+  const leftDigits = normalizePhoneDigits(left);
+  const rightDigits = normalizePhoneDigits(right);
+  return Boolean(leftDigits && rightDigits && leftDigits === rightDigits);
+}
+
+function normalizeLocalHeroSmsActivation(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    return null;
+  }
+  const activationId = String(record.activationId ?? record.id ?? record.activation ?? '').trim();
+  const phoneNumber = String(record.phoneNumber ?? record.number ?? record.phone ?? '').trim();
+  if (!activationId || !phoneNumber) {
+    return null;
+  }
+  const rawProvider = String(record.provider ?? record.smsProvider ?? '').trim();
+  const provider = rawProvider ? normalizePhoneSmsProvider(rawProvider) : PHONE_SMS_PROVIDER_HERO;
+  if (provider !== PHONE_SMS_PROVIDER_HERO) {
+    return null;
+  }
+  const countryId = Math.max(
+    0,
+    Math.floor(Number(record.countryId ?? record.country ?? record.countryCode) || 0)
+  );
+  const countryLabel = String(record.countryLabel || record.label || '').trim();
+  const serviceCode = String(record.serviceCode || record.service || HERO_SMS_SERVICE_CODE).trim() || HERO_SMS_SERVICE_CODE;
+  return {
+    ...record,
+    provider: PHONE_SMS_PROVIDER_HERO,
+    activationId,
+    phoneNumber,
+    serviceCode,
+    ...(countryId > 0 ? { countryId } : {}),
+    ...(countryLabel ? { countryLabel } : {}),
+  };
+}
+
+function findLocalHeroSmsActivationForPhone(state = {}, phoneNumber = '') {
+  const candidates = [
+    state.currentPhoneActivation,
+    state.reusablePhoneActivation,
+    state.pendingPhoneActivationConfirmation,
+    state.signupPhoneActivation,
+    state.signupPhoneCompletedActivation,
+    state.phonePreferredActivation,
+    state.freeReusablePhoneActivation,
+  ];
+  if (Array.isArray(state.phoneReusableActivationPool)) {
+    candidates.push(...state.phoneReusableActivationPool);
+  }
+  for (const candidate of candidates) {
+    const normalized = normalizeLocalHeroSmsActivation(candidate);
+    if (normalized && phoneNumbersMatch(normalized.phoneNumber, phoneNumber)) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+async function setFreeReusablePhoneActivation(record = {}) {
+  const phoneNumber = String(record.phoneNumber || record.number || record.phone || '').trim();
+  if (!phoneNumber) {
+    throw new Error('请先填写白嫖复用手机号。');
+  }
+  const state = await getState();
+  if (isPhoneSignupIdentityStateForReuse(state)) {
+    throw new Error('\u624b\u673a\u53f7\u6ce8\u518c\u6a21\u5f0f\u4e0b\u4e0d\u80fd\u8bb0\u5f55\u767d\u5ad6\u590d\u7528\u624b\u673a\u53f7\uff0c\u8bf7\u5207\u6362\u90ae\u7bb1\u6ce8\u518c\u540e\u518d\u4f7f\u7528\u3002');
+  }
+  const localActivation = findLocalHeroSmsActivationForPhone(state, phoneNumber);
+  const activationId = String(
+    record.activationId
+    || record.id
+    || record.activation
+    || localActivation?.activationId
+    || ''
+  ).trim();
+  const inferredCountry = inferHeroSmsCountryFromPhoneNumber(phoneNumber);
+  const hasExplicitCountry = Number.isFinite(Number(record.countryId)) && Number(record.countryId) > 0;
+  const countryId = Math.max(
+    1,
+    Math.floor(
+      Number(record.countryId)
+      || Number(localActivation?.countryId)
+      || Number(inferredCountry?.id)
+      || Number(state.heroSmsCountryId)
+      || HERO_SMS_COUNTRY_ID
+    )
+  );
+  const stateCountryLabel = Math.floor(Number(state.heroSmsCountryId) || 0) === countryId
+    ? String(state.heroSmsCountryLabel || '').trim()
+    : '';
+  const countryLabel = String(
+    record.countryLabel
+    || (Number(localActivation?.countryId) === countryId ? localActivation?.countryLabel : '')
+    || (!hasExplicitCountry && inferredCountry?.id === countryId ? inferredCountry.label : '')
+    || stateCountryLabel
+    || (countryId === HERO_SMS_COUNTRY_ID ? HERO_SMS_COUNTRY_LABEL : `Country #${countryId}`)
+  ).trim();
+  const activation = {
+    ...(activationId ? { activationId } : {}),
+    phoneNumber,
+    provider: PHONE_SMS_PROVIDER_HERO,
+    serviceCode: String(record.serviceCode || localActivation?.serviceCode || HERO_SMS_SERVICE_CODE).trim() || HERO_SMS_SERVICE_CODE,
+    countryId,
+    ...(countryLabel ? { countryLabel } : {}),
+    successfulUses: Math.max(0, Math.floor(Number(record.successfulUses) || 0)),
+    maxUses: Math.max(1, Math.floor(Number(record.maxUses) || 3)),
+    source: 'free-manual-reuse',
+    recordedAt: Date.now(),
+    manualOnly: !activationId,
+  };
+  await setState({ freeReusablePhoneActivation: activation });
+  broadcastDataUpdate({ freeReusablePhoneActivation: activation });
+  await addLog(
+    activationId
+      ? `已手动记录白嫖复用手机号 ${phoneNumber}（#${activationId}）。`
+      : `已手动记录白嫖复用手机号 ${phoneNumber}。未填写 HeroSMS 激活 ID，仅支持手动填号复用。`,
+    'ok'
+  );
+  return { ok: true, freeReusablePhoneActivation: activation };
+}
+
 // ============================================================
 // Tab Registry
 // ============================================================
@@ -6603,6 +7589,22 @@ async function getTabId(source) {
   return tabRuntime.getTabId(source);
 }
 
+async function getAutomationWindowId(options = {}) {
+  return tabRuntime.getAutomationWindowId(options);
+}
+
+async function createAutomationTab(createProperties = {}, options = {}) {
+  return tabRuntime.createAutomationTab(createProperties, options);
+}
+
+async function queryTabsInAutomationWindow(queryInfo = {}, options = {}) {
+  return tabRuntime.queryTabsInAutomationWindow(queryInfo, options);
+}
+
+async function isTabInAutomationWindow(tabOrId, options = {}) {
+  return tabRuntime.isTabInAutomationWindow(tabOrId, options);
+}
+
 function parseUrlSafely(rawUrl) {
   if (typeof navigationUtils !== 'undefined' && navigationUtils?.parseUrlSafely) {
     return navigationUtils.parseUrlSafely(rawUrl);
@@ -6620,6 +7622,7 @@ function normalizeSub2ApiUrl(rawUrl) {
     return navigationUtils.normalizeSub2ApiUrl(rawUrl);
   }
   const input = (rawUrl || '').trim() || DEFAULT_SUB2API_URL;
+  if (!input) return '';
   const withProtocol = /^https?:\/\//i.test(input) ? input : `https://${input}`;
   const parsed = new URL(withProtocol);
   if (!parsed.pathname || parsed.pathname === '/') {
@@ -6681,7 +7684,16 @@ function isSignupEntryHost(hostname = '') {
   if (typeof navigationUtils !== 'undefined' && navigationUtils?.isSignupEntryHost) {
     return navigationUtils.isSignupEntryHost(hostname);
   }
-  return ['chatgpt.com', 'chat.openai.com'].includes(hostname);
+  return ['chatgpt.com', 'www.chatgpt.com', 'chat.openai.com'].includes(hostname);
+}
+
+function isLikelyLoggedInChatgptHomeUrl(rawUrl) {
+  const parsed = parseUrlSafely(rawUrl);
+  if (!parsed) return false;
+  if (!isSignupEntryHost(String(parsed.hostname || '').toLowerCase())) {
+    return false;
+  }
+  return !/^\/(?:auth\/|create-account\/|email-verification|log-in|add-phone)(?:[/?#]|$)/i.test(parsed.pathname || '');
 }
 
 function isSignupPasswordPageUrl(rawUrl) {
@@ -6756,6 +7768,7 @@ function matchesSourceUrlFamily(source, candidateUrl, referenceUrl) {
   if (!candidate) return false;
   const reference = parseUrlSafely(referenceUrl);
   switch (source) {
+    case 'openai-auth':
     case 'signup-page':
       return isSignupPageHost(candidate.hostname) || isSignupEntryHost(candidate.hostname);
     case 'duck-mail':
@@ -6766,6 +7779,8 @@ function matchesSourceUrlFamily(source, candidateUrl, referenceUrl) {
       return is163MailHost(candidate.hostname);
     case 'gmail-mail':
       return candidate.hostname === 'mail.google.com';
+    case 'icloud-mail':
+      return candidate.hostname === 'www.icloud.com' || candidate.hostname === 'www.icloud.com.cn';
     case 'inbucket-mail':
       return Boolean(reference) && candidate.origin === reference.origin && candidate.pathname.startsWith('/m/');
     case 'mail-2925':
@@ -6776,9 +7791,22 @@ function matchesSourceUrlFamily(source, candidateUrl, referenceUrl) {
       return Boolean(reference)
         && candidate.origin === reference.origin
         && (candidate.pathname.startsWith('/admin/accounts') || candidate.pathname.startsWith('/login') || candidate.pathname === '/');
+    case 'codex2api-panel':
+      return Boolean(reference)
+        && candidate.origin === reference.origin
+        && (candidate.pathname.startsWith('/admin/accounts') || candidate.pathname === '/admin' || candidate.pathname === '/');
     default:
       return false;
   }
+}
+
+function sourcesMatch(leftSource, rightSource) {
+  if (sourceRegistry?.resolveCanonicalSource) {
+    const left = sourceRegistry.resolveCanonicalSource(leftSource);
+    const right = sourceRegistry.resolveCanonicalSource(rightSource);
+    return Boolean(left && right && left === right);
+  }
+  return String(leftSource || '').trim() === String(rightSource || '').trim();
 }
 
 async function rememberSourceLastUrl(source, url) {
@@ -6861,7 +7889,7 @@ async function ensureContentScriptReadyOnTab(source, tabId, options = {}) {
 
 function isContentScriptReadyPong(source, pong) {
   if (!pong?.ok) return false;
-  if (pong.source && pong.source !== source) return false;
+  if (pong.source && !sourcesMatch(pong.source, source)) return false;
   if (source === 'plus-checkout') {
     return Boolean(pong.plusCheckoutReady);
   }
@@ -7052,11 +8080,13 @@ function getSourceLabel(source) {
     return loggingStatus.getSourceLabel(source);
   }
   const labels = {
+    'openai-auth': '认证页',
     'gmail-mail': 'Gmail 邮箱',
     'sidepanel': '侧边栏',
     'signup-page': '认证页',
     'vps-panel': 'CPA 面板',
     'sub2api-panel': 'SUB2API 后台',
+    'codex2api-panel': 'Codex2API 后台',
     'qq-mail': 'QQ 邮箱',
     'mail-163': '163 邮箱',
     'mail-2925': '2925 邮箱',
@@ -7065,8 +8095,11 @@ function getSourceLabel(source) {
     'hotmail-api': 'Hotmail（API对接/本地助手）',
     'luckmail-api': 'LuckMail（API 购邮）',
     'cloudflare-temp-email': 'Cloudflare Temp Email',
+    'cloudmail': 'Cloud Mail',
     'plus-checkout': 'Plus Checkout',
     'paypal-flow': 'PayPal 授权页',
+    'gopay-flow': 'GoPay 授权页',
+    'unknown-source': '未知来源',
   };
   return labels[source] || source || '未知来源';
 }
@@ -7075,17 +8108,21 @@ function getSourceLabel(source) {
 // Step Status Management
 // ============================================================
 
-async function setStepStatus(step, status) {
-  if (typeof loggingStatus !== 'undefined' && loggingStatus?.setStepStatus) {
-    return loggingStatus.setStepStatus(step, status);
+async function setNodeStatus(nodeId, status) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) {
+    throw new Error('setNodeStatus 缺少 nodeId。');
   }
   const state = await getState();
-  const statuses = { ...state.stepStatuses };
-  statuses[step] = status;
-  await setState({ stepStatuses: statuses, currentStep: step });
+  const nodeStatuses = { ...(state.nodeStatuses || {}) };
+  nodeStatuses[normalizedNodeId] = status;
+  await setState({
+    nodeStatuses,
+    currentNodeId: normalizedNodeId,
+  });
   chrome.runtime.sendMessage({
-    type: 'STEP_STATUS_CHANGED',
-    payload: { step, status },
+    type: 'NODE_STATUS_CHANGED',
+    payload: { nodeId: normalizedNodeId, status },
   }).catch(() => { });
 }
 
@@ -7096,7 +8133,7 @@ function isStopError(error) {
 
 function isRetryableContentScriptTransportError(error) {
   const message = String(typeof error === 'string' ? error : error?.message || '');
-  return /back\/forward cache|message channel is closed|Receiving end does not exist|port closed before a response was received|A listener indicated an asynchronous response|did not respond in \d+s|failed to fetch|networkerror|network error|fetch failed|load failed/i.test(message);
+  return /back\/forward cache|message channel is closed|Receiving end does not exist|port closed before a response was received|A listener indicated an asynchronous response|内容脚本\s+\d+(?:\.\d+)?\s*秒内未响应|did not respond in \d+s|failed to fetch|networkerror|network error|fetch failed|load failed/i.test(message);
 }
 
 function isStepFetchNetworkRetryableError(error) {
@@ -7120,19 +8157,32 @@ function getStepFetchNetworkRetryPolicy(step) {
   };
 }
 
+const sourceRegistry = self.MultiPageSourceRegistry?.createSourceRegistry?.() || null;
+const flowCapabilityRegistry = self.MultiPageFlowCapabilities?.createFlowCapabilityRegistry?.({
+  defaultFlowId: DEFAULT_ACTIVE_FLOW_ID,
+}) || null;
+const workflowEngine = self.MultiPageBackgroundWorkflowEngine?.createWorkflowEngine?.({
+  defaultFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  workflowDefinitions: self.MultiPageStepDefinitions,
+}) || null;
+
 const navigationUtils = self.MultiPageBackgroundNavigationUtils?.createNavigationUtils({
   DEFAULT_CODEX2API_URL,
   DEFAULT_SUB2API_URL,
   normalizeLocalCpaStep9Mode,
+  sourceRegistry,
 });
 
 const loggingStatus = self.MultiPageBackgroundLoggingStatus?.createLoggingStatus({
   chrome,
   DEFAULT_STATE,
+  getStepDefinitionForState,
+  getStepIdByNodeIdForState,
   getState,
   isRecoverableStep9AuthFailure,
   LOG_PREFIX,
   setState,
+  sourceRegistry,
   STOP_ERROR_MESSAGE,
 });
 
@@ -7145,6 +8195,7 @@ const tabRuntime = self.MultiPageBackgroundTabRuntime?.createTabRuntime({
   isRetryableContentScriptTransportError,
   LOG_PREFIX,
   matchesSourceUrlFamily,
+  sourceRegistry,
   setState,
   sleepWithStop,
   STOP_ERROR_MESSAGE,
@@ -7155,7 +8206,9 @@ function getErrorMessage(error) {
   if (typeof loggingStatus !== 'undefined' && loggingStatus?.getErrorMessage) {
     return loggingStatus.getErrorMessage(error);
   }
-  return String(typeof error === 'string' ? error : error?.message || '');
+  return String(typeof error === 'string' ? error : error?.message || '')
+    .replace(/^GPC_TASK_ENDED::/i, '')
+    .replace(/^AUTO_RUN_STEP_IDLE_RESTART::/i, '');
 }
 
 function isCloudflareSecurityBlockedError(error) {
@@ -7269,7 +8322,93 @@ function isRestartCurrentAttemptError(error) {
     return loggingStatus.isRestartCurrentAttemptError(error);
   }
   const message = String(typeof error === 'string' ? error : error?.message || '');
-  return /当前邮箱已存在，需要重新开始新一轮/.test(message);
+  return /当前邮箱已存在，需要重新开始新一轮|SIGNUP_PHONE_PASSWORD_MISMATCH::/i.test(message);
+}
+
+function isSignupPhonePasswordMismatchFailure(error) {
+  const message = getErrorMessage(error);
+  return /SIGNUP_PHONE_PASSWORD_MISMATCH::/i.test(message);
+}
+
+function getSignupPhonePasswordMismatchRestartPayload(preservedState = {}) {
+  const preservedEmail = String(preservedState.email || '').trim();
+  const preservedPassword = String(preservedState.password || '').trim();
+  const accountIdentifierType = String(preservedState.accountIdentifierType || '').trim().toLowerCase();
+  const activeSignupPhoneNumber = String(
+    preservedState.signupPhoneNumber
+    || preservedState.signupPhoneActivation?.phoneNumber
+    || preservedState.signupPhoneCompletedActivation?.phoneNumber
+    || (accountIdentifierType === 'phone' ? preservedState.accountIdentifier : '')
+    || ''
+  ).trim();
+  const shouldClearSignupPhoneRuntime = Boolean(
+    activeSignupPhoneNumber
+    || preservedState.signupPhoneActivation
+    || preservedState.signupPhoneCompletedActivation
+    || preservedState.signupPhoneVerificationRequestedAt
+    || preservedState.signupPhoneVerificationPurpose
+    || accountIdentifierType === 'phone'
+  );
+  const restorePayload = {};
+  if (preservedEmail) restorePayload.email = preservedEmail;
+  if (preservedPassword) restorePayload.password = preservedPassword;
+  if (shouldClearSignupPhoneRuntime) {
+    restorePayload.signupPhoneNumber = '';
+    restorePayload.signupPhoneActivation = null;
+    restorePayload.signupPhoneCompletedActivation = null;
+    restorePayload.signupPhoneVerificationRequestedAt = null;
+    restorePayload.signupPhoneVerificationPurpose = '';
+    if (accountIdentifierType === 'phone') {
+      restorePayload.accountIdentifierType = null;
+      restorePayload.accountIdentifier = '';
+    }
+  }
+  return {
+    activeSignupPhoneNumber,
+    preservedEmail,
+    restorePayload,
+    shouldClearSignupPhoneRuntime,
+  };
+}
+
+async function restartSignupPhonePasswordMismatchAttemptFromNode(nodeId, restartCount, error) {
+  const preservedState = await getState();
+  const {
+    activeSignupPhoneNumber,
+    preservedEmail,
+    restorePayload,
+    shouldClearSignupPhoneRuntime,
+  } = getSignupPhonePasswordMismatchRestartPayload(preservedState);
+  const emailSuffix = preservedEmail ? `当前邮箱：${preservedEmail}；` : '';
+  const phoneSuffix = activeSignupPhoneNumber ? `当前手机号：${activeSignupPhoneNumber}；` : '';
+  const errorMessage = getErrorMessage(error);
+  const reasonLabel = /PHONE_RESEND_BANNED_NUMBER::|无法向此(?:电话|手机)号码发送短信|无法发送短信到此(?:电话|手机)号码|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number/i
+    .test(errorMessage)
+    ? '当前注册手机号无法接收短信'
+    : (/与此(?:电话|手机)号码相关联的帐户已存在|account\s+associated\s+with\s+this\s+phone\s+number\s+already\s+exists/i
+      .test(errorMessage)
+      ? '注册手机号异常'
+      : '手机号/密码不匹配');
+  const normalizedNodeId = String(nodeId || '').trim() || 'fetch-signup-code';
+  await addLog(
+    `节点 ${normalizedNodeId}：检测到${reasonLabel}，准备丢弃当前注册手机号并回到节点 open-chatgpt 重新开始（第 ${restartCount} 次重开）。${phoneSuffix}${emailSuffix}原因：${errorMessage}`,
+    'warn'
+  );
+  if (typeof invalidateDownstreamAfterNodeRestart === 'function') {
+    await invalidateDownstreamAfterNodeRestart('open-chatgpt', {
+      logLabel: `节点 ${normalizedNodeId} 检测到${reasonLabel}后准备回到 open-chatgpt 重新获取手机号重试（第 ${restartCount} 次重开）`,
+    });
+  } else {
+    await invalidateDownstreamAfterStepRestart(1, {
+      logLabel: `节点 ${normalizedNodeId} 检测到${reasonLabel}后准备回到 open-chatgpt 重新获取手机号重试（第 ${restartCount} 次重开）`,
+    });
+  }
+  if (shouldClearSignupPhoneRuntime) {
+    await addLog(`节点 ${normalizedNodeId}：已清空本轮注册手机号与接码订单，下一次重开将重新获取号码。`, 'warn');
+  }
+  if (Object.keys(restorePayload).length) {
+    await setState(restorePayload);
+  }
 }
 
 function isSignupUserAlreadyExistsFailure(error) {
@@ -7285,21 +8424,6 @@ function isStep4Route405RecoveryLimitFailure(error) {
   return /STEP4_405_RECOVERY_LIMIT::|步骤\s*4：检测到\s*405\s*错误页面，已连续点击“重试”恢复/i.test(message);
 }
 
-function isStep4PhoneNumberUnusableFailure(error) {
-  const message = getErrorMessage(error);
-  return /STEP4_PHONE_NUMBER_UNUSABLE::|无法向此电话(?:号|号码)发送文本消息|无法向此手机号发送文本消息|无法向此电话号码发送短信/i.test(message);
-}
-
-function isStep4ContactVerificationRoute405Failure(error) {
-  const message = getErrorMessage(error);
-  return /STEP4_CONTACT_VERIFICATION_ROUTE_405::|步骤\s*4：(?:点击重新发送后进入|检测到)\s*\/contact-verification\s*的\s*405\s*错误页/i.test(message);
-}
-
-function isStep2PhoneAlreadyRegisteredFailure(error) {
-  const message = getErrorMessage(error);
-  return /STEP2_PHONE_ALREADY_REGISTERED::|步骤\s*2：提交手机号后进入登录密码页/i.test(message);
-}
-
 function isPhoneSmsPlatformRateLimitFailure(error) {
   const message = getErrorMessage(error);
   return /FIVE_SIM_RATE_LIMIT::|5sim[\s\S]*(?:限流|rate\s*limit)/i.test(message);
@@ -7307,17 +8431,45 @@ function isPhoneSmsPlatformRateLimitFailure(error) {
 
 function isPlusCheckoutNonFreeTrialFailure(error) {
   const message = getErrorMessage(error);
-  return /PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|没有免费试用资格/i.test(message);
+  return /PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|没有免费试用资格|该账号已经开通过\s*ChatGPT\s*订阅套餐，不能重复订阅(?:。)?(?:（\s*checkout_order\s*）|\(\s*checkout_order\s*\))?/i.test(message);
+}
+
+function isGpcTaskEndedFailure(error) {
+  const message = String(typeof error === 'string' ? error : error?.message || '');
+  return /GPC_TASK_ENDED::/i.test(message);
+}
+
+function isGpcCheckoutRestartRequiredFailure(error) {
+  const rawMessage = String(typeof error === 'string' ? error : error?.message || '');
+  const message = getErrorMessage(error);
+  const combinedMessage = `${rawMessage}\n${message}`;
+  if (/PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|没有免费试用资格/i.test(combinedMessage)) {
+    return false;
+  }
+  if (/GPC_TASK_ENDED::/i.test(rawMessage)) {
+    return true;
+  }
+  return /GPC\s*API\s*请求超时|GPC\s*任务状态超过\s*\d+\s*秒无进展|GPC[\s\S]*请重新创建任务|步骤\s*[67][\s\S]*GPC[\s\S]*(?:access\s*token|accessToken|任务轮询超时|请求超时|超时|timeout|timed\s*out|卡死|无响应|失败)|account\s+already\s+linked|GOPAY已经绑了订阅|(?:账号|账户|GoPay|GOPAY)[\s\S]*(?:已绑定|已经绑定|已绑|绑了订阅|绑定了订阅)|创建\s*GPC\s*订单失败[\s\S]*(?:任务已结束|任务结束|failed|expired|discarded|请求超时|timeout|timed\s*out)/i.test(message);
+}
+
+function isPlusCheckoutRestartStep(step, stepExecutionKey = '', state = {}) {
+  const normalizedKey = String(stepExecutionKey || '').trim();
+  if (normalizedKey === 'plus-checkout-create'
+    || normalizedKey === 'plus-checkout-billing'
+    || normalizedKey === 'gopay-subscription-confirm') {
+    return true;
+  }
+  const numericStep = Number(step);
+  return Boolean(state?.plusModeEnabled) && (numericStep === 6 || numericStep === 7);
+}
+
+function isPlusCheckoutRestartRequiredFailure(error) {
+  return !isPlusCheckoutNonFreeTrialFailure(error);
 }
 
 function isGoPayCheckoutRestartRequiredFailure(error) {
   const message = getErrorMessage(error);
   return /GOPAY_RESTART_FROM_STEP6::|GOPAY_RETRY_REQUIRED::/i.test(message);
-}
-
-function isGoPayManualInterventionRequiredFailure(error) {
-  const message = getErrorMessage(error);
-  return /GOPAY_MANUAL_INTERVENTION_REQUIRED::|GoPay 页面显示技术错误，请手动处理后继续/i.test(message);
 }
 
 function isStep9RecoverableAuthError(error) {
@@ -7335,28 +8487,62 @@ function isStepDoneStatus(status) {
   return status === 'completed' || status === 'manual_completed' || status === 'skipped';
 }
 
+function normalizeStatusMapForNodes(statuses = {}, state = {}) {
+  const candidate = statuses && typeof statuses === 'object' && !Array.isArray(statuses) ? statuses : {};
+  const nodeIds = new Set(getNodeIdsForState(state));
+  const hasNodeKey = Object.keys(candidate).some((key) => nodeIds.has(key));
+  const hasStepKey = Object.keys(candidate).some((key) => Number.isInteger(Number(key)) && Number(key) > 0);
+  if (hasNodeKey || !hasStepKey) {
+    return { ...DEFAULT_STATE.nodeStatuses, ...(state.nodeStatuses || {}), ...candidate };
+  }
+
+  const projected = { ...DEFAULT_STATE.nodeStatuses, ...(state.nodeStatuses || {}) };
+  for (const [step, status] of Object.entries(candidate)) {
+    const nodeId = getNodeIdByStepForState(step, state);
+    if (nodeId) {
+      projected[nodeId] = status;
+    }
+  }
+  return projected;
+}
+
+function getFirstUnfinishedNodeId(statuses = {}, stateOverride = null) {
+  const state = stateOverride || {};
+  const nodeStatuses = normalizeStatusMapForNodes(statuses, state);
+  if (workflowEngine?.getFirstUnfinishedNodeId) {
+    return workflowEngine.getFirstUnfinishedNodeId(nodeStatuses, state);
+  }
+  const nodeIds = getNodeIdsForState(state);
+  for (const nodeId of nodeIds) {
+    if (!isStepDoneStatus(nodeStatuses[nodeId] || 'pending')) {
+      return nodeId;
+    }
+  }
+  return '';
+}
+
 function getFirstUnfinishedStep(statuses = {}, stateOverride = null) {
   const state = stateOverride || {};
-  const activeStepIds = typeof getStepIdsForState === 'function'
-    ? getStepIdsForState(state)
-    : (typeof STEP_IDS !== 'undefined' && Array.isArray(STEP_IDS) && STEP_IDS.length
-      ? STEP_IDS
-      : Array.from({ length: typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10 }, (_, index) => index + 1));
-  for (const step of activeStepIds) {
-    if (!isStepDoneStatus(statuses[step] || 'pending')) return step;
+  const firstNodeId = getFirstUnfinishedNodeId(statuses, state);
+  if (firstNodeId) {
+    return getStepIdByNodeIdForState(firstNodeId, state);
   }
   return null;
 }
 
+function hasSavedNodeProgress(statuses = {}, stateOverride = null) {
+  const state = stateOverride || {};
+  const nodeStatuses = normalizeStatusMapForNodes(statuses, state);
+  if (workflowEngine?.hasSavedProgress) {
+    return workflowEngine.hasSavedProgress(nodeStatuses, state);
+  }
+  const merged = { ...DEFAULT_STATE.nodeStatuses, ...nodeStatuses };
+  return getNodeIdsForState(state).some((nodeId) => (merged[nodeId] || 'pending') !== 'pending');
+}
+
 function hasSavedProgress(statuses = {}, stateOverride = null) {
   const state = stateOverride || {};
-  const merged = { ...DEFAULT_STATE.stepStatuses, ...statuses };
-  const activeStepIds = typeof getStepIdsForState === 'function'
-    ? getStepIdsForState(state)
-    : (typeof STEP_IDS !== 'undefined' && Array.isArray(STEP_IDS) && STEP_IDS.length
-      ? STEP_IDS
-      : Array.from({ length: typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10 }, (_, index) => index + 1));
-  return activeStepIds.some((step) => (merged[step] || 'pending') !== 'pending');
+  return hasSavedNodeProgress(statuses, state);
 }
 
 function getDownstreamStateResets(step, state = {}) {
@@ -7371,11 +8557,6 @@ function getDownstreamStateResets(step, state = {}) {
     plusBillingAddress: null,
     plusPaypalApprovedAt: null,
     plusGoPayApprovedAt: null,
-    plusWhatsappUnlinkedAt: null,
-    plusWhatsappUnlinkTimedOut: false,
-    plusBalanceRaw: '',
-    plusBalanceValue: null,
-    plusBalanceConfirmedAt: null,
     plusReturnUrl: '',
     plusManualConfirmationPending: false,
     plusManualConfirmationRequestId: '',
@@ -7390,6 +8571,22 @@ function getDownstreamStateResets(step, state = {}) {
     gopayHelperFlowId: '',
     gopayHelperChallengeId: '',
     gopayHelperStartPayload: null,
+    gopayHelperTaskId: '',
+    gopayHelperTaskStatus: '',
+    gopayHelperStatusText: '',
+    gopayHelperRemoteStage: '',
+    gopayHelperApiWaitingFor: '',
+    gopayHelperApiInputDeadlineAt: '',
+    gopayHelperApiInputWaitSeconds: 0,
+    gopayHelperLastInputError: '',
+    gopayHelperOtpInvalidCount: 0,
+    gopayHelperFailureStage: '',
+    gopayHelperFailureDetail: '',
+    gopayHelperTaskPayload: null,
+    gopayHelperOrderCreatedAt: 0,
+    gopayHelperTaskProgressSignature: '',
+    gopayHelperTaskProgressAt: 0,
+    gopayHelperTaskProgressTaskId: '',
     gopayHelperPinPayload: null,
     gopayHelperResolvedOtp: '',
     gopayHelperOtpRequestId: '',
@@ -7405,7 +8602,9 @@ function getDownstreamStateResets(step, state = {}) {
       sub2apiSessionId: null,
       sub2apiOAuthState: null,
       sub2apiGroupId: null,
+      sub2apiGroupIds: [],
       sub2apiDraftName: null,
+      sub2apiProxyId: null,
       codex2apiSessionId: null,
       codex2apiOAuthState: null,
       flowStartTime: null,
@@ -7415,13 +8614,6 @@ function getDownstreamStateResets(step, state = {}) {
       loginVerificationRequestedAt: null,
       oauthFlowDeadlineAt: null,
       oauthFlowDeadlineSourceUrl: null,
-      accountIdentifierType: null,
-      accountIdentifier: '',
-      signupPhoneNumber: '',
-      signupPhoneActivation: null,
-      signupPhoneCompletedActivation: null,
-      signupPhoneVerificationRequestedAt: null,
-      signupPhoneVerificationPurpose: '',
       pendingPhoneActivationConfirmation: null,
       lastSignupCode: null,
       lastLoginCode: null,
@@ -7485,6 +8677,7 @@ function getDownstreamStateResets(step, state = {}) {
         plusManualConfirmationTitle: '',
         plusManualConfirmationMessage: '',
         gopayHelperResolvedOtp: '',
+        gopayHelperLastInputError: '',
         gopayHelperOtpRequestId: '',
         gopayHelperOtpReferenceId: '',
       } : {}),
@@ -7516,7 +8709,12 @@ function getDownstreamStateResets(step, state = {}) {
       currentPhoneVerificationCountdownWindowTotal: 0,
     };
   }
-  if (stepKey === 'oauth-login' || stepKey === 'fetch-login-code') {
+  if (
+    stepKey === 'oauth-login'
+    || stepKey === 'fetch-login-code'
+    || stepKey === 'relogin-bound-email'
+    || stepKey === 'fetch-bound-email-login-code'
+  ) {
     return {
       lastLoginCode: null,
       loginVerificationRequestedAt: null,
@@ -7542,33 +8740,32 @@ function getDownstreamStateResets(step, state = {}) {
 async function invalidateDownstreamAfterStepRestart(step, options = {}) {
   const { logLabel = `步骤 ${step} 重新执行` } = options;
   const state = await getState();
-  const statuses = { ...(state.stepStatuses || {}) };
-  const changedSteps = [];
+  const nodeStatuses = { ...(state.nodeStatuses || {}) };
+  const changedNodes = [];
+  const activeNodeIds = getNodeIdsForState(state);
+  const currentNodeId = getNodeIdByStepForState(step, state);
+  const currentIndex = activeNodeIds.indexOf(currentNodeId);
 
-  const activeStepIds = typeof getStepIdsForState === 'function'
-    ? getStepIdsForState(state)
-    : (typeof STEP_IDS !== 'undefined' && Array.isArray(STEP_IDS) && STEP_IDS.length
-      ? STEP_IDS
-      : Array.from({ length: typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10 }, (_, index) => index + 1));
-  for (const downstream of activeStepIds) {
-    if (downstream <= step) {
-      continue;
-    }
-    if (statuses[downstream] !== 'pending') {
-      statuses[downstream] = 'pending';
-      changedSteps.push(downstream);
+  if (currentIndex >= 0) {
+    for (let index = currentIndex + 1; index < activeNodeIds.length; index += 1) {
+      const downstreamNodeId = activeNodeIds[index];
+      if (nodeStatuses[downstreamNodeId] === 'pending') {
+        continue;
+      }
+      nodeStatuses[downstreamNodeId] = 'pending';
+      changedNodes.push(downstreamNodeId);
     }
   }
 
-  if (changedSteps.length) {
-    await setState({ stepStatuses: statuses });
-    for (const downstream of changedSteps) {
+  if (changedNodes.length) {
+    await setState({ nodeStatuses });
+    for (const nodeId of changedNodes) {
       chrome.runtime.sendMessage({
-        type: 'STEP_STATUS_CHANGED',
-        payload: { step: downstream, status: 'pending' },
+        type: 'NODE_STATUS_CHANGED',
+        payload: { nodeId, status: 'pending' },
       }).catch(() => { });
     }
-    await addLog(`${logLabel}，已重置后续步骤状态：${changedSteps.join(', ')}`, 'warn');
+    await addLog(`${logLabel}，已重置后续节点状态：${changedNodes.join(', ')}`, 'warn');
   }
 
   const resets = getDownstreamStateResets(step, state);
@@ -7578,60 +8775,106 @@ async function invalidateDownstreamAfterStepRestart(step, options = {}) {
   }
 }
 
+async function invalidateDownstreamAfterNodeRestart(nodeId, options = {}) {
+  const state = await getState();
+  const step = getStepIdByNodeIdForState(nodeId, state);
+  if (Number.isInteger(step) && step > 0) {
+    return invalidateDownstreamAfterStepRestart(step, options);
+  }
+
+  const normalizedNodeId = String(nodeId || '').trim();
+  const logLabel = options.logLabel || `节点 ${normalizedNodeId} 重新执行`;
+  const nodeStatuses = { ...(state.nodeStatuses || {}) };
+  const activeNodeIds = getNodeIdsForState(state);
+  const currentIndex = activeNodeIds.indexOf(normalizedNodeId);
+  const changedNodes = [];
+  if (currentIndex >= 0) {
+    for (let index = currentIndex + 1; index < activeNodeIds.length; index += 1) {
+      const downstreamNodeId = activeNodeIds[index];
+      if (nodeStatuses[downstreamNodeId] === 'pending') {
+        continue;
+      }
+      nodeStatuses[downstreamNodeId] = 'pending';
+      changedNodes.push(downstreamNodeId);
+    }
+  }
+  if (changedNodes.length) {
+    await setState({ nodeStatuses });
+    for (const changedNodeId of changedNodes) {
+      chrome.runtime.sendMessage({
+        type: 'NODE_STATUS_CHANGED',
+        payload: { nodeId: changedNodeId, status: 'pending' },
+      }).catch(() => { });
+    }
+    await addLog(`${logLabel}，已重置后续节点状态：${changedNodes.join(', ')}`, 'warn');
+  }
+}
+
 function clearStopRequest() {
   stopRequested = false;
 }
 
+function getRunningNodeIds(statuses = {}, stateOverride = null) {
+  const state = stateOverride || {};
+  const nodeStatuses = normalizeStatusMapForNodes(statuses, state);
+  if (workflowEngine?.getRunningNodeIds) {
+    return workflowEngine.getRunningNodeIds(nodeStatuses, state);
+  }
+  const merged = { ...DEFAULT_STATE.nodeStatuses, ...nodeStatuses };
+  return getNodeIdsForState(state).filter((nodeId) => merged[nodeId] === 'running');
+}
+
 function getRunningSteps(statuses = {}, stateOverride = null) {
   const state = stateOverride || {};
-  const merged = { ...DEFAULT_STATE.stepStatuses, ...statuses };
-  const activeStepIds = typeof getStepIdsForState === 'function'
-    ? getStepIdsForState(state)
-    : (typeof STEP_IDS !== 'undefined' && Array.isArray(STEP_IDS) && STEP_IDS.length
-      ? STEP_IDS
-      : Array.from({ length: typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10 }, (_, index) => index + 1));
-  return activeStepIds
-    .filter((step) => merged[step] === 'running')
+  return getRunningNodeIds(statuses, state)
+    .map((nodeId) => getStepIdByNodeIdForState(nodeId, state))
+    .filter((step) => Number.isInteger(step) && step > 0)
     .sort((a, b) => a - b);
 }
 
-function inferStoppedRecordStep(state = {}) {
-  const statuses = { ...DEFAULT_STATE.stepStatuses, ...(state?.stepStatuses || {}) };
-  const stepIds = typeof getStepIdsForState === 'function'
-    ? getStepIdsForState(state)
-    : (typeof STEP_IDS !== 'undefined' && Array.isArray(STEP_IDS) && STEP_IDS.length
-      ? STEP_IDS
-      : Array.from({ length: typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10 }, (_, index) => index + 1));
-
-  const runningSteps = stepIds.filter((step) => statuses[step] === 'running');
-  if (runningSteps.length) {
-    return runningSteps[0];
+function inferStoppedRecordNode(state = {}) {
+  const nodeStatuses = normalizeStatusMapForNodes(state?.nodeStatuses || {}, state);
+  const nodeIds = getNodeIdsForState(state);
+  const runningNode = nodeIds.find((nodeId) => nodeStatuses[nodeId] === 'running');
+  if (runningNode) {
+    return runningNode;
   }
 
-  const hasProgress = stepIds.some((step) => statuses[step] !== 'pending');
-  if (!hasProgress) {
-    return null;
-  }
-
-  for (const step of stepIds) {
-    const status = statuses[step] || 'pending';
-    if (!(status === 'completed' || status === 'manual_completed' || status === 'skipped')) {
-      return step;
+  const currentNodeId = String(state?.currentNodeId || '').trim();
+  if (currentNodeId && nodeIds.includes(currentNodeId)) {
+    const currentStatus = String(nodeStatuses[currentNodeId] || '').trim();
+    if (!isStepDoneStatus(currentStatus)) {
+      return currentNodeId;
     }
   }
 
-  return null;
+  const hasProgress = nodeIds.some((nodeId) => String(nodeStatuses[nodeId] || 'pending') !== 'pending');
+  if (!hasProgress) {
+    return '';
+  }
+
+  return nodeIds.find((nodeId) => !isStepDoneStatus(nodeStatuses[nodeId] || 'pending')) || '';
+}
+
+function inferStoppedRecordStep(state = {}) {
+  const nodeId = inferStoppedRecordNode(state);
+  return nodeId ? getStepIdByNodeIdForState(nodeId, state) : null;
 }
 
 function resolveAccountRunRecordStatusForStop(status, state = {}) {
   const normalizedStatus = String(status || '').trim().toLowerCase();
   if (normalizedStatus === 'stopped') {
-    const inferredStep = inferStoppedRecordStep(state);
-    if (Number.isInteger(inferredStep) && inferredStep > 0) {
-      return `step${inferredStep}_stopped`;
+    const inferredNodeId = inferStoppedRecordNode(state);
+    if (inferredNodeId) {
+      return `node:${inferredNodeId}:stopped`;
     }
   }
   return status;
+}
+
+function extractStoppedNodeFromRecordStatus(status = '') {
+  const match = String(status || '').trim().match(/^node:([^:]+):stopped$/i);
+  return match ? String(match[1] || '').trim() : '';
 }
 
 function extractStoppedStepFromRecordStatus(status = '') {
@@ -7645,6 +8888,17 @@ function extractStoppedStepFromRecordStatus(status = '') {
 
 function resolveAccountRunRecordReasonForStop(status, reason = '') {
   const text = String(reason || '').trim();
+  const stoppedNodeId = extractStoppedNodeFromRecordStatus(status);
+  if (stoppedNodeId) {
+    if (!text || text === STOP_ERROR_MESSAGE || /^流程已被用户停止。?$/.test(text)) {
+      return `节点 ${stoppedNodeId} 已被用户停止。`;
+    }
+    if (/流程尚未完成/.test(text) || /已使用(?:邮箱|手机号)/.test(text)) {
+      return text.replace(/^步骤\s*\d+/, `节点 ${stoppedNodeId}`);
+    }
+    return text;
+  }
+
   const stoppedStep = extractStoppedStepFromRecordStatus(status);
 
   if (!stoppedStep) {
@@ -7910,6 +9164,30 @@ async function launchAutoRunTimerPlan(trigger = 'alarm', options = {}) {
       return false;
     }
 
+    if (plan.kind === AUTO_RUN_TIMER_KIND_SCHEDULED_START) {
+      const autoRunStartValidation = typeof validateAutoRunStartState === 'function'
+        ? validateAutoRunStartState(state, { state })
+        : { ok: true, errors: [] };
+      if (autoRunStartValidation?.ok === false) {
+        const validationMessage = autoRunStartValidation.errors?.[0]?.message || '当前设置不支持启动自动流程。';
+        await clearAutoRunTimerAlarm();
+        await broadcastAutoRunStatus('idle', {
+          currentRun: 0,
+          totalRuns: 1,
+          attemptRun: 0,
+        }, {
+          autoRunRoundSummaries: [],
+          autoRunTimerPlan: null,
+          scheduledAutoRunPlan: null,
+        });
+        await addLog(`自动运行计划已取消：${validationMessage}`, 'error');
+        if (trigger === 'manual') {
+          throw new Error(validationMessage);
+        }
+        return false;
+      }
+    }
+
     await clearAutoRunTimerAlarm();
     if (plan.autoRunSessionId && !isCurrentAutoRunSessionId(plan.autoRunSessionId)) {
       return false;
@@ -8100,55 +9378,52 @@ async function ensureManualInteractionAllowed(actionLabel) {
   return state;
 }
 
-async function skipStep(step) {
+async function skipNode(nodeId) {
   const state = await ensureManualInteractionAllowed('跳过步骤');
-  const activeStepIds = typeof getStepIdsForState === 'function'
-    ? getStepIdsForState(state)
-    : (typeof STEP_IDS !== 'undefined' && Array.isArray(STEP_IDS) && STEP_IDS.length
-      ? STEP_IDS
-      : Array.from({ length: typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10 }, (_, index) => index + 1));
+  const normalizedNodeId = String(nodeId || '').trim();
+  const activeNodeIds = getNodeIdsForState(state);
 
-  if (!Number.isInteger(step) || !activeStepIds.includes(step)) {
-    throw new Error(`无效步骤：${step}`);
+  if (!normalizedNodeId || !activeNodeIds.includes(normalizedNodeId)) {
+    throw new Error(`无效节点：${normalizedNodeId || nodeId}`);
   }
 
-  const statuses = { ...(state.stepStatuses || {}) };
-  const currentStatus = statuses[step];
+  const statuses = normalizeStatusMapForNodes(state.nodeStatuses || {}, state);
+  const currentStatus = statuses[normalizedNodeId];
   if (currentStatus === 'running') {
-    throw new Error(`步骤 ${step} 正在运行中，不能跳过。`);
+    throw new Error(`节点 ${normalizedNodeId} 正在运行中，不能跳过。`);
   }
   if (isStepDoneStatus(currentStatus)) {
-    throw new Error(`步骤 ${step} 已完成，无需再跳过。`);
+    throw new Error(`节点 ${normalizedNodeId} 已完成，无需再跳过。`);
   }
 
-  const currentIndex = activeStepIds.indexOf(step);
+  const currentIndex = activeNodeIds.indexOf(normalizedNodeId);
   if (currentIndex > 0) {
-    const prevStep = activeStepIds[currentIndex - 1];
-    const prevStatus = statuses[prevStep];
+    const prevNodeId = activeNodeIds[currentIndex - 1];
+    const prevStatus = statuses[prevNodeId];
     if (!isStepDoneStatus(prevStatus)) {
-      throw new Error(`请先完成步骤 ${prevStep}，再跳过步骤 ${step}。`);
+      throw new Error(`请先完成节点 ${prevNodeId}，再跳过节点 ${normalizedNodeId}。`);
     }
   }
 
-  await setStepStatus(step, 'skipped');
-  await addLog(`步骤 ${step} 已跳过`, 'warn');
+  await setNodeStatus(normalizedNodeId, 'skipped');
+  await addLog(`节点 ${normalizedNodeId} 已跳过`, 'warn');
 
-  if (step === 1) {
+  if (normalizedNodeId === 'open-chatgpt') {
     const latestState = await getState();
-    const skippedSteps = [];
-    for (let linkedStep = 2; linkedStep <= 5; linkedStep += 1) {
-      const linkedStatus = latestState.stepStatuses?.[linkedStep];
+    const skippedNodes = [];
+    for (const linkedNodeId of ['submit-signup-email', 'fill-password', 'fetch-signup-code', 'fill-profile']) {
+      const linkedStatus = latestState.nodeStatuses?.[linkedNodeId];
       if (!isStepDoneStatus(linkedStatus) && linkedStatus !== 'running') {
-        await setStepStatus(linkedStep, 'skipped');
-        skippedSteps.push(linkedStep);
+        await setNodeStatus(linkedNodeId, 'skipped');
+        skippedNodes.push(linkedNodeId);
       }
     }
-    if (skippedSteps.length) {
-      await addLog(`步骤 1 已跳过，步骤 ${skippedSteps.join('、')} 也已同时跳过。`, 'warn');
+    if (skippedNodes.length) {
+      await addLog(`节点 open-chatgpt 已跳过，节点 ${skippedNodes.join('、')} 也已同时跳过。`, 'warn');
     }
   }
 
-  return { ok: true, step, status: 'skipped' };
+  return { ok: true, nodeId: normalizedNodeId, status: 'skipped' };
 }
 
 function throwIfStopped(error = null) {
@@ -8278,6 +9553,34 @@ async function handleStepData(step, payload) {
     return messageRouter.handleStepData(step, payload);
   }
 
+  function shouldPreservePhoneIdentityForStepEmailPayload(state = {}, stepPayload = {}) {
+    if (String(stepPayload.accountIdentifierType || '').trim().toLowerCase() === 'email') {
+      return false;
+    }
+    return Boolean(
+      String(state.signupPhoneNumber || '').trim()
+      || (String(state.accountIdentifierType || '').trim().toLowerCase() === 'phone'
+        && String(state.accountIdentifier || '').trim())
+      || state.signupPhoneActivation
+      || state.signupPhoneCompletedActivation
+    );
+  }
+
+  async function persistStepEmailPayload(email, stepPayload = {}, source = 'step_identity') {
+    if (!email) {
+      return;
+    }
+    const currentState = await getState();
+    if (shouldPreservePhoneIdentityForStepEmailPayload(currentState, stepPayload)) {
+      await persistRegistrationEmailState(currentState, email, {
+        source,
+        preserveAccountIdentity: true,
+      });
+      return;
+    }
+    await setEmailState(email);
+  }
+
   switch (step) {
     case 1: {
       const updates = {};
@@ -8288,6 +9591,9 @@ async function handleStepData(step, payload) {
       if (payload.sub2apiSessionId !== undefined) updates.sub2apiSessionId = payload.sub2apiSessionId || null;
       if (payload.sub2apiOAuthState !== undefined) updates.sub2apiOAuthState = payload.sub2apiOAuthState || null;
       if (payload.sub2apiGroupId !== undefined) updates.sub2apiGroupId = payload.sub2apiGroupId || null;
+      if (payload.sub2apiGroupIds !== undefined) updates.sub2apiGroupIds = Array.isArray(payload.sub2apiGroupIds)
+        ? payload.sub2apiGroupIds
+        : [];
       if (payload.sub2apiDraftName !== undefined) updates.sub2apiDraftName = payload.sub2apiDraftName || null;
       if (payload.sub2apiProxyId !== undefined) updates.sub2apiProxyId = payload.sub2apiProxyId || null;
       if (payload.cpaOAuthState !== undefined) updates.cpaOAuthState = payload.cpaOAuthState || null;
@@ -8303,8 +9609,8 @@ async function handleStepData(step, payload) {
       break;
     }
     case 2:
-      if (payload.email) await setEmailState(payload.email);
-      if (payload.accountIdentifierType || payload.accountIdentifier || payload.signupPhoneNumber || payload.signupPhoneActivation) {
+      await persistStepEmailPayload(payload.email, payload, 'step2_identity');
+      if (!payload.email && (payload.accountIdentifierType || payload.accountIdentifier || payload.signupPhoneNumber || payload.signupPhoneActivation)) {
         await setState({
           accountIdentifierType: payload.accountIdentifierType || null,
           accountIdentifier: String(payload.accountIdentifier || '').trim(),
@@ -8314,24 +9620,26 @@ async function handleStepData(step, payload) {
       }
       if (payload.skippedPasswordStep) {
         const latestState = await getState();
-        const step3Status = latestState.stepStatuses?.[3];
-        if (step3Status !== 'running' && step3Status !== 'completed' && step3Status !== 'manual_completed') {
-          await setStepStatus(3, 'skipped');
+        const step3NodeId = getNodeIdByStepForState(3, latestState);
+        const step3Status = step3NodeId ? latestState.nodeStatuses?.[step3NodeId] : '';
+        if (step3NodeId && step3Status !== 'running' && step3Status !== 'completed' && step3Status !== 'manual_completed') {
+          await setNodeStatus(step3NodeId, 'skipped');
           const identityLabel = payload.accountIdentifierType === 'phone' ? '手机号' : '邮箱';
           await addLog(`步骤 2：提交${identityLabel}后页面直接进入验证码页，已自动跳过步骤 3。`, 'warn');
         }
       }
       break;
     case 3:
-      if (payload.email) await setEmailState(payload.email);
+      await persistStepEmailPayload(payload.email, payload, 'step3_identity');
       if (payload.signupVerificationRequestedAt) {
         await setState({ signupVerificationRequestedAt: payload.signupVerificationRequestedAt });
       }
       if (payload.skipProfileStep) {
         const latestState = await getState();
-        const step5Status = latestState.stepStatuses?.[5];
-        if (step5Status !== 'running' && step5Status !== 'completed' && step5Status !== 'manual_completed') {
-          await setStepStatus(5, 'skipped');
+        const step5NodeId = getNodeIdByStepForState(5, latestState);
+        const step5Status = step5NodeId ? latestState.nodeStatuses?.[step5NodeId] : '';
+        if (step5NodeId && step5Status !== 'running' && step5Status !== 'completed' && step5Status !== 'manual_completed') {
+          await setNodeStatus(step5NodeId, 'skipped');
           await addLog('步骤 3：页面已直接进入已登录态，已自动跳过步骤 5。', 'warn');
         }
       }
@@ -8340,6 +9648,15 @@ async function handleStepData(step, payload) {
       }
       break;
     case 7:
+      if (payload.accountIdentifierType || payload.accountIdentifier || payload.signupPhoneNumber || payload.signupPhoneActivation || payload.signupPhoneCompletedActivation) {
+        await setState({
+          accountIdentifierType: payload.accountIdentifierType || null,
+          accountIdentifier: String(payload.accountIdentifier || '').trim(),
+          signupPhoneNumber: String(payload.signupPhoneNumber || '').trim(),
+          signupPhoneActivation: payload.signupPhoneActivation || null,
+          signupPhoneCompletedActivation: payload.signupPhoneCompletedActivation || null,
+        });
+      }
       if (payload.loginVerificationRequestedAt) {
         await setState({ loginVerificationRequestedAt: payload.loginVerificationRequestedAt });
       }
@@ -8384,50 +9701,77 @@ async function handleStepData(step, payload) {
   }
 }
 
+async function handleNodeData(nodeId, payload) {
+  const state = await getState();
+  const step = getStepIdByNodeIdForState(nodeId, state);
+  if (!Number.isInteger(step) || step <= 0) {
+    return;
+  }
+  return handleStepData(step, payload);
+}
+
 // ============================================================
 // Step Completion Waiting
 // ============================================================
 
-// Map of step -> { resolve, reject } for waiting on step completion
+// Map of nodeId -> { resolve, reject } for waiting on node completion
+const nodeWaiters = new Map();
+// Legacy boundary waiters are kept only for callers that still pass a display step.
 const stepWaiters = new Map();
 let resumeWaiter = null;
 const AUTO_RUN_SIGNAL_COMPLETION_TIMEOUT_MS = 120000;
+const AUTO_RUN_STEP_IDLE_LOG_TIMEOUT_MS = 5 * 60 * 1000;
+const AUTO_RUN_STEP_IDLE_LOG_CHECK_INTERVAL_MS = 5000;
+const AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS = 3;
+const AUTO_RUN_STEP_IDLE_RESTART_ERROR_PREFIX = 'AUTO_RUN_STEP_IDLE_RESTART::';
 const AUTO_RUN_BACKGROUND_COMPLETED_STEPS = new Set([1, 2, 4, 6, 7, 8, 9]);
 const STEP_COMPLETION_SIGNAL_STEPS = new Set([3, 5, 10, 12]);
 const AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS = new Set([
   'open-chatgpt',
   'submit-signup-email',
   'fetch-signup-code',
-  'clear-login-cookies',
+  'wait-registration-success',
   'plus-checkout-create',
   'plus-checkout-billing',
   'paypal-approve',
-  'gopay-subscription-confirm',
   'plus-checkout-return',
   'oauth-login',
   'fetch-login-code',
+  'post-login-phone-verification',
+  'bind-email',
+  'fetch-bind-email-code',
+  'relogin-bound-email',
+  'fetch-bound-email-login-code',
+  'post-bound-email-phone-verification',
   'confirm-oauth',
 ]);
 const STEP_COMPLETION_SIGNAL_STEP_KEYS = new Set([
   'fill-password',
   'fill-profile',
+  'gopay-subscription-confirm',
   'platform-verify',
 ]);
-const STEP_COMPLETION_SIGNAL_TIMEOUTS_BY_STEP_KEY = new Map();
+const STEP_COMPLETION_SIGNAL_TIMEOUTS_BY_STEP_KEY = new Map([
+  ['fill-profile', 150000],
+  ['gopay-subscription-confirm', 1800000],
+]);
 const AUTO_RUN_PRE_EXECUTION_DELAYS_BY_STEP_KEY = new Map([
   ['plus-checkout-create', 20000],
 ]);
 
-function waitForStepComplete(step, timeoutMs = 120000) {
+function waitForNodeComplete(nodeId, timeoutMs = 120000) {
   throwIfStopped();
-  const normalizedStep = Number(step);
-  const existingWaiter = stepWaiters.get(normalizedStep);
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) {
+    return Promise.reject(new Error('等待节点完成失败：缺少 nodeId。'));
+  }
+  const existingWaiter = nodeWaiters.get(normalizedNodeId);
   if (existingWaiter?.promise) {
-    console.log(LOG_PREFIX, `[waitForStepComplete] reuse existing waiter for step ${normalizedStep}`);
+    console.log(LOG_PREFIX, `[waitForNodeComplete] reuse existing waiter for node ${normalizedNodeId}`);
     return existingWaiter.promise;
   }
 
-  console.log(LOG_PREFIX, `[waitForStepComplete] register step ${normalizedStep}, timeout=${timeoutMs}ms`);
+  console.log(LOG_PREFIX, `[waitForNodeComplete] register node ${normalizedNodeId}, timeout=${timeoutMs}ms`);
   const waiter = {
     promise: null,
     resolve: null,
@@ -8436,31 +9780,41 @@ function waitForStepComplete(step, timeoutMs = 120000) {
 
   waiter.promise = new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      if (stepWaiters.get(normalizedStep) === waiter) {
-        stepWaiters.delete(normalizedStep);
+      if (nodeWaiters.get(normalizedNodeId) === waiter) {
+        nodeWaiters.delete(normalizedNodeId);
       }
-      console.warn(LOG_PREFIX, `[waitForStepComplete] timeout for step ${normalizedStep} after ${timeoutMs}ms`);
-      reject(new Error(`步骤 ${normalizedStep} 等待超时（>${timeoutMs / 1000} 秒）`));
+      console.warn(LOG_PREFIX, `[waitForNodeComplete] timeout for node ${normalizedNodeId} after ${timeoutMs}ms`);
+      reject(new Error(`节点 ${normalizedNodeId} 等待超时（>${timeoutMs / 1000} 秒）`));
     }, timeoutMs);
 
     waiter.resolve = (data) => {
       clearTimeout(timer);
-      if (stepWaiters.get(normalizedStep) === waiter) {
-        stepWaiters.delete(normalizedStep);
+      if (nodeWaiters.get(normalizedNodeId) === waiter) {
+        nodeWaiters.delete(normalizedNodeId);
       }
       resolve(data);
     };
     waiter.reject = (err) => {
       clearTimeout(timer);
-      if (stepWaiters.get(normalizedStep) === waiter) {
-        stepWaiters.delete(normalizedStep);
+      if (nodeWaiters.get(normalizedNodeId) === waiter) {
+        nodeWaiters.delete(normalizedNodeId);
       }
       reject(err);
     };
   });
 
-  stepWaiters.set(normalizedStep, waiter);
+  nodeWaiters.set(normalizedNodeId, waiter);
   return waiter.promise;
+}
+
+function waitForStepComplete(step, timeoutMs = 120000) {
+  return getState().then((state) => {
+    const nodeId = getNodeIdByStepForState(step, state);
+    if (!nodeId) {
+      throw new Error(`等待步骤 ${step} 完成失败：当前 flow 中未找到对应节点。`);
+    }
+    return waitForNodeComplete(nodeId, timeoutMs);
+  });
 }
 
 function getStepExecutionKeyForState(step, state = {}) {
@@ -8470,88 +9824,136 @@ function getStepExecutionKeyForState(step, state = {}) {
   return String(getStepDefinitionForState(step, state)?.key || '').trim();
 }
 
+function getNodeExecutionKeyForState(nodeId, state = {}) {
+  return String(getNodeDefinitionForState(nodeId, state)?.executeKey || nodeId || '').trim();
+}
+
+function doesNodeUseBackgroundCompletion(nodeId, state = {}) {
+  const executionKey = getNodeExecutionKeyForState(nodeId, state);
+  return AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS.has(executionKey || nodeId);
+}
+
 function doesStepUseBackgroundCompletion(step, state = {}) {
-  const stepKey = getStepExecutionKeyForState(step, state);
-  if (stepKey) {
-    return AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS.has(stepKey);
-  }
-  return AUTO_RUN_BACKGROUND_COMPLETED_STEPS.has(step);
+  return doesNodeUseBackgroundCompletion(getNodeIdByStepForState(step, state), state);
+}
+
+function doesNodeUseCompletionSignal(nodeId, state = {}) {
+  const executionKey = getNodeExecutionKeyForState(nodeId, state);
+  return STEP_COMPLETION_SIGNAL_STEP_KEYS.has(executionKey || nodeId);
 }
 
 function doesStepUseCompletionSignal(step, state = {}) {
-  const stepKey = getStepExecutionKeyForState(step, state);
-  if (stepKey) {
-    return STEP_COMPLETION_SIGNAL_STEP_KEYS.has(stepKey);
-  }
-  return STEP_COMPLETION_SIGNAL_STEPS.has(step);
+  return doesNodeUseCompletionSignal(getNodeIdByStepForState(step, state), state);
+}
+
+function getAutoRunPreExecutionDelayMsForNode(nodeId, state = {}) {
+  const executionKey = getNodeExecutionKeyForState(nodeId, state);
+  return AUTO_RUN_PRE_EXECUTION_DELAYS_BY_STEP_KEY.get(executionKey || nodeId) || 0;
 }
 
 function getAutoRunPreExecutionDelayMs(step, state = {}) {
-  const stepKey = getStepExecutionKeyForState(step, state);
-  if (stepKey) {
-    return AUTO_RUN_PRE_EXECUTION_DELAYS_BY_STEP_KEY.get(stepKey) || 0;
-  }
-  return 0;
+  return getAutoRunPreExecutionDelayMsForNode(getNodeIdByStepForState(step, state), state);
+}
+
+function getNodeCompletionSignalTimeoutMs(nodeId, state = {}) {
+  const executionKey = getNodeExecutionKeyForState(nodeId, state);
+  return STEP_COMPLETION_SIGNAL_TIMEOUTS_BY_STEP_KEY.get(executionKey || nodeId) || AUTO_RUN_SIGNAL_COMPLETION_TIMEOUT_MS;
 }
 
 function getStepCompletionSignalTimeoutMs(step, state = {}) {
-  const stepKey = getStepExecutionKeyForState(step, state);
-  if (stepKey) {
-    return STEP_COMPLETION_SIGNAL_TIMEOUTS_BY_STEP_KEY.get(stepKey) || AUTO_RUN_SIGNAL_COMPLETION_TIMEOUT_MS;
-  }
-  return AUTO_RUN_SIGNAL_COMPLETION_TIMEOUT_MS;
+  return getNodeCompletionSignalTimeoutMs(getNodeIdByStepForState(step, state), state);
+}
+
+function notifyNodeComplete(nodeId, payload) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  const waiter = nodeWaiters.get(normalizedNodeId);
+  console.log(LOG_PREFIX, `[notifyNodeComplete] node ${normalizedNodeId}, hasWaiter=${Boolean(waiter)}`);
+  if (waiter) waiter.resolve(payload);
 }
 
 function notifyStepComplete(step, payload) {
+  getState().then((state) => {
+    const nodeId = getNodeIdByStepForState(step, state);
+    if (nodeId) {
+      notifyNodeComplete(nodeId, payload);
+    }
+  }).catch(() => {});
   const waiter = stepWaiters.get(step);
   console.log(LOG_PREFIX, `[notifyStepComplete] step ${step}, hasWaiter=${Boolean(waiter)}`);
   if (waiter) waiter.resolve(payload);
 }
 
+function notifyNodeError(nodeId, error) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  const waiter = nodeWaiters.get(normalizedNodeId);
+  console.warn(LOG_PREFIX, `[notifyNodeError] node ${normalizedNodeId}, hasWaiter=${Boolean(waiter)}, error=${error}`);
+  if (waiter) waiter.reject(new Error(error));
+}
+
 function notifyStepError(step, error) {
+  getState().then((state) => {
+    const nodeId = getNodeIdByStepForState(step, state);
+    if (nodeId) {
+      notifyNodeError(nodeId, error);
+    }
+  }).catch(() => {});
   const waiter = stepWaiters.get(step);
   console.warn(LOG_PREFIX, `[notifyStepError] step ${step}, hasWaiter=${Boolean(waiter)}, error=${error}`);
   if (waiter) waiter.reject(new Error(error));
 }
 
 async function runCompletedStepSideEffects(step, payload, completionState, lastStepId) {
-  await handleStepData(step, payload);
-  if (step === lastStepId) {
+  const state = await getState();
+  const nodeId = getNodeIdByStepForState(step, state);
+  const lastNodeId = getNodeIdByStepForState(lastStepId, state);
+  return runCompletedNodeSideEffects(nodeId, payload, completionState, lastNodeId);
+}
+
+async function reportCompletedStepSideEffectError(step, error) {
+  const state = await getState();
+  return reportCompletedNodeSideEffectError(getNodeIdByStepForState(step, state), error);
+}
+
+async function runCompletedNodeSideEffects(nodeId, payload, completionState, lastNodeId) {
+  await handleNodeData(nodeId, payload);
+  if (nodeId === lastNodeId) {
     await appendAndBroadcastAccountRunRecord('success', completionState);
   }
 }
 
-async function reportCompletedStepSideEffectError(step, error) {
+async function reportCompletedNodeSideEffectError(nodeId, error) {
   const message = getErrorMessage(error);
-  console.warn(LOG_PREFIX, `[completeStepFromBackground] step ${step} post-completion side effect failed:`, error);
-  await addLog(`已完成，但完成后的收尾处理失败：${message}`, 'warn', { step });
+  console.warn(LOG_PREFIX, `[completeNodeFromBackground] node ${nodeId} post-completion side effect failed:`, error);
+  await addLog(`已完成，但完成后的收尾处理失败：${message}`, 'warn', { nodeId });
 }
 
-async function completeStepFromBackground(step, payload = {}) {
+async function completeNodeFromBackground(nodeId, payload = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) {
+    throw new Error('completeNodeFromBackground 缺少 nodeId。');
+  }
   if (stopRequested) {
-    await setStepStatus(step, 'stopped');
-    await appendManualAccountRunRecordIfNeeded(`step${step}_stopped`, null, STOP_ERROR_MESSAGE);
-    notifyStepError(step, STOP_ERROR_MESSAGE);
+    await setNodeStatus(normalizedNodeId, 'stopped');
+    await appendManualAccountRunRecordIfNeeded(`node:${normalizedNodeId}:stopped`, null, STOP_ERROR_MESSAGE);
+    notifyNodeError(normalizedNodeId, STOP_ERROR_MESSAGE);
     return;
   }
 
   const latestState = await getState();
-  const lastStepId = typeof getLastStepIdForState === 'function'
-    ? getLastStepIdForState(latestState)
-    : (typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10);
-  const completionState = step === lastStepId ? latestState : null;
-  await setStepStatus(step, 'completed');
-  await addLog('已完成', 'ok', { step });
+  const lastNodeId = getLastNodeIdForState(latestState);
+  const completionState = normalizedNodeId === lastNodeId ? latestState : null;
+  await setNodeStatus(normalizedNodeId, 'completed');
+  await addLog('已完成', 'ok', { nodeId: normalizedNodeId });
 
-  if (step === lastStepId) {
-    notifyStepComplete(step, payload);
-    void runCompletedStepSideEffects(step, payload, completionState, lastStepId)
-      .catch((error) => reportCompletedStepSideEffectError(step, error));
+  if (normalizedNodeId === lastNodeId) {
+    notifyNodeComplete(normalizedNodeId, payload);
+    void runCompletedNodeSideEffects(normalizedNodeId, payload, completionState, lastNodeId)
+      .catch((error) => reportCompletedNodeSideEffectError(normalizedNodeId, error));
     return;
   }
 
-  await runCompletedStepSideEffects(step, payload, completionState, lastStepId);
-  notifyStepComplete(step, payload);
+  await runCompletedNodeSideEffects(normalizedNodeId, payload, completionState, lastNodeId);
+  notifyNodeComplete(normalizedNodeId, payload);
 }
 
 async function appendManualAccountRunRecordIfNeeded(status, stateOverride = null, reason = '') {
@@ -8563,42 +9965,53 @@ async function appendManualAccountRunRecordIfNeeded(status, stateOverride = null
   return appendAndBroadcastAccountRunRecord(status, state, reason);
 }
 
-async function finalizeDeferredStepExecutionError(step, error) {
+async function finalizeDeferredNodeExecutionError(nodeId, error) {
   const latestState = await getState();
-  const currentStatus = latestState.stepStatuses?.[step];
+  const normalizedNodeId = String(nodeId || '').trim();
+  const currentStatus = latestState.nodeStatuses?.[normalizedNodeId];
   if (currentStatus === 'completed' || currentStatus === 'failed' || currentStatus === 'stopped') {
     return;
   }
 
   if (isStopError(error)) {
-    await setStepStatus(step, 'stopped');
-    await addLog('已被用户停止', 'warn', { step });
-    await appendManualAccountRunRecordIfNeeded(`step${step}_stopped`, latestState, getErrorMessage(error));
+    await setNodeStatus(normalizedNodeId, 'stopped');
+    await addLog('已被用户停止', 'warn', { nodeId: normalizedNodeId });
+    await appendManualAccountRunRecordIfNeeded(`node:${normalizedNodeId}:stopped`, latestState, getErrorMessage(error));
     return;
   }
 
-  await setStepStatus(step, 'failed');
-  await addLog(`失败：${getErrorMessage(error)}`, 'error', { step });
-  await appendManualAccountRunRecordIfNeeded(`step${step}_failed`, latestState, getErrorMessage(error));
+  await setNodeStatus(normalizedNodeId, 'failed');
+  await addLog(`失败：${getErrorMessage(error)}`, 'error', { nodeId: normalizedNodeId });
+  await appendManualAccountRunRecordIfNeeded(`node:${normalizedNodeId}:failed`, latestState, getErrorMessage(error));
 }
 
-async function executeStepViaCompletionSignal(step, timeoutMs = 0) {
+async function finalizeDeferredStepExecutionError(step, error) {
+  const latestState = await getState();
+  const nodeId = getNodeIdByStepForState(step, latestState);
+  if (!nodeId) {
+    return;
+  }
+  return finalizeDeferredNodeExecutionError(nodeId, error);
+}
+
+async function executeNodeViaCompletionSignal(nodeId, timeoutMs = 0) {
+  const normalizedNodeId = String(nodeId || '').trim();
   const executionState = await getState();
   const resolvedTimeoutMs = Number(timeoutMs) > 0
     ? timeoutMs
-    : getStepCompletionSignalTimeoutMs(step, executionState);
-  const completionResultPromise = waitForStepComplete(step, resolvedTimeoutMs).then(
+    : getNodeCompletionSignalTimeoutMs(normalizedNodeId, executionState);
+  const completionResultPromise = waitForNodeComplete(normalizedNodeId, resolvedTimeoutMs).then(
     payload => ({ ok: true, payload }),
     error => ({ ok: false, error }),
   );
 
   let executeError = null;
   try {
-    await executeStep(step, { deferRetryableTransportError: true });
+    await executeNode(normalizedNodeId, { deferRetryableTransportError: true });
   } catch (err) {
     executeError = err;
     if (isStopError(err) || !isRetryableContentScriptTransportError(err)) {
-      notifyStepError(step, getErrorMessage(err));
+      notifyNodeError(normalizedNodeId, getErrorMessage(err));
     }
   }
 
@@ -8607,7 +10020,7 @@ async function executeStepViaCompletionSignal(step, timeoutMs = 0) {
     if (executeError) {
       console.warn(
         LOG_PREFIX,
-        `[executeStepViaCompletionSignal] step ${step} completed after deferred execute error: ${getErrorMessage(executeError)}`
+        `[executeNodeViaCompletionSignal] node ${normalizedNodeId} completed after deferred execute error: ${getErrorMessage(executeError)}`
       );
     }
     return completionResult.payload;
@@ -8616,7 +10029,7 @@ async function executeStepViaCompletionSignal(step, timeoutMs = 0) {
   if (executeError && isRetryableContentScriptTransportError(executeError)) {
     const completionMessage = getErrorMessage(completionResult.error);
     if (/等待超时/.test(completionMessage)) {
-      await finalizeDeferredStepExecutionError(step, executeError);
+      await finalizeDeferredNodeExecutionError(normalizedNodeId, executeError);
       throw executeError;
     }
     throw completionResult.error;
@@ -8629,48 +10042,181 @@ async function executeStepViaCompletionSignal(step, timeoutMs = 0) {
   throw completionResult.error;
 }
 
-async function waitForRunningStepsToFinish(payload = {}) {
+async function executeStepViaCompletionSignal(step, timeoutMs = 0) {
+  const state = await getState();
+  const nodeId = getNodeIdByStepForState(step, state);
+  if (!nodeId) {
+    throw new Error(`执行步骤 ${step} 失败：当前 flow 中未找到对应节点。`);
+  }
+  return executeNodeViaCompletionSignal(nodeId, timeoutMs);
+}
+
+function getLatestLogTimestamp(logs = [], fallback = 0) {
+  if (!Array.isArray(logs) || !logs.length) {
+    return Number.isFinite(Number(fallback)) ? Number(fallback) : 0;
+  }
+  return logs.reduce((latest, entry) => {
+    const timestamp = Number(entry?.timestamp);
+    return Number.isFinite(timestamp) && timestamp > latest ? timestamp : latest;
+  }, Number.isFinite(Number(fallback)) ? Number(fallback) : 0);
+}
+
+function buildAutoRunNodeIdleRestartError(nodeId, idleMs = AUTO_RUN_STEP_IDLE_LOG_TIMEOUT_MS) {
+  const seconds = Math.max(1, Math.round((Number(idleMs) || AUTO_RUN_STEP_IDLE_LOG_TIMEOUT_MS) / 1000));
+  const normalizedNodeId = String(nodeId || '').trim();
+  const error = new Error(`${AUTO_RUN_STEP_IDLE_RESTART_ERROR_PREFIX}节点 ${normalizedNodeId} 已连续 ${seconds} 秒没有新日志，准备重新开始当前节点。`);
+  error.autoRunStepIdleRestart = true;
+  error.failedNodeId = normalizedNodeId;
+  return error;
+}
+
+function isAutoRunStepIdleRestartError(error) {
+  const message = String(typeof error === 'string' ? error : error?.message || '');
+  return Boolean(error?.autoRunStepIdleRestart) || message.startsWith(AUTO_RUN_STEP_IDLE_RESTART_ERROR_PREFIX);
+}
+
+function startAutoRunNodeIdleLogWatchdog(nodeId, options = {}) {
+  const idleTimeoutMs = Math.max(1000, Math.floor(Number(options.idleTimeoutMs) || AUTO_RUN_STEP_IDLE_LOG_TIMEOUT_MS));
+  const checkIntervalMs = Math.max(250, Math.min(idleTimeoutMs, Math.floor(Number(options.checkIntervalMs) || AUTO_RUN_STEP_IDLE_LOG_CHECK_INTERVAL_MS)));
+  const normalizedNodeId = String(nodeId || '').trim();
+  let cancelled = false;
+  let timer = null;
+  let lastActivityAt = Date.now();
+
+  const promise = new Promise((_, reject) => {
+    const schedule = () => {
+      if (cancelled) {
+        return;
+      }
+      const idleForMs = Math.max(0, Date.now() - lastActivityAt);
+      const delayMs = Math.max(50, Math.min(checkIntervalMs, idleTimeoutMs - idleForMs));
+      timer = setTimeout(check, delayMs);
+    };
+
+    const check = async () => {
+      if (cancelled) {
+        return;
+      }
+      try {
+        const state = await getState();
+        if (state?.plusManualConfirmationPending) {
+          lastActivityAt = Date.now();
+          schedule();
+          return;
+        }
+
+        const latestLogAt = getLatestLogTimestamp(state?.logs || [], lastActivityAt);
+        if (latestLogAt > lastActivityAt) {
+          lastActivityAt = latestLogAt;
+        }
+
+        const idleForMs = Date.now() - lastActivityAt;
+        if (idleForMs >= idleTimeoutMs) {
+          reject(buildAutoRunNodeIdleRestartError(normalizedNodeId, idleForMs));
+          return;
+        }
+      } catch (_err) {
+        // Watchdog read failures should not break the real step; retry the check.
+      }
+      schedule();
+    };
+
+    schedule();
+  });
+
+  return {
+    promise,
+    cancel() {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    },
+  };
+}
+
+async function runAutoNodeActionWithIdleLogWatchdog(nodeId, action, options = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  const executionPromise = Promise.resolve().then(action);
+  const watchdog = startAutoRunNodeIdleLogWatchdog(normalizedNodeId, options);
+  try {
+    return await Promise.race([
+      executionPromise,
+      watchdog.promise,
+    ]);
+  } catch (error) {
+    if (isAutoRunStepIdleRestartError(error)) {
+      void executionPromise.catch((lateError) => {
+        const lateMessage = getErrorMessage(lateError);
+        if (!lateMessage || isStopError(lateError) || isAutoRunStepIdleRestartError(lateError)) {
+          return;
+        }
+        addLog(`节点 ${normalizedNodeId}：无日志重开后收到原执行失败：${lateMessage}`, 'warn').catch(() => {});
+      });
+    }
+    throw error;
+  } finally {
+    watchdog.cancel();
+  }
+}
+
+async function executeNodeAndWaitWithAutoRunIdleLogWatchdog(nodeId, delayAfter = 2000, options = {}) {
+  return runAutoNodeActionWithIdleLogWatchdog(
+    nodeId,
+    () => executeNodeAndWait(nodeId, delayAfter),
+    options
+  );
+}
+
+async function waitForRunningNodesToFinish(payload = {}) {
   let currentState = await getState();
-  let runningSteps = getRunningSteps(currentState.stepStatuses, currentState);
-  if (!runningSteps.length) {
+  let runningNodes = getRunningNodeIds(currentState.nodeStatuses, currentState);
+  if (!runningNodes.length) {
     return currentState;
   }
 
-  await addLog(`自动继续：检测到步骤 ${runningSteps.join(', ')} 正在运行，等待完成后再继续自动流程...`, 'info');
+  await addLog(`自动继续：检测到节点 ${runningNodes.join(', ')} 正在运行，等待完成后再继续自动流程...`, 'info');
   await broadcastAutoRunStatus('waiting_step', payload);
 
-  while (runningSteps.length) {
+  while (runningNodes.length) {
     await sleepWithStop(250);
     currentState = await getState();
-    runningSteps = getRunningSteps(currentState.stepStatuses, currentState);
+    runningNodes = getRunningNodeIds(currentState.nodeStatuses, currentState);
   }
 
-  await addLog('自动继续：当前运行步骤已结束，准备按最新进度继续自动流程...', 'info');
+  await addLog('自动继续：当前运行节点已结束，准备按最新进度继续自动流程...', 'info');
   return currentState;
 }
 
-const AUTH_CHAIN_STEP_IDS = new Set([7, 8, 9, 10, 11, 12, 13]);
-const AUTH_CHAIN_STEP_KEYS = new Set([
+async function waitForRunningStepsToFinish(payload = {}) {
+  return waitForRunningNodesToFinish(payload);
+}
+
+const AUTH_CHAIN_NODE_IDS = new Set([
   'oauth-login',
   'fetch-login-code',
+  'post-login-phone-verification',
+  'bind-email',
+  'fetch-bind-email-code',
+  'relogin-bound-email',
+  'fetch-bound-email-login-code',
+  'post-bound-email-phone-verification',
   'confirm-oauth',
   'platform-verify',
 ]);
 let activeTopLevelAuthChainExecution = null;
 
-function isAuthChainStep(step, state = {}) {
-  const stepKey = typeof getStepDefinitionForState === 'function'
-    ? String(getStepDefinitionForState(step, state)?.key || '').trim()
-    : '';
-  if (stepKey && typeof AUTH_CHAIN_STEP_KEYS !== 'undefined') {
-    return AUTH_CHAIN_STEP_KEYS.has(stepKey);
-  }
-  return AUTH_CHAIN_STEP_IDS.has(Number(step));
+function isAuthChainNode(nodeId) {
+  return AUTH_CHAIN_NODE_IDS.has(String(nodeId || '').trim());
 }
 
-async function acquireTopLevelAuthChainExecution(step, state = {}) {
-  const normalizedStep = Number(step);
-  if (!isAuthChainStep(normalizedStep, state)) {
+function isAuthChainStep(step, state = {}) {
+  return isAuthChainNode(getNodeIdByStepForState(step, state));
+}
+
+async function acquireTopLevelAuthChainExecutionForNode(nodeId, state = {}) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!isAuthChainNode(normalizedNodeId)) {
     return {
       joined: false,
       release() {},
@@ -8680,7 +10226,7 @@ async function acquireTopLevelAuthChainExecution(step, state = {}) {
   if (activeTopLevelAuthChainExecution) {
     const activeExecution = activeTopLevelAuthChainExecution;
     await addLog(
-      `步骤 ${normalizedStep}：检测到步骤 ${activeExecution.step} 正在运行，本次请求将复用当前授权链，不再重复启动。`,
+      `节点 ${normalizedNodeId}：检测到节点 ${activeExecution.nodeId} 正在运行，本次请求将复用当前授权链，不再重复启动。`,
       'warn'
     );
     const result = await activeExecution.promise;
@@ -8698,7 +10244,7 @@ async function acquireTopLevelAuthChainExecution(step, state = {}) {
     settleExecution = (error = null) => resolve({ error });
   });
   const execution = {
-    step: normalizedStep,
+    nodeId: normalizedNodeId,
     promise,
   };
   activeTopLevelAuthChainExecution = execution;
@@ -8714,20 +10260,24 @@ async function acquireTopLevelAuthChainExecution(step, state = {}) {
   };
 }
 
-async function markRunningStepsStopped() {
+async function markRunningNodesStopped() {
   const state = await getState();
-  const runningSteps = getRunningSteps(state.stepStatuses, state);
+  const runningNodes = getRunningNodeIds(state.nodeStatuses, state);
 
-  for (const step of runningSteps) {
-    await setStepStatus(step, 'stopped');
+  for (const nodeId of runningNodes) {
+    await setNodeStatus(nodeId, 'stopped');
   }
+}
+
+async function markRunningStepsStopped() {
+  return markRunningNodesStopped();
 }
 
 async function requestStop(options = {}) {
   const { logMessage = '已收到停止请求，正在取消当前操作...' } = options;
   const state = await getState();
-  const runningSteps = getRunningSteps(state.stepStatuses, state);
-  const inferredStopStep = inferStoppedRecordStep(state);
+  const runningNodes = getRunningNodeIds(state.nodeStatuses, state);
+  const inferredStopNode = inferStoppedRecordNode(state);
   const timerPlan = getPendingAutoRunTimerPlan(state);
 
   if (timerPlan?.kind === AUTO_RUN_TIMER_KIND_SCHEDULED_START && !autoRunActive) {
@@ -8776,10 +10326,14 @@ async function requestStop(options = {}) {
   await addLog(logMessage, 'warn');
   await broadcastStopToContentScripts();
 
-  if (!runningSteps.length && Number.isInteger(inferredStopStep) && inferredStopStep > 0) {
+  if (!runningNodes.length && inferredStopNode) {
     await appendAndBroadcastAccountRunRecord('stopped', state, STOP_ERROR_MESSAGE);
   }
 
+  for (const waiter of nodeWaiters.values()) {
+    waiter.reject(new Error(STOP_ERROR_MESSAGE));
+  }
+  nodeWaiters.clear();
   for (const waiter of stepWaiters.values()) {
     waiter.reject(new Error(STOP_ERROR_MESSAGE));
   }
@@ -8803,7 +10357,7 @@ async function requestStop(options = {}) {
     resumeWaiter = null;
   }
 
-  await markRunningStepsStopped();
+  await markRunningNodesStopped();
   autoRunActive = false;
   await broadcastAutoRunStatus('stopped', {
     currentRun: autoRunCurrentRun,
@@ -8827,11 +10381,16 @@ const STEP_FETCH_NETWORK_RETRY_POLICIES = new Map([
   [9, { maxAttempts: 3, cooldownMs: 12000 }],
 ]);
 
-async function executeStep(step, options = {}) {
+async function executeNode(nodeId, options = {}) {
   const { deferRetryableTransportError = false } = options;
-  console.log(LOG_PREFIX, `Executing step ${step}`);
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) {
+    throw new Error('executeNode 缺少 nodeId。');
+  }
+  console.log(LOG_PREFIX, `Executing node ${normalizedNodeId}`);
   let state = await getState();
-  const authChainClaim = await acquireTopLevelAuthChainExecution(step, state);
+  const step = getStepIdByNodeIdForState(normalizedNodeId, state);
+  const authChainClaim = await acquireTopLevelAuthChainExecutionForNode(normalizedNodeId, state);
   if (authChainClaim.joined) {
     return;
   }
@@ -8839,8 +10398,8 @@ async function executeStep(step, options = {}) {
   let executionError = null;
   throwIfStopped();
   try {
-    await setStepStatus(step, 'running');
-    await addLog('开始执行', 'info', { step });
+    await setNodeStatus(normalizedNodeId, 'running');
+    await addLog('开始执行', 'info', { nodeId: normalizedNodeId });
     await humanStepDelay();
     const fetchRetryPolicy = typeof getStepFetchNetworkRetryPolicy === 'function'
       ? getStepFetchNetworkRetryPolicy(step)
@@ -8857,25 +10416,27 @@ async function executeStep(step, options = {}) {
       state = await getState();
 
       // Set flow start time on first step
-      if (step === 1 && !state.flowStartTime) {
+      if (normalizedNodeId === 'open-chatgpt' && !state.flowStartTime) {
         await setState({ flowStartTime: Date.now() });
       }
 
       const activeStepRegistry = getStepRegistryForState(state);
-      if (!activeStepRegistry?.getStepDefinition?.(step)) {
-        throw new Error(`当前模式下不存在步骤：${step}`);
+      if (!activeStepRegistry?.getNodeDefinition?.(normalizedNodeId)) {
+        throw new Error(`当前模式下不存在节点：${normalizedNodeId}`);
       }
 
       try {
-        await activeStepRegistry.executeStep(step, {
+        await activeStepRegistry.executeNode(normalizedNodeId, {
           ...state,
           visibleStep: Number(step),
+          nodeId: normalizedNodeId,
+          nodeDefinition: getNodeDefinitionForState(normalizedNodeId, state),
           stepDefinition: getStepDefinitionForState(step, state),
         });
 
         if (attempt > 1) {
           await addLog(
-            `[NETWORK_FETCH_RETRY] 步骤 ${step}：网络请求异常已恢复，当前重试成功（${attempt}/${fetchRetryPolicy?.maxAttempts || attempt}）。`,
+            `[NETWORK_FETCH_RETRY] 节点 ${normalizedNodeId}：网络请求异常已恢复，当前重试成功（${attempt}/${fetchRetryPolicy?.maxAttempts || attempt}）。`,
             'ok'
           );
         }
@@ -8889,7 +10450,7 @@ async function executeStep(step, options = {}) {
         const cooldownMs = fetchRetryPolicy.cooldownMs;
         const cooldownSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
         await addLog(
-          `[NETWORK_FETCH_RETRY] 步骤 ${step}：检测到网络请求异常（${getErrorMessage(attemptError)}），${cooldownSeconds} 秒后重试（${nextAttempt}/${fetchRetryPolicy.maxAttempts}）。`,
+          `[NETWORK_FETCH_RETRY] 节点 ${normalizedNodeId}：检测到网络请求异常（${getErrorMessage(attemptError)}），${cooldownSeconds} 秒后重试（${nextAttempt}/${fetchRetryPolicy.maxAttempts}）。`,
           'warn'
         );
         if (cooldownMs > 0) {
@@ -8902,9 +10463,9 @@ async function executeStep(step, options = {}) {
     executionError = err;
     const errorState = await getState();
     if (isStopError(err)) {
-      await setStepStatus(step, 'stopped');
-      await addLog('已被用户停止', 'warn', { step });
-      await appendManualAccountRunRecordIfNeeded(`step${step}_stopped`, errorState, getErrorMessage(err));
+      await setNodeStatus(normalizedNodeId, 'stopped');
+      await addLog('已被用户停止', 'warn', { nodeId: normalizedNodeId });
+      await appendManualAccountRunRecordIfNeeded(`node:${normalizedNodeId}:stopped`, errorState, getErrorMessage(err));
       throw err;
     }
     if (isTerminalSecurityBlockedError(err)) {
@@ -8915,14 +10476,14 @@ async function executeStep(step, options = {}) {
       await handleBrowserSwitchRequired(err);
       throw new Error(STOP_ERROR_MESSAGE);
     }
-    if (!(deferRetryableTransportError && doesStepUseCompletionSignal(step, errorState) && isRetryableContentScriptTransportError(err))) {
-      await setStepStatus(step, 'failed');
-      await addLog(`失败：${err.message}`, 'error', { step });
-      await appendManualAccountRunRecordIfNeeded(`step${step}_failed`, errorState, getErrorMessage(err));
+    if (!(deferRetryableTransportError && doesNodeUseCompletionSignal(normalizedNodeId, errorState) && isRetryableContentScriptTransportError(err))) {
+      await setNodeStatus(normalizedNodeId, 'failed');
+      await addLog(`失败：${err.message}`, 'error', { nodeId: normalizedNodeId });
+      await appendManualAccountRunRecordIfNeeded(`node:${normalizedNodeId}:failed`, errorState, getErrorMessage(err));
     } else {
       console.warn(
         LOG_PREFIX,
-        `[executeStep] deferring retryable transport error for step ${step}: ${getErrorMessage(err)}`
+        `[executeNode] deferring retryable transport error for node ${normalizedNodeId}: ${getErrorMessage(err)}`
       );
     }
     throw err;
@@ -8931,57 +10492,66 @@ async function executeStep(step, options = {}) {
   }
 }
 
-/**
- * Execute a step and wait for it to complete before returning.
- * @param {number} step
- * @param {number} delayAfter - ms to wait after completion (for page transitions)
- */
-async function executeStepAndWait(step, delayAfter = 2000) {
+async function executeNodeAndWait(nodeId, delayAfter = 2000) {
   throwIfStopped();
+  const normalizedNodeId = String(nodeId || '').trim();
+  if (!normalizedNodeId) {
+    throw new Error('executeNodeAndWait 缺少 nodeId。');
+  }
+  let completionPayload = null;
 
   const delaySeconds = normalizeAutoStepDelaySeconds((await getState()).autoStepDelaySeconds, null);
   if (delaySeconds > 0) {
     await addLog(
-      `自动运行：步骤 ${step} 执行前额外等待 ${delaySeconds} 秒，避免节奏过快。`,
+      `自动运行：节点 ${normalizedNodeId} 执行前额外等待 ${delaySeconds} 秒，避免节奏过快。`,
       'info'
     );
     await sleepWithStop(delaySeconds * 1000);
   }
 
   let executionState = await getState();
-  const preExecutionDelayMs = getAutoRunPreExecutionDelayMs(step, executionState);
+  const step = getStepIdByNodeIdForState(normalizedNodeId, executionState);
+  const preExecutionDelayMs = getAutoRunPreExecutionDelayMsForNode(normalizedNodeId, executionState);
   if (preExecutionDelayMs > 0) {
     await addLog(
-      `自动运行：步骤 ${step} 执行前固定等待 ${Math.round(preExecutionDelayMs / 1000)} 秒，确保 Plus Checkout 创建前页面稳定。`,
+      `自动运行：节点 ${normalizedNodeId} 执行前固定等待 ${Math.round(preExecutionDelayMs / 1000)} 秒，确保 Plus Checkout 创建前页面稳定。`,
       'info'
     );
     await sleepWithStop(preExecutionDelayMs);
     executionState = await getState();
   }
 
-  if (doesStepUseBackgroundCompletion(step, executionState)) {
-    await addLog(`自动运行：步骤 ${step} 由后台流程负责收尾，执行函数返回后将直接进入下一步。`, 'info');
-    await executeStep(step);
+  if (doesNodeUseBackgroundCompletion(normalizedNodeId, executionState)) {
+    await addLog(`自动运行：节点 ${normalizedNodeId} 由后台流程负责收尾，执行函数返回后将直接进入下一步。`, 'info');
+    await executeNode(normalizedNodeId);
     const latestState = await getState();
-    await addLog(`自动运行：步骤 ${step} 已执行返回，当前状态为 ${latestState.stepStatuses?.[step] || 'pending'}，准备继续后续步骤。`, 'info');
-  } else if (doesStepUseCompletionSignal(step, executionState)) {
-    await addLog(`自动运行：步骤 ${step} 已发起，正在等待完成信号（超时 ${AUTO_RUN_SIGNAL_COMPLETION_TIMEOUT_MS / 1000} 秒）。`, 'info');
-    await executeStepViaCompletionSignal(step, AUTO_RUN_SIGNAL_COMPLETION_TIMEOUT_MS);
-    await addLog(`自动运行：步骤 ${step} 已收到完成信号，准备继续后续步骤。`, 'info');
+    await addLog(`自动运行：节点 ${normalizedNodeId} 已执行返回，当前状态为 ${latestState.nodeStatuses?.[normalizedNodeId] || 'pending'}，准备继续后续节点。`, 'info');
+  } else if (doesNodeUseCompletionSignal(normalizedNodeId, executionState)) {
+    const completionSignalTimeoutMs = getNodeCompletionSignalTimeoutMs(normalizedNodeId, executionState);
+    await addLog(`自动运行：节点 ${normalizedNodeId} 已发起，正在等待完成信号（超时 ${Math.round(completionSignalTimeoutMs / 1000)} 秒）。`, 'info');
+    completionPayload = await executeNodeViaCompletionSignal(normalizedNodeId, completionSignalTimeoutMs);
+    await addLog(`自动运行：节点 ${normalizedNodeId} 已收到完成信号，准备继续后续节点。`, 'info');
   } else {
-    await executeStep(step);
+    await executeNode(normalizedNodeId);
   }
 
-  if (step === 5) {
+  if (normalizedNodeId === 'fill-profile') {
     const signupTabId = await getTabId('signup-page');
     if (signupTabId) {
-      await addLog('自动运行：步骤 5 已收到完成信号，正在等待当前页面完成加载并稳定...', 'info');
+      await addLog('自动运行：填写资料节点已收到完成信号，正在等待当前页面完成加载并稳定...', 'info');
       await waitForTabStableComplete(signupTabId, {
-        timeoutMs: 30000,
+        timeoutMs: 120000,
         retryDelayMs: 300,
         stableMs: 1000,
         initialDelayMs: 800,
       });
+      try {
+        await validateStep5PostCompletion(signupTabId, completionPayload || {});
+      } catch (step5ValidationError) {
+        await setNodeStatus(normalizedNodeId, 'failed');
+        await addLog(`失败：${getErrorMessage(step5ValidationError)}`, 'error', { nodeId: normalizedNodeId });
+        throw step5ValidationError;
+      }
     }
   }
 
@@ -9012,6 +10582,7 @@ function getEmailGeneratorLabel(generator) {
   }
   if (generator === 'cloudflare') return 'Cloudflare 邮箱';
   if (generator === CLOUDFLARE_TEMP_EMAIL_GENERATOR) return 'Cloudflare Temp Email';
+  if (generator === CLOUD_MAIL_GENERATOR) return 'Cloud Mail';
   return 'Duck 邮箱';
 }
 const mail2925SessionManager = self.MultiPageBackgroundMail2925Session?.createMail2925SessionManager({
@@ -9147,6 +10718,7 @@ const generatedEmailHelpers = self.MultiPageGeneratedEmailHelpers?.createGenerat
   getCloudflareTempEmailAddressFromResponse,
   getCloudflareTempEmailConfig,
   getCustomEmailPoolEmail: getCustomEmailPoolEmailForRun,
+  getRegistrationEmailBaseline,
   getState,
   ensureMail2925AccountForFlow,
   joinCloudflareTempEmailUrl,
@@ -9154,6 +10726,7 @@ const generatedEmailHelpers = self.MultiPageGeneratedEmailHelpers?.createGenerat
   normalizeCloudflareTempEmailAddress,
   normalizeEmailGenerator,
   isGeneratedAliasProvider,
+  persistRegistrationEmailState,
   reuseOrCreateTab,
   sendToContentScript,
   setEmailState,
@@ -9185,6 +10758,11 @@ async function fetchDuckEmail(options = {}) {
 }
 
 async function fetchGeneratedEmail(state, options = {}) {
+  const currentState = state || await getState();
+  const generator = normalizeEmailGenerator(options.generator ?? currentState.emailGenerator);
+  if (generator === CLOUD_MAIL_GENERATOR) {
+    return fetchCloudMailAddress(currentState, options);
+  }
   return generatedEmailHelpers.fetchGeneratedEmail(state, options);
 }
 
@@ -9204,23 +10782,35 @@ const VERIFICATION_POLL_MAX_ROUNDS = 5;
 const STANDARD_MAIL_VERIFICATION_RESEND_INTERVAL_MS = 25000;
 const MAIL_2925_VERIFICATION_MAX_ATTEMPTS = 15;
 const MAIL_2925_VERIFICATION_INTERVAL_MS = 15000;
-const AUTO_STEP_DELAYS = {
-  1: 2000,
-  2: 2000,
-  3: 3000,
-  4: 2000,
-  5: 0,
-  6: 3000,
-  7: 2000,
-  8: 2000,
-  9: 1000,
-};
+const AUTO_RUN_NODE_DELAYS = Object.freeze({
+  'open-chatgpt': 2000,
+  'submit-signup-email': 2000,
+  'fill-password': 3000,
+  'fetch-signup-code': 2000,
+  'fill-profile': 0,
+  'wait-registration-success': 3000,
+  'plus-checkout-create': 3000,
+  'plus-checkout-billing': 2000,
+  'gopay-subscription-confirm': 2000,
+  'paypal-approve': 2000,
+  'plus-checkout-return': 1000,
+  'oauth-login': 2000,
+  'fetch-login-code': 2000,
+  'confirm-oauth': 1000,
+  'platform-verify': 0,
+});
+
+function getAutoRunNodeDelayMs(nodeId) {
+  return AUTO_RUN_NODE_DELAYS[String(nodeId || '').trim()] ?? 0;
+}
 const accountRunHistoryHelpers = self.MultiPageBackgroundAccountRunHistory?.createAccountRunHistoryHelpers({
   ACCOUNT_RUN_HISTORY_STORAGE_KEY,
   addLog,
   buildLocalHelperEndpoint: (baseUrl, path) => buildHotmailLocalEndpoint(baseUrl, path),
   chrome,
   getErrorMessage,
+  getNodeIdByStepForState,
+  getNodeTitleForState,
   getState,
   normalizeAccountRunHistoryHelperBaseUrl,
 });
@@ -9229,7 +10819,9 @@ const contributionOAuthManager = self.MultiPageBackgroundContributionOAuth?.crea
   broadcastDataUpdate,
   chrome,
   closeLocalhostCallbackTabs,
+  createAutomationTab,
   getState,
+  queryTabsInAutomationWindow,
   setState,
 });
 contributionOAuthManager?.ensureCallbackListeners?.();
@@ -9443,22 +11035,42 @@ function resolveGpcHelperBaseUrl(apiUrl = '') {
   let normalized = String(apiUrl || DEFAULT_GPC_HELPER_API_URL).trim().replace(/\/+$/g, '');
   normalized = normalized.replace(/\/api\/checkout\/start$/i, '');
   normalized = normalized.replace(/\/api\/gopay\/(?:otp|pin)$/i, '');
+  normalized = normalized.replace(/\/api\/gp\/tasks(?:\/[^/?#]+)?(?:\/(?:otp|pin|stop))?(?:\?.*)?$/i, '');
+  normalized = normalized.replace(/\/api\/gp\/balance(?:\?.*)?$/i, '');
   normalized = normalized.replace(/\/api\/card\/balance(?:\?.*)?$/i, '');
+  normalized = normalized.replace(/\/api\/card\/redeem-api-key(?:\?.*)?$/i, '');
   return normalized || DEFAULT_GPC_HELPER_API_URL;
 }
 
-function buildGpcCardBalanceRequestUrl(apiUrl = '', cardKey = '') {
+function buildGpcApiKeyBalanceRequestUrl(apiUrl = '') {
+  if (self.GoPayUtils?.buildGpcApiKeyBalanceUrl) {
+    return self.GoPayUtils.buildGpcApiKeyBalanceUrl(apiUrl);
+  }
   if (self.GoPayUtils?.buildGpcCardBalanceUrl) {
-    return self.GoPayUtils.buildGpcCardBalanceUrl(apiUrl, cardKey);
+    return self.GoPayUtils.buildGpcCardBalanceUrl(apiUrl);
   }
   const baseUrl = resolveGpcHelperBaseUrl(apiUrl);
   if (!baseUrl) {
     return '';
   }
-  return `${baseUrl}/api/card/balance?card_key=${encodeURIComponent(String(cardKey || '').trim())}`;
+  return `${baseUrl}/api/gp/balance`;
 }
 
-function formatGpcCardBalancePayload(payload = {}) {
+function buildGpcApiKeyHeaders(apiKey = '', extraHeaders = {}) {
+  if (self.GoPayUtils?.buildGpcApiKeyHeaders) {
+    return self.GoPayUtils.buildGpcApiKeyHeaders(apiKey, extraHeaders);
+  }
+  const headers = {
+    ...(extraHeaders && typeof extraHeaders === 'object' ? extraHeaders : {}),
+  };
+  const normalizedApiKey = String(apiKey || '').trim();
+  if (normalizedApiKey) {
+    headers['X-API-Key'] = normalizedApiKey;
+  }
+  return headers;
+}
+
+function formatGpcApiKeyBalancePayload(payload = {}) {
   if (self.GoPayUtils?.formatGpcBalancePayload) {
     return self.GoPayUtils.formatGpcBalancePayload(payload);
   }
@@ -9466,30 +11078,40 @@ function formatGpcCardBalancePayload(payload = {}) {
     return '';
   }
   const remaining = payload.remaining_uses ?? payload.remainingUses ?? payload.balance ?? payload.remaining;
+  const total = payload.total_uses ?? payload.totalUses;
+  const used = payload.used_uses ?? payload.usedUses;
   const status = String(payload.card_status || payload.cardStatus || payload.status || '').trim();
   return [
-    remaining !== undefined && remaining !== null && String(remaining).trim() !== '' ? `余额 ${remaining}` : '',
+    remaining !== undefined && remaining !== null && String(remaining).trim() !== ''
+      ? (total !== undefined && total !== null && String(total).trim() !== '' ? `余额 ${remaining}/${total}` : `余额 ${remaining}`)
+      : '',
+    used !== undefined && used !== null && String(used).trim() !== '' ? `已用 ${used}` : '',
     status ? `状态 ${status}` : '',
   ].filter(Boolean).join('，');
 }
 
-async function refreshGpcCardBalance(state = {}, options = {}) {
+async function refreshGpcApiKeyBalance(state = {}, options = {}) {
   const apiUrl = resolveGpcHelperBaseUrl(state?.gopayHelperApiUrl || DEFAULT_GPC_HELPER_API_URL);
-  const cardKey = String(state?.gopayHelperCardKey || state?.gpcCardKey || state?.cardKey || '').trim();
+  const apiKey = String(
+    state?.gopayHelperApiKey
+    || state?.gpcApiKey
+    || state?.apiKey
+    || ''
+  ).trim();
   if (!apiUrl) {
     throw new Error('缺少 GPC API 地址。');
   }
-  if (!cardKey) {
-    throw new Error('缺少 GPC 卡密。');
+  if (!apiKey) {
+    throw new Error('缺少 GPC API Key。');
   }
-  const requestUrl = buildGpcCardBalanceRequestUrl(apiUrl, cardKey);
+  const requestUrl = buildGpcApiKeyBalanceRequestUrl(apiUrl);
   if (!requestUrl) {
     throw new Error('缺少 GPC API 地址。');
   }
 
   const response = await fetch(requestUrl, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: buildGpcApiKeyHeaders(apiKey, { Accept: 'application/json' }),
   });
   const rawText = await response.text();
   let payload = {};
@@ -9498,20 +11120,43 @@ async function refreshGpcCardBalance(state = {}, options = {}) {
   } catch {
     payload = { raw: rawText };
   }
-  const balanceText = formatGpcCardBalancePayload(payload) || rawText || '未知';
+  const balancePayload = self.GoPayUtils?.unwrapGpcResponse
+    ? self.GoPayUtils.unwrapGpcResponse(payload)
+    : (payload?.data && typeof payload === 'object' ? payload.data : payload);
+  const balanceData = balancePayload && typeof balancePayload === 'object' && !Array.isArray(balancePayload)
+    ? balancePayload
+    : {};
+  const remainingUses = self.GoPayUtils?.getGpcBalanceRemainingUses
+    ? self.GoPayUtils.getGpcBalanceRemainingUses(balanceData)
+    : Math.max(0, Number(balanceData.remaining_uses ?? balanceData.remainingUses ?? balanceData.balance ?? balanceData.remaining) || 0);
+  const autoModeEnabled = self.GoPayUtils?.isGpcAutoModeEnabled
+    ? self.GoPayUtils.isGpcAutoModeEnabled(balanceData)
+    : Boolean(balanceData.auto_mode_enabled ?? balanceData.autoModeEnabled);
+  const apiKeyStatus = self.GoPayUtils?.getGpcApiKeyStatus
+    ? self.GoPayUtils.getGpcApiKeyStatus(balanceData)
+    : String(balanceData.status || balanceData.card_status || balanceData.cardStatus || '').trim();
+  const balanceText = formatGpcApiKeyBalancePayload(payload) || rawText || '未知';
   const updates = {
     gopayHelperBalance: balanceText,
-    gopayHelperBalancePayload: payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : { raw: String(payload || '') },
+    gopayHelperBalancePayload: Object.keys(balanceData).length > 0 ? balanceData : { raw: String(balancePayload || '') },
     gopayHelperBalanceUpdatedAt: Date.now(),
     gopayHelperBalanceError: '',
+    gopayHelperRemainingUses: Math.max(0, Number(remainingUses) || 0),
+    gopayHelperAutoModeEnabled: Boolean(autoModeEnabled),
+    gopayHelperApiKeyStatus: apiKeyStatus,
   };
-  const flowId = String(payload?.flow_id || payload?.flowId || '').trim();
+  const flowId = String(balancePayload?.flow_id || balancePayload?.flowId || '').trim();
   if (flowId) {
     updates.gopayHelperFlowId = flowId;
   }
 
-  if (!response.ok || payload?.ok === false) {
-    const detail = payload?.error || payload?.message || payload?.detail || `HTTP ${response.status}`;
+  const unifiedOk = self.GoPayUtils?.isGpcUnifiedResponseOk
+    ? self.GoPayUtils.isGpcUnifiedResponseOk(payload)
+    : true;
+  if (!response.ok || payload?.ok === false || !unifiedOk) {
+    const detail = self.GoPayUtils?.extractGpcResponseErrorDetail
+      ? self.GoPayUtils.extractGpcResponseErrorDetail(payload, response.status)
+      : (payload?.data?.detail || payload?.error || payload?.message || payload?.detail || `HTTP ${response.status}`);
     const errorUpdates = { ...updates, gopayHelperBalanceError: String(detail || '余额查询失败') };
     await setPersistentSettings(errorUpdates);
     broadcastDataUpdate(errorUpdates);
@@ -9527,8 +11172,18 @@ async function refreshGpcCardBalance(state = {}, options = {}) {
       : `GPC 余额查询成功：${balanceText}`,
     'info'
   );
-  return { balance: balanceText, payload, updatedAt: updates.gopayHelperBalanceUpdatedAt };
+  return {
+    balance: balanceText,
+    payload,
+    data: updates.gopayHelperBalancePayload,
+    remainingUses: updates.gopayHelperRemainingUses,
+    autoModeEnabled: updates.gopayHelperAutoModeEnabled,
+    apiKeyStatus: updates.gopayHelperApiKeyStatus,
+    updatedAt: updates.gopayHelperBalanceUpdatedAt,
+  };
 }
+
+const refreshGpcCardBalance = refreshGpcApiKeyBalance;
 
 const autoRunController = self.MultiPageBackgroundAutoRunController?.createAutoRunController({
   addLog,
@@ -9545,16 +11200,16 @@ const autoRunController = self.MultiPageBackgroundAutoRunController?.createAutoR
   ensureHotmailMailboxReadyForAutoRunRound: (...args) => ensureHotmailMailboxReadyForAutoRunRound(...args),
   getAutoRunStatusPayload,
   getErrorMessage,
-  getFirstUnfinishedStep,
+  getFirstUnfinishedNodeId,
   getPendingAutoRunTimerPlan,
-  getRunningSteps,
+  getRunningNodeIds,
   getState,
   getStopRequested: () => stopRequested,
-  hasSavedProgress,
+  hasSavedNodeProgress,
   isAddPhoneAuthFailure,
-  isGoPayManualInterventionRequiredFailure,
   isPhoneSmsPlatformRateLimitFailure,
   isPlusCheckoutNonFreeTrialFailure,
+  isGpcTaskEndedFailure,
   isRestartCurrentAttemptError,
   isStep4Route405RecoveryLimitFailure,
   isSignupUserAlreadyExistsFailure,
@@ -9564,7 +11219,7 @@ const autoRunController = self.MultiPageBackgroundAutoRunController?.createAutoR
   onAutoRunRoundSuccess: (payload = {}) => maybeSwitchIpProxyAfterAutoRunRoundSuccess(payload),
   persistAutoRunTimerPlan,
   resetState,
-  runAutoSequenceFromStep: (...args) => runAutoSequenceFromStep(...args),
+  runAutoSequenceFromNode: (...args) => runAutoSequenceFromNode(...args),
   runtime: {
     get: () => ({
       autoRunActive,
@@ -9584,7 +11239,7 @@ const autoRunController = self.MultiPageBackgroundAutoRunController?.createAutoR
   setState,
   sleepWithStop,
   throwIfAutoRunSessionStopped: (sessionId) => throwIfAutoRunSessionStopped(sessionId),
-  waitForRunningStepsToFinish,
+  waitForRunningNodesToFinish,
   throwIfStopped: () => throwIfStopped(),
   chrome,
 });
@@ -9927,73 +11582,247 @@ async function ensureAutoEmailReady(targetRun, totalRuns, attemptRuns) {
   return resumedState.email;
 }
 
-async function runAutoSequenceFromStep(startStep, context = {}) {
+async function runAutoSequenceFromNode(startNodeId, context = {}) {
+  const state = await getState();
+  const normalizedStartNodeId = String(startNodeId || '').trim();
+  if (!normalizedStartNodeId || !getAutoRunWorkflowNodeIds(state).includes(normalizedStartNodeId)) {
+    throw new Error(`自动运行无法从未知节点继续：${startNodeId}`);
+  }
+  return runAutoSequenceFromNodeGraph(normalizedStartNodeId, context);
+}
+
+function getAutoRunWorkflowNodeIds(state = {}) {
+  if (typeof getNodeIdsForState === 'function') {
+    const nodeIds = getNodeIdsForState(state);
+    if (Array.isArray(nodeIds) && nodeIds.length) {
+      return nodeIds.map((nodeId) => String(nodeId || '').trim()).filter(Boolean);
+    }
+  }
+
+  if (typeof getStepIdsForState === 'function' && typeof getNodeIdByStepForState === 'function') {
+    return getStepIdsForState(state)
+      .map((step) => getNodeIdByStepForState(step, state))
+      .map((nodeId) => String(nodeId || '').trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+async function runAutoSequenceFromNodeGraph(startNodeId, context = {}) {
   const { targetRun, totalRuns, attemptRuns, continued = false } = context;
   let postStep7RestartCount = 0;
   let goPayCheckoutRestartCount = 0;
+  let gpcCheckoutRestartCount = 0;
+  let plusCheckoutRestartCount = 0;
   let step4RestartCount = 0;
-  let currentStartStep = startStep;
+  const nodeIdleRestartCounts = new Map();
+  let currentStartNodeId = String(startNodeId || '').trim();
   let continueCurrentAttempt = continued;
   const resolvedSignupMethod = await ensureResolvedSignupMethodForRun();
+  const normalizePlusPaymentMethodForRun = typeof normalizePlusPaymentMethod === 'function'
+    ? normalizePlusPaymentMethod
+    : (value) => (String(value || '').trim().toLowerCase() === 'gpc-helper' ? 'gpc-helper' : String(value || '').trim().toLowerCase());
+  const plusPaymentMethodGpcHelper = typeof PLUS_PAYMENT_METHOD_GPC_HELPER === 'string'
+    ? PLUS_PAYMENT_METHOD_GPC_HELPER
+    : 'gpc-helper';
+  const getNodeStatusForNode = (state, nodeId) => (
+    String(state?.nodeStatuses?.[nodeId] || 'pending').trim() || 'pending'
+  );
+  const getDisplayStepForNode = (nodeId, state = {}) => {
+    const displayStep = typeof getStepIdByNodeIdForState === 'function'
+      ? Number(getStepIdByNodeIdForState(nodeId, state))
+      : 0;
+    return Number.isInteger(displayStep) && displayStep > 0 ? displayStep : null;
+  };
+  const getNodeExecutionKey = (nodeId, state = {}) => {
+    const nodeDefinition = typeof getNodeDefinitionForState === 'function'
+      ? getNodeDefinitionForState(nodeId, state)
+      : null;
+    return String(nodeDefinition?.executeKey || nodeDefinition?.command || nodeId || '').trim();
+  };
+  const getNodeLabel = (nodeId, state = {}) => {
+    const title = typeof getNodeTitleForState === 'function'
+      ? getNodeTitleForState(nodeId, state)
+      : '';
+    return title && title !== nodeId ? `${nodeId}（${title}）` : nodeId;
+  };
+  const getNodeIndex = (state, nodeId) => getAutoRunWorkflowNodeIds(state).indexOf(nodeId);
+  const shouldRunNamedNode = async (nodeId) => {
+    const state = await getState();
+    const nodeIds = getAutoRunWorkflowNodeIds(state);
+    const targetIndex = nodeIds.indexOf(nodeId);
+    if (targetIndex < 0) {
+      return false;
+    }
+    const startIndex = nodeIds.indexOf(currentStartNodeId);
+    return startIndex < 0 || startIndex <= targetIndex;
+  };
+  const getPreviousNodeId = (nodeId, state = {}) => {
+    const nodeIds = getAutoRunWorkflowNodeIds(state);
+    const index = nodeIds.indexOf(nodeId);
+    return index > 0 ? nodeIds[index - 1] : '';
+  };
+  const setRestartNode = (nodeId) => {
+    currentStartNodeId = String(nodeId || '').trim();
+    continueCurrentAttempt = true;
+  };
+  const attachFailedNode = (error, nodeId, state = {}) => {
+    const failedNodeId = String(nodeId || '').trim();
+    if (!error || typeof error !== 'object' || !failedNodeId) {
+      return error;
+    }
+
+    if (!String(error.failedNodeId || '').trim()) {
+      try {
+        error.failedNodeId = failedNodeId;
+      } catch (_err) {
+        // Some host errors may be non-extensible; state-based inference still covers normal paths.
+      }
+    }
+
+    const failedStep = getDisplayStepForNode(failedNodeId, state);
+    if (!Number.isInteger(Number(error.failedStep)) || Number(error.failedStep) <= 0) {
+      try {
+        error.failedStep = failedStep;
+      } catch (_err) {
+        // Some host errors may be non-extensible; state-based inference still covers normal paths.
+      }
+    }
+
+    return error;
+  };
+  const invalidateDownstreamAfterAutoRunNodeRestart = async (nodeId, options = {}) => {
+    if (typeof invalidateDownstreamAfterNodeRestart === 'function') {
+      return invalidateDownstreamAfterNodeRestart(nodeId, options);
+    }
+    const state = await getState();
+    const step = getDisplayStepForNode(nodeId, state);
+    if (Number.isInteger(step) && step > 0 && typeof invalidateDownstreamAfterStepRestart === 'function') {
+      return invalidateDownstreamAfterStepRestart(step, options);
+    }
+    return undefined;
+  };
+  const restartCurrentNodeAfterIdle = async (nodeId, error) => {
+    if (!isAutoRunStepIdleRestartError(error)) {
+      return false;
+    }
+
+    const idleRestartCount = (nodeIdleRestartCounts.get(nodeId) || 0) + 1;
+    nodeIdleRestartCounts.set(nodeId, idleRestartCount);
+    if (idleRestartCount > AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS) {
+      await addLog(
+        `节点 ${nodeId}：已连续 ${AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS} 次因 5 分钟无新日志而重开，停止自动重试。原因：${getErrorMessage(error)}`,
+        'error'
+      );
+      throw error;
+    }
+
+    const reason = getErrorMessage(error);
+    if (typeof cancelPendingCommands === 'function') {
+      cancelPendingCommands(`节点 ${nodeId} 5 分钟没有新日志，准备重开当前节点。`);
+    }
+    if (typeof broadcastStopToContentScripts === 'function') {
+      await broadcastStopToContentScripts();
+    }
+    await addLog(
+      `节点 ${nodeId}：5 分钟没有新日志，准备重新开始当前节点（第 ${idleRestartCount}/${AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS} 次）。原因：${reason}`,
+      'warn'
+    );
+    const latestState = await getState();
+    const resetAnchorNodeId = getPreviousNodeId(nodeId, latestState) || nodeId;
+    await invalidateDownstreamAfterAutoRunNodeRestart(resetAnchorNodeId, {
+      logLabel: `节点 ${nodeId} 因 5 分钟无新日志准备重开（第 ${idleRestartCount}/${AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS} 次）`,
+    });
+    setRestartNode(nodeId);
+    return true;
+  };
 
   while (true) {
 
   if (continueCurrentAttempt) {
-    await addLog(`=== 目标 ${targetRun}/${totalRuns} 轮：继续当前进度，从步骤 ${startStep} 开始（第 ${attemptRuns} 次尝试）===`, 'info');
+    await addLog(`=== 目标 ${targetRun}/${totalRuns} 轮：继续当前进度，从节点 ${currentStartNodeId} 开始（第 ${attemptRuns} 次尝试）===`, 'info');
   } else {
     await addLog(`=== 目标 ${targetRun}/${totalRuns} 轮：第 ${attemptRuns} 次尝试，阶段 1，打开官网并进入密码页 ===`, 'info');
   }
 
-  if (currentStartStep <= 1) {
-    await executeStepAndWait(1, AUTO_STEP_DELAYS[1]);
-  }
-
-  if (currentStartStep <= 2) {
-    if (resolvedSignupMethod === SIGNUP_METHOD_PHONE) {
-      await addLog(`=== 目标 ${targetRun}/${totalRuns} 轮：本轮注册方式为手机号注册，将跳过邮箱预获取 ===`, 'info');
-    } else {
-      await ensureAutoEmailReady(targetRun, totalRuns, attemptRuns);
-    }
+  if (await shouldRunNamedNode('open-chatgpt')) {
     try {
-      await executeStepAndWait(2, AUTO_STEP_DELAYS[2]);
+      await executeNodeAndWaitWithAutoRunIdleLogWatchdog('open-chatgpt', getAutoRunNodeDelayMs('open-chatgpt'));
     } catch (err) {
+      attachFailedNode(err, 'open-chatgpt', await getState());
       if (isStopError(err)) {
         throw err;
       }
-      if (isStep2PhoneAlreadyRegisteredFailure(err)) {
-        const preservedState = await getState();
-        const preservedPassword = String(preservedState.password || '').trim();
-        await addLog(`步骤 2：检测到当前手机号已注册，准备直接回到步骤 1 重新获取新号码。原因：${getErrorMessage(err)}`, 'warn');
-        await invalidateDownstreamAfterStepRestart(1, {
-          logLabel: '步骤 2 报错后准备回到步骤 1 重新获取新手机号',
-        });
-        if (preservedPassword) {
-          await setState({ password: preservedPassword });
-        }
-        currentStartStep = 1;
-        continueCurrentAttempt = true;
+      if (await restartCurrentNodeAfterIdle('open-chatgpt', err)) {
         continue;
       }
       throw err;
     }
   }
 
-  if (currentStartStep <= 3) {
+  if (await shouldRunNamedNode('submit-signup-email')) {
+    try {
+      await runAutoNodeActionWithIdleLogWatchdog('submit-signup-email', async () => {
+        if (resolvedSignupMethod === SIGNUP_METHOD_PHONE) {
+          await addLog(`=== 目标 ${targetRun}/${totalRuns} 轮：本轮注册方式为手机号注册，将跳过邮箱预获取 ===`, 'info');
+        } else {
+          await ensureAutoEmailReady(targetRun, totalRuns, attemptRuns);
+        }
+        await executeNodeAndWait('submit-signup-email', getAutoRunNodeDelayMs('submit-signup-email'));
+      });
+    } catch (err) {
+      attachFailedNode(err, 'submit-signup-email', await getState());
+      if (isStopError(err)) {
+        throw err;
+      }
+      if (await restartCurrentNodeAfterIdle('submit-signup-email', err)) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  let restartFromStep1WithCurrentEmail = false;
+
+  if (await shouldRunNamedNode('fill-password')) {
     const latestState = await getState();
-    const step3Status = latestState.stepStatuses?.[3] || 'pending';
+    const fillPasswordStatus = getNodeStatusForNode(latestState, 'fill-password');
     await addLog(`=== 目标 ${targetRun}/${totalRuns} 轮：阶段 2，填写密码、验证、登录并完成授权（第 ${attemptRuns} 次尝试）===`, 'info');
     await broadcastAutoRunStatus('running', {
       currentRun: targetRun,
       totalRuns,
       attemptRun: attemptRuns,
     });
-    if (isStepDoneStatus(step3Status)) {
-      await addLog(`自动运行：步骤 3 当前状态为 ${step3Status}，将直接继续后续流程。`, 'info');
+    if (isStepDoneStatus(fillPasswordStatus)) {
+      await addLog(`自动运行：节点 fill-password 当前状态为 ${fillPasswordStatus}，将直接继续后续流程。`, 'info');
     } else {
-      await executeStepAndWait(3, AUTO_STEP_DELAYS[3]);
+      try {
+        await executeNodeAndWaitWithAutoRunIdleLogWatchdog('fill-password', getAutoRunNodeDelayMs('fill-password'));
+      } catch (err) {
+        attachFailedNode(err, 'fill-password', latestState);
+        if (isStopError(err)) {
+          throw err;
+        }
+        if (await restartCurrentNodeAfterIdle('fill-password', err)) {
+          continue;
+        }
+        if (isSignupPhonePasswordMismatchFailure(err)) {
+          step4RestartCount += 1;
+          await restartSignupPhonePasswordMismatchAttemptFromNode('fill-password', step4RestartCount, err);
+          setRestartNode('open-chatgpt');
+          restartFromStep1WithCurrentEmail = true;
+          continue;
+        }
+        throw err;
+      }
     }
   } else {
     await addLog(`=== 目标 ${targetRun}/${totalRuns} 轮：继续执行剩余流程（第 ${attemptRuns} 次尝试）===`, 'info');
+  }
+
+  if (restartFromStep1WithCurrentEmail) {
+    continue;
   }
 
   const signupTabId = await getTabId('signup-page');
@@ -10001,90 +11830,128 @@ async function runAutoSequenceFromStep(startStep, context = {}) {
     await chrome.tabs.update(signupTabId, { active: true });
   }
 
-  let restartFromStep1WithCurrentEmail = false;
-  let step = Math.max(currentStartStep, 4);
-  while (step <= (typeof getLastStepIdForState === 'function'
-    ? getLastStepIdForState(await getState())
-    : (typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10))) {
+  let loopState = await getState();
+  let nodeIds = getAutoRunWorkflowNodeIds(loopState);
+  const firstVerificationIndex = nodeIds.indexOf('fetch-signup-code');
+  const startIndex = nodeIds.indexOf(currentStartNodeId);
+  let nodeIndex = Math.max(
+    startIndex >= 0 ? startIndex : 0,
+    firstVerificationIndex >= 0 ? firstVerificationIndex : 0
+  );
+  while (nodeIndex < nodeIds.length) {
     const latestState = await getState();
-    if (typeof getStepDefinitionForState === 'function' && !getStepDefinitionForState(step, latestState)) {
-      step += 1;
+    nodeIds = getAutoRunWorkflowNodeIds(latestState);
+    const nodeId = nodeIds[nodeIndex];
+    if (!nodeId) {
+      nodeIndex += 1;
       continue;
     }
-    const currentStatus = latestState.stepStatuses?.[step] || 'pending';
+    const currentStatus = getNodeStatusForNode(latestState, nodeId);
     if (isStepDoneStatus(currentStatus)) {
-      await addLog(`自动运行：步骤 ${step} 当前状态为 ${currentStatus}，将直接继续后续流程。`, 'info');
-      step += 1;
+      await addLog(`自动运行：节点 ${nodeId} 当前状态为 ${currentStatus}，将直接继续后续流程。`, 'info');
+      nodeIndex += 1;
       continue;
     }
     try {
-      await executeStepAndWait(step, AUTO_STEP_DELAYS[step]);
-      step += 1;
+      await executeNodeAndWaitWithAutoRunIdleLogWatchdog(nodeId, getAutoRunNodeDelayMs(nodeId));
+      nodeIndex += 1;
     } catch (err) {
+      attachFailedNode(err, nodeId, latestState);
       if (isStopError(err)) {
         throw err;
       }
 
-      const failingStepKey = typeof getStepDefinitionForState === 'function'
-        ? String(getStepDefinitionForState(step, latestState)?.key || '').trim()
-        : '';
-      const isGoPayApproveStep = (step === 8 && failingStepKey === 'paypal-approve')
-        || (step === 8 && failingStepKey === 'gopay-subscription-confirm')
-        || (step === 8 && !failingStepKey);
-      if (isGoPayApproveStep && isGoPayCheckoutRestartRequiredFailure(err)) {
+      if (await restartCurrentNodeAfterIdle(nodeId, err)) {
+        continue;
+      }
+
+      const step = getDisplayStepForNode(nodeId, latestState);
+      const nodeExecutionKey = getNodeExecutionKey(nodeId, latestState);
+      const isGpcCheckoutStep = normalizePlusPaymentMethodForRun(latestState?.plusPaymentMethod) === plusPaymentMethodGpcHelper
+        || String(latestState?.plusCheckoutSource || '').trim() === plusPaymentMethodGpcHelper;
+      if (isPlusCheckoutRestartStep(step, nodeExecutionKey, latestState)
+        && isPlusCheckoutRestartRequiredFailure(err)) {
+        const isGoPayCheckoutStep = nodeExecutionKey === 'gopay-subscription-confirm'
+          || normalizePlusPaymentMethodForRun(latestState?.plusPaymentMethod) === 'gopay';
+        if (isGpcCheckoutStep) {
+          gpcCheckoutRestartCount += 1;
+        } else if (isGoPayCheckoutStep) {
+          goPayCheckoutRestartCount += 1;
+        } else {
+          plusCheckoutRestartCount += 1;
+        }
+        const checkoutRestartCount = isGpcCheckoutStep
+          ? gpcCheckoutRestartCount
+          : (isGoPayCheckoutStep ? goPayCheckoutRestartCount : plusCheckoutRestartCount);
+        const checkoutLabel = isGpcCheckoutStep
+          ? 'GPC 任务'
+          : (isGoPayCheckoutStep ? 'GoPay 订阅' : 'Plus Checkout');
+        const recreateLabel = isGpcCheckoutStep
+          ? '重新创建 GPC 任务'
+          : (isGoPayCheckoutStep ? '重新创建 GoPay 订阅' : '重新创建 Plus Checkout');
+        await addLog(
+          `节点 ${getNodeLabel(nodeId, latestState)}：检测到 ${checkoutLabel} 失败/卡住，准备回到节点 plus-checkout-create ${recreateLabel}（第 ${checkoutRestartCount} 次）。原因：${getErrorMessage(err)}`,
+          'warn'
+        );
+        const checkoutResetAnchorNodeId = getPreviousNodeId('plus-checkout-create', latestState) || 'fill-profile';
+        await invalidateDownstreamAfterAutoRunNodeRestart(checkoutResetAnchorNodeId, {
+          logLabel: `节点 ${nodeId} ${checkoutLabel}失败后准备回到 plus-checkout-create 重试（第 ${checkoutRestartCount} 次）`,
+        });
+        nodeIndex = Math.max(0, getNodeIndex(await getState(), 'plus-checkout-create'));
+        continue;
+      }
+
+      if (nodeId === 'paypal-approve' && isGoPayCheckoutRestartRequiredFailure(err)) {
         goPayCheckoutRestartCount += 1;
         if (goPayCheckoutRestartCount > 3) {
-          await addLog(`步骤 ${step}：GoPay Checkout 已连续重建 ${goPayCheckoutRestartCount - 1} 次仍失败，停止自动重试。原因：${getErrorMessage(err)}`, 'error');
+          await addLog(`节点 paypal-approve：GoPay Checkout 已连续重建 ${goPayCheckoutRestartCount - 1} 次仍失败，停止自动重试。原因：${getErrorMessage(err)}`, 'error');
           throw err;
         }
         await addLog(
-          `步骤 ${step}：检测到 GoPay 支付页失效/卡死，准备关闭旧页并回到步骤 6 重新创建 Checkout（第 ${goPayCheckoutRestartCount}/3 次）。原因：${getErrorMessage(err)}`,
+          `节点 paypal-approve：检测到 GoPay 支付页失效/卡死，准备关闭旧页并回到节点 plus-checkout-create 重新创建 Checkout（第 ${goPayCheckoutRestartCount}/3 次）。原因：${getErrorMessage(err)}`,
           'warn'
         );
-        await invalidateDownstreamAfterStepRestart(5, {
-          logLabel: `步骤 ${step} GoPay 支付页失效后准备回到步骤 6 重试（第 ${goPayCheckoutRestartCount}/3 次）`,
+        await invalidateDownstreamAfterAutoRunNodeRestart(getPreviousNodeId('plus-checkout-create', latestState) || 'fill-profile', {
+          logLabel: `节点 paypal-approve GoPay 支付页失效后准备回到 plus-checkout-create 重试（第 ${goPayCheckoutRestartCount}/3 次）`,
         });
-        step = 6;
+        nodeIndex = Math.max(0, getNodeIndex(await getState(), 'plus-checkout-create'));
         continue;
       }
-      if (isGoPayApproveStep && isGoPayManualInterventionRequiredFailure(err)) {
-        throw err;
-      }
 
-      if (step === 4) {
+      if (nodeId === 'fetch-signup-code') {
         if (isSignupUserAlreadyExistsFailure(err)) {
           throw err;
         }
         if (isMail2925ThreadTerminatedError(err)) {
-          await addLog(`步骤 4：2925 已切换账号并要求结束当前尝试：${getErrorMessage(err)}`, 'warn');
+          await addLog(`节点 fetch-signup-code：2925 已切换账号并要求结束当前尝试：${getErrorMessage(err)}`, 'warn');
           throw err;
         }
-        if (isStep4ContactVerificationRoute405Failure(err)) {
-          await addLog(`步骤 4：检测到 /contact-verification 的 405 错误页，准备直接回到步骤 1 重新开始。原因：${getErrorMessage(err)}`, 'warn');
-        }
-        if (isStep4PhoneNumberUnusableFailure(err)) {
-          await addLog(`步骤 4：当前注册手机号已失效，准备直接回到步骤 1 重新开始。原因：${getErrorMessage(err)}`, 'warn');
-        }
         step4RestartCount += 1;
-        const preservedState = await getState();
-        const preservedEmail = String(preservedState.email || '').trim();
-        const preservedPassword = String(preservedState.password || '').trim();
-        const emailSuffix = preservedEmail ? `当前邮箱：${preservedEmail}；` : '';
-        await addLog(
-          `步骤 4：执行失败，准备沿用当前邮箱回到步骤 1 重新开始（第 ${step4RestartCount} 次重开）。${emailSuffix}原因：${getErrorMessage(err)}`,
-          'warn'
-        );
-        await invalidateDownstreamAfterStepRestart(1, {
-          logLabel: `步骤 4 报错后准备回到步骤 1 沿用当前邮箱重试（第 ${step4RestartCount} 次重开）`,
-        });
-        const restorePayload = {};
-        if (preservedEmail) restorePayload.email = preservedEmail;
-        if (preservedPassword) restorePayload.password = preservedPassword;
-        if (Object.keys(restorePayload).length) {
-          await setState(restorePayload);
+        const isPhoneResendBanned = typeof phoneVerificationHelpers !== 'undefined'
+          && typeof phoneVerificationHelpers?.isPhoneResendBannedNumberError === 'function'
+          && phoneVerificationHelpers.isPhoneResendBannedNumberError(err);
+        if (isSignupPhonePasswordMismatchFailure(err) || isPhoneResendBanned) {
+          await restartSignupPhonePasswordMismatchAttemptFromNode('fetch-signup-code', step4RestartCount, err);
+        } else {
+          const preservedState = await getState();
+          const preservedEmail = String(preservedState.email || '').trim();
+          const preservedPassword = String(preservedState.password || '').trim();
+          const emailSuffix = preservedEmail ? `当前邮箱：${preservedEmail}；` : '';
+          await addLog(
+            `节点 fetch-signup-code：执行失败，准备沿用当前邮箱回到节点 open-chatgpt 重新开始（第 ${step4RestartCount} 次重开）。${emailSuffix}原因：${getErrorMessage(err)}`,
+            'warn'
+          );
+          await invalidateDownstreamAfterAutoRunNodeRestart('open-chatgpt', {
+            logLabel: `节点 fetch-signup-code 报错后准备回到 open-chatgpt 沿用当前邮箱重试（第 ${step4RestartCount} 次重开）`,
+          });
+          const restorePayload = {};
+          if (preservedEmail) restorePayload.email = preservedEmail;
+          if (preservedPassword) restorePayload.password = preservedPassword;
+          if (Object.keys(restorePayload).length) {
+            await setState(restorePayload);
+          }
         }
-        currentStartStep = 1;
-        continueCurrentAttempt = true;
+        setRestartNode('open-chatgpt');
         restartFromStep1WithCurrentEmail = true;
         break;
       }
@@ -10092,11 +11959,9 @@ async function runAutoSequenceFromStep(startStep, context = {}) {
       const restartDecision = await getPostStep6AutoRestartDecision(step, err);
       if (restartDecision.shouldRestart) {
         postStep7RestartCount += 1;
-        const restartStep = restartDecision.restartStep
-          || (typeof getAuthChainStartStepId === 'function'
-            ? getAuthChainStartStepId(await getState())
-            : FINAL_OAUTH_CHAIN_START_STEP);
-        const resetAfterStep = Math.max(1, restartStep - 1);
+        const restartStep = restartDecision.restartStep;
+        const restartNodeId = String(getNodeIdByStepForState(restartStep, await getState()) || 'oauth-login').trim();
+        const resetAfterNodeId = getPreviousNodeId(restartNodeId, await getState()) || restartNodeId;
         const authState = restartDecision.authState;
         const authStateLabel = authState?.state ? getLoginAuthStateLabel(authState.state) : '未知页面';
         const authStateSuffix = authState?.url
@@ -10105,22 +11970,20 @@ async function runAutoSequenceFromStep(startStep, context = {}) {
             ? `当前认证页：${authStateLabel}`
             : '未获取到认证页状态';
         await addLog(
-          `步骤 ${step}：检测到报错且当前未进入 add-phone，正在回到步骤 ${restartStep} 重新开始授权流程（第 ${postStep7RestartCount} 次重开）。${authStateSuffix}；原因：${restartDecision.errorMessage || '未知错误'}`,
+          `节点 ${getNodeLabel(nodeId, latestState)}：检测到报错且当前未进入 add-phone，正在回到节点 ${restartNodeId} 重新开始授权流程（第 ${postStep7RestartCount} 次重开）。${authStateSuffix}；原因：${restartDecision.errorMessage || '未知错误'}`,
           'warn'
         );
-        await invalidateDownstreamAfterStepRestart(resetAfterStep, {
-          logLabel: `步骤 ${step} 报错后准备回到步骤 ${restartStep} 重试（第 ${postStep7RestartCount} 次重开）`,
+        await invalidateDownstreamAfterAutoRunNodeRestart(resetAfterNodeId, {
+          logLabel: `节点 ${nodeId} 报错后准备回到 ${restartNodeId} 重试（第 ${postStep7RestartCount} 次重开）`,
         });
-        step = restartStep;
+        nodeIndex = Math.max(0, getNodeIndex(await getState(), restartNodeId));
         continue;
       }
 
       if (restartDecision.blockedByAddPhone) {
         const addPhoneUrl = restartDecision.authState?.url || 'https://auth.openai.com/add-phone';
-        const authChainStartStep = typeof getAuthChainStartStepId === 'function'
-          ? getAuthChainStartStepId(await getState())
-          : FINAL_OAUTH_CHAIN_START_STEP;
-        await addLog(`步骤 ${step}：检测到认证流程进入 add-phone（${addPhoneUrl}），停止自动回到步骤 ${authChainStartStep} 重开。`, 'warn');
+        const authChainStartNodeId = String(getNodeIdByStepForState(restartDecision.restartStep, await getState()) || 'oauth-login').trim();
+        await addLog(`节点 ${getNodeLabel(nodeId, latestState)}：检测到认证流程进入 add-phone（${addPhoneUrl}），停止自动回到节点 ${authChainStartNodeId} 重开。`, 'warn');
       }
       throw err;
     }
@@ -10241,11 +12104,12 @@ async function resumeAutoRun() {
 // ============================================================
 
 const SIGNUP_ENTRY_URL = 'https://chatgpt.com/';
-const SIGNUP_PAGE_INJECT_FILES = ['content/utils.js', 'content/auth-page-recovery.js', 'content/phone-country-utils.js', 'content/phone-auth.js', 'content/signup-page.js'];
+const SIGNUP_PAGE_INJECT_FILES = ['content/utils.js', 'content/operation-delay.js', 'content/auth-page-recovery.js', 'content/phone-country-utils.js', 'content/phone-auth.js', 'content/signup-page.js'];
 const panelBridge = self.MultiPageBackgroundPanelBridge?.createPanelBridge({
   chrome,
   addLog,
   closeConflictingTabsForSource,
+  createAutomationTab,
   ensureContentScriptReadyOnTab,
   getPanelMode,
   normalizeCodex2ApiUrl,
@@ -10276,13 +12140,14 @@ const signupFlowHelpers = self.MultiPageSignupFlowHelpers?.createSignupFlowHelpe
   },
   isSignupProfilePageUrl: (rawUrl) => {
     const parsed = parseUrlSafely(rawUrl);
-    return Boolean(parsed && isSignupPageHost(parsed.hostname) && /\/create-account\/profile(?:[/?#]|$)/i.test(parsed.pathname || ''));
+    return Boolean(parsed && isSignupPageHost(parsed.hostname) && /\/(?:create-account\/profile|u\/signup\/profile|signup\/profile|about-you)(?:[/?#]|$)/i.test(parsed.pathname || ''));
   },
   isRetryableContentScriptTransportError,
   isHotmailProvider,
   isLuckmailProvider,
   isSignupPasswordPageUrl,
   isTabAlive,
+  persistRegistrationEmailState,
   reuseOrCreateTab,
   sendToContentScriptResilient,
   setEmailState,
@@ -10292,16 +12157,30 @@ const signupFlowHelpers = self.MultiPageSignupFlowHelpers?.createSignupFlowHelpe
   waitForTabStableComplete,
   waitForTabUrlMatch,
 });
+const openAiMailRules = self.MultiPageOpenAiMailRules?.createOpenAiMailRules({
+  getHotmailVerificationRequestTimestamp,
+  MAIL_2925_VERIFICATION_INTERVAL_MS,
+  MAIL_2925_VERIFICATION_MAX_ATTEMPTS,
+});
+const mailRuleRegistry = self.MultiPageBackgroundMailRuleRegistry?.createMailRuleRegistry({
+  defaultFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  flowBuilders: {
+    openai: openAiMailRules,
+  },
+});
 const verificationFlowHelpers = self.MultiPageBackgroundVerificationFlow?.createVerificationFlowHelpers({
   addLog,
+  buildVerificationPollPayload: mailRuleRegistry?.buildVerificationPollPayload,
   chrome,
   closeConflictingTabsForSource,
   CLOUDFLARE_TEMP_EMAIL_PROVIDER,
-  completeStepFromBackground,
+  CLOUD_MAIL_PROVIDER,
+  completeNodeFromBackground,
   confirmCustomVerificationStepBypassRequest: (step) => chrome.runtime.sendMessage({
     type: 'REQUEST_CUSTOM_VERIFICATION_BYPASS_CONFIRMATION',
     payload: { step },
   }),
+  getNodeIdByStepForState,
   getHotmailVerificationPollConfig,
   getHotmailVerificationRequestTimestamp,
   handleMail2925LimitReachedError,
@@ -10315,13 +12194,14 @@ const verificationFlowHelpers = self.MultiPageBackgroundVerificationFlow?.create
   MAIL_2925_VERIFICATION_INTERVAL_MS,
   MAIL_2925_VERIFICATION_MAX_ATTEMPTS,
   pollCloudflareTempEmailVerificationCode,
+  pollCloudMailVerificationCode,
   pollHotmailVerificationCode,
   pollLuckmailVerificationCode,
   sendToContentScript,
   sendToContentScriptResilient,
   sendToMailContentScriptResilient,
+  setNodeStatus,
   setState,
-  setStepStatus,
   sleepWithStop,
   throwIfStopped,
   VERIFICATION_POLL_MAX_ROUNDS,
@@ -10342,7 +12222,32 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
   DEFAULT_PHONE_CODE_TIMEOUT_WINDOWS,
   DEFAULT_PHONE_CODE_POLL_INTERVAL_SECONDS,
   DEFAULT_PHONE_CODE_POLL_ROUNDS,
+  readAuthTabSnapshot,
   ensureStep8SignupPageReady,
+  navigateAuthTabToAddPhone: async (tabId, options = {}) => {
+    const visibleStep = Math.floor(Number(options.visibleStep || options.step) || 0) || 9;
+    const requestedTimeoutMs = Number(options.timeoutMs);
+    const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
+      ? requestedTimeoutMs
+      : await getOAuthFlowStepTimeoutMs(30000, {
+        step: visibleStep,
+        actionLabel: 'direct add-phone navigation',
+      });
+    await chrome.tabs.update(tabId, { url: 'https://auth.openai.com/add-phone', active: true });
+    await ensureStep8SignupPageReady(tabId, {
+      timeoutMs,
+      visibleStep,
+      logStepKey: options.logStepKey || 'phone-verification',
+      logMessage: options.logMessage || '步骤 9：认证页已失联，直接打开添加手机号页面后等待脚本恢复。',
+    });
+    return {
+      addPhonePage: true,
+      phoneVerificationPage: false,
+      url: 'https://auth.openai.com/add-phone',
+    };
+  },
+  generateRandomBirthday,
+  generateRandomName,
   getOAuthFlowRemainingMs,
   getOAuthFlowStepTimeoutMs,
   getState,
@@ -10359,13 +12264,13 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
 });
 const step1Executor = self.MultiPageBackgroundStep1?.createStep1Executor({
   addLog,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   openSignupEntryTab,
 });
 const step2Executor = self.MultiPageBackgroundStep2?.createStep2Executor({
   addLog,
   chrome,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureContentScriptReadyOnTab,
   ensureSignupAuthEntryPageReady,
   ensureSignupEntryPageReady,
@@ -10378,6 +12283,7 @@ const step2Executor = self.MultiPageBackgroundStep2?.createStep2Executor({
   resolveSignupEmailForFlow,
   sendToContentScriptResilient,
   SIGNUP_PAGE_INJECT_FILES,
+  waitForTabStableComplete,
 });
 const step3Executor = self.MultiPageBackgroundStep3?.createStep3Executor({
   addLog,
@@ -10406,7 +12312,7 @@ async function ensureIcloudMailSessionForVerification(options = {}) {
 const step4Executor = self.MultiPageBackgroundStep4?.createStep4Executor({
   addLog,
   chrome,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   confirmCustomVerificationStepBypass: verificationFlowHelpers.confirmCustomVerificationStepBypass,
   generateRandomBirthday,
   generateRandomName,
@@ -10418,6 +12324,7 @@ const step4Executor = self.MultiPageBackgroundStep4?.createStep4Executor({
   isTabAlive,
   LUCKMAIL_PROVIDER,
   CLOUDFLARE_TEMP_EMAIL_PROVIDER,
+  CLOUD_MAIL_PROVIDER,
   resolveVerificationStep: verificationFlowHelpers.resolveVerificationStep,
   reuseOrCreateTab,
   sendToContentScript,
@@ -10437,19 +12344,25 @@ const step5Executor = self.MultiPageBackgroundStep5?.createStep5Executor({
   sendToContentScript,
 });
 const step6Executor = self.MultiPageBackgroundStep6?.createStep6Executor({
-  completeStepFromBackground,
-  runPreStep6CookieCleanup,
+  addLog,
+  chrome,
+  completeNodeFromBackground,
+  getErrorMessage,
+  registrationSuccessWaitMs: STEP6_REGISTRATION_SUCCESS_WAIT_MS,
+  sleepWithStop,
 });
 const step7Executor = self.MultiPageBackgroundStep7?.createStep7Executor({
   addLog,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   getErrorMessage,
   getLoginAuthStateLabel,
   getOAuthFlowStepTimeoutMs,
   getState,
+  getTabId,
   isAddPhoneAuthFailure,
   isStep6RecoverableResult,
   isStep6SuccessResult,
+  phoneVerificationHelpers,
   refreshOAuthUrlBeforeStep6,
   reuseOrCreateTab,
   sendToContentScriptResilient,
@@ -10461,7 +12374,8 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
   addLog,
   chrome,
   CLOUDFLARE_TEMP_EMAIL_PROVIDER,
-  completeStepFromBackground,
+  CLOUD_MAIL_PROVIDER,
+  completeNodeFromBackground,
   confirmCustomVerificationStepBypass: verificationFlowHelpers.confirmCustomVerificationStepBypass,
   ensureMail2925MailboxSession,
   ensureIcloudMailSession: ensureIcloudMailSessionForVerification,
@@ -10478,6 +12392,7 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
   LUCKMAIL_PROVIDER,
   resolveVerificationStep: verificationFlowHelpers.resolveVerificationStep,
   resolveSignupEmailForFlow,
+  persistRegistrationEmailState,
   phoneVerificationHelpers,
   rerunStep7ForStep8Recovery: (...args) => rerunStep7ForStep8Recovery(...args),
   resolveSignupMethod,
@@ -10493,7 +12408,8 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
 const plusCheckoutCreateExecutor = self.MultiPageBackgroundPlusCheckoutCreate?.createPlusCheckoutCreateExecutor({
   addLog,
   chrome,
-  completeStepFromBackground,
+  completeNodeFromBackground,
+  createAutomationTab,
   ensureContentScriptReadyOnTabUntilStopped,
   fetch: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
   markCurrentRegistrationAccountUsed,
@@ -10508,7 +12424,7 @@ const plusCheckoutBillingExecutor = self.MultiPageBackgroundPlusCheckoutBilling?
   addLog,
   broadcastDataUpdate,
   chrome,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureContentScriptReadyOnTabUntilStopped,
   fetch: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
   generateRandomName,
@@ -10517,6 +12433,7 @@ const plusCheckoutBillingExecutor = self.MultiPageBackgroundPlusCheckoutBilling?
   getTabId,
   isTabAlive,
   markCurrentRegistrationAccountUsed,
+  queryTabsInAutomationWindow,
   sendTabMessageUntilStopped,
   setState,
   sleepWithStop,
@@ -10532,13 +12449,15 @@ const goPayManualConfirmExecutor = self.MultiPageBackgroundGoPayManualConfirm?.c
   getTabId,
   isTabAlive,
   registerTab,
+  createAutomationTab,
   setState,
 });
 const payPalApproveExecutor = self.MultiPageBackgroundPayPalApprove?.createPayPalApproveExecutor({
   addLog,
   chrome,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureContentScriptReadyOnTabUntilStopped,
+  queryTabsInAutomationWindow,
   getTabId,
   isTabAlive,
   sendTabMessageUntilStopped,
@@ -10547,44 +12466,28 @@ const payPalApproveExecutor = self.MultiPageBackgroundPayPalApprove?.createPayPa
   waitForTabCompleteUntilStopped,
   waitForTabUrlMatchUntilStopped,
 });
-const whatsappOtpClient = self.MultiPageWhatsappOtpClient?.createWhatsappOtpClient({
-  addLog,
-  fetch: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
-  sleepWithStop,
-  throwIfStopped,
-});
 const goPayApproveExecutor = self.MultiPageBackgroundGoPayApprove?.createGoPayApproveExecutor({
   addLog,
   chrome,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureContentScriptReadyOnTabUntilStopped,
-  getState,
   getTabId,
   isTabAlive,
+  queryTabsInAutomationWindow,
   registerTab,
   sendTabMessageUntilStopped,
   setState,
   sleepWithStop,
-  throwIfStopped,
   waitForTabCompleteUntilStopped,
   clickWithDebugger,
-  gopayOtpClient: whatsappOtpClient,
-});
-const unlinkWhatsappExecutor = self.MultiPageBackgroundUnlinkWhatsapp?.createUnlinkWhatsappExecutor({
-  addLog,
-  completeStepFromBackground,
-  setState,
-  whatsappOtpClient,
-});
-const checkBalanceExecutor = self.MultiPageBackgroundCheckBalance?.createCheckBalanceExecutor({
-  addLog,
-  completeStepFromBackground,
-  setState,
-  whatsappOtpClient,
+  requestGoPayOtpInput: (payload = {}) => chrome.runtime.sendMessage({
+    type: 'REQUEST_GOPAY_OTP_INPUT',
+    payload,
+  }),
 });
 const plusReturnConfirmExecutor = self.MultiPageBackgroundPlusReturnConfirm?.createPlusReturnConfirmExecutor({
   addLog,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   getTabId,
   isTabAlive,
   setState,
@@ -10595,7 +12498,7 @@ const step10Executor = self.MultiPageBackgroundStep10?.createStep10Executor({
   addLog,
   chrome,
   closeConflictingTabsForSource,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureContentScriptReadyOnTab,
   getPanelMode,
   getTabId,
@@ -10608,28 +12511,66 @@ const step10Executor = self.MultiPageBackgroundStep10?.createStep10Executor({
   sendToContentScript,
   sendToContentScriptResilient,
   shouldBypassStep9ForLocalCpa,
+  DEFAULT_SUB2API_GROUP_NAME,
   SUB2API_STEP9_RESPONSE_TIMEOUT_MS,
 });
+
+function resolveBoundEmailForReloginState(state = {}) {
+  return String(
+    state?.step8VerificationTargetEmail
+    || state?.email
+    || state?.registrationEmailState?.current
+    || ''
+  ).trim();
+}
+
+async function executeReloginBoundEmail(state = {}) {
+  const visibleStep = Math.floor(Number(state?.visibleStep) || 0) || 10;
+  const boundEmail = resolveBoundEmailForReloginState(state);
+  if (!boundEmail) {
+    throw new Error(`步骤 ${visibleStep}：缺少绑定邮箱，无法在绑定邮箱后切入邮箱模式 OAuth 登录。`);
+  }
+  await addLog(`步骤 ${visibleStep}：绑定邮箱已提交，正在刷新 OAuth 并使用绑定邮箱 ${boundEmail} 登录...`, 'info', {
+    step: visibleStep,
+    stepKey: 'relogin-bound-email',
+  });
+  return step7Executor.executeStep7({
+    ...state,
+    forceLoginIdentifierType: 'email',
+    forceEmailLogin: true,
+    signupMethod: 'email',
+    resolvedSignupMethod: 'email',
+    accountIdentifierType: 'email',
+    accountIdentifier: boundEmail,
+    email: boundEmail,
+    step8VerificationTargetEmail: boundEmail,
+  });
+}
+
 const stepExecutorsByKey = {
   'open-chatgpt': () => step1Executor.executeStep1(),
   'submit-signup-email': (state) => step2Executor.executeStep2(state),
   'fill-password': (state) => step3Executor.executeStep3(state),
   'fetch-signup-code': (state) => step4Executor.executeStep4(state),
   'fill-profile': (state) => step5Executor.executeStep5(state),
-  'clear-login-cookies': () => step6Executor.executeStep6(),
+  'wait-registration-success': (state) => step6Executor.executeStep6(state),
   'plus-checkout-create': (state) => plusCheckoutCreateExecutor.executePlusCheckoutCreate(state),
   'plus-checkout-billing': (state) => plusCheckoutBillingExecutor.executePlusCheckoutBilling(state),
-  'gopay-subscription-confirm': (state) => goPayApproveExecutor.executeGoPayApprove(state),
+  'gopay-subscription-confirm': (state) => goPayManualConfirmExecutor.executeGoPayManualConfirm(state),
   'paypal-approve': (state) => normalizePlusPaymentMethod(state?.plusPaymentMethod) === PLUS_PAYMENT_METHOD_GOPAY
     ? goPayApproveExecutor.executeGoPayApprove(state)
     : payPalApproveExecutor.executePayPalApprove(state),
   'plus-checkout-return': (state) => plusReturnConfirmExecutor.executePlusReturnConfirm(state),
   'oauth-login': (state) => step7Executor.executeStep7(state),
   'fetch-login-code': (state) => step8Executor.executeStep8(state),
+  'post-login-phone-verification': (state) => step8Executor.executePostLoginPhoneVerification(state),
+  'bind-email': (state) => step8Executor.executeBindEmail(state),
+  'fetch-bind-email-code': (state) => step8Executor.executeFetchBindEmailCode(state),
+  'relogin-bound-email': (state) => executeReloginBoundEmail(state),
+  'fetch-bound-email-login-code': (state) => step8Executor.executeBoundEmailLoginCode(state),
+  'post-bound-email-phone-verification': (state) => step8Executor.executeBoundEmailPostLoginPhoneVerification(state),
   'confirm-oauth': (state) => step9Executor.executeStep9(state),
   'platform-verify': (state) => executeStep10(state),
-  'unlink-whatsapp': (state) => unlinkWhatsappExecutor.executeUnlinkWhatsapp(state),
-  'check-balance': (state) => checkBalanceExecutor.executeCheckBalance(state),
 };
 const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter({
   addLog,
@@ -10645,22 +12586,23 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   clearAccountRunHistory: (...args) => clearAndBroadcastAccountRunHistory(...args),
   deleteAccountRunHistoryRecords: (...args) => deleteAndBroadcastAccountRunHistoryRecords(...args),
   clearAutoRunTimerAlarm,
+  clearFreeReusablePhoneActivation,
   clearLuckmailRuntimeState,
   clearStopRequest,
   closeLocalhostCallbackTabs,
   closeTabsByUrlPrefix,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   deleteHotmailAccount,
   deleteHotmailAccounts,
   deleteIcloudAlias,
   deleteUsedIcloudAliases,
   findPayPalAccount,
   disableUsedLuckmailPurchases,
-  doesStepUseCompletionSignal,
+  doesNodeUseCompletionSignal,
   ensureMail2925MailboxSession,
   ensureManualInteractionAllowed,
-  executeStep,
-  executeStepViaCompletionSignal,
+  executeNode,
+  executeNodeViaCompletionSignal,
   exportSettingsBundle,
   fetchGeneratedEmail,
   refreshGpcCardBalance,
@@ -10681,12 +12623,16 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   getPendingAutoRunTimerPlan,
   getSourceLabel,
   getState,
+  getNodeDefinitionForState,
+  getNodeIdsForState,
+  getStepIdByNodeIdForState,
   getStepDefinitionForState,
   getStepIdsForState,
   getLastStepIdForState,
   normalizeSignupMethod,
   canUsePhoneSignup,
   resolveSignupMethod,
+  validateAutoRunStart: validateAutoRunStartState,
   getTabId,
   getStopRequested: () => stopRequested,
   handleCloudflareSecurityBlocked,
@@ -10714,8 +12660,8 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   normalizePayPalAccounts,
   normalizeRunCount,
   AUTO_RUN_TIMER_KIND_SCHEDULED_START,
-  notifyStepComplete,
-  notifyStepError,
+  notifyNodeComplete,
+  notifyNodeError,
   patchHotmailAccount,
   patchMail2925Account,
   registerTab,
@@ -10733,6 +12679,8 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   setContributionMode,
   setEmailState,
   setEmailStateSilently,
+  persistRegistrationEmailState,
+  setFreeReusablePhoneActivation,
   setSignupPhoneState,
   setSignupPhoneStateSilently,
   setIcloudAliasPreservedState,
@@ -10742,9 +12690,9 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   setLuckmailPurchaseUsedState,
   setPersistentSettings,
   setState,
-  setStepStatus,
+  setNodeStatus,
   skipAutoRunCountdown,
-  skipStep,
+  skipNode,
   startContributionFlow: (...args) => contributionOAuthManager?.startContributionFlow?.(...args),
   startAutoRunLoop,
   pollContributionStatus: (...args) => contributionOAuthManager?.pollContributionStatus?.(...args),
@@ -10759,29 +12707,87 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   verifyHotmailAccount,
 });
 
-function buildStepRegistry(definitions = []) {
-  return self.MultiPageBackgroundStepRegistry?.createStepRegistry(
+function buildNodeRegistry(definitions = []) {
+  return self.MultiPageBackgroundStepRegistry?.createNodeRegistry(
     definitions.map((definition) => ({
       ...definition,
-      execute: stepExecutorsByKey[definition.key],
+      nodeId: definition.nodeId || definition.key,
+      displayOrder: definition.displayOrder || definition.order,
+      executeKey: definition.executeKey || definition.key,
+      execute: stepExecutorsByKey[definition.executeKey || definition.key || definition.nodeId],
     }))
   );
 }
 
+function buildStepRegistry(definitions = []) {
+  const nodeRegistry = buildNodeRegistry(definitions);
+  return {
+    executeNode: (nodeId, state) => nodeRegistry.executeNode(nodeId, state),
+    getNodeDefinition: (nodeId) => nodeRegistry.getNodeDefinition(nodeId),
+    getOrderedNodes: () => nodeRegistry.getOrderedNodes(),
+    executeStep: (step, state) => {
+      const nodeId = String(getStepDefinitionForState(step, state)?.key || '').trim();
+      if (!nodeId) {
+        throw new Error(`未知节点：${step}`);
+      }
+      return nodeRegistry.executeNode(nodeId, state);
+    },
+    getStepDefinition: (step) => {
+      const nodeId = String(getStepDefinitionForState(step, {})?.key || '').trim();
+      return nodeId ? nodeRegistry.getNodeDefinition(nodeId) : null;
+    },
+    getOrderedSteps: () => nodeRegistry.getOrderedNodes(),
+  };
+}
+
+async function acquireTopLevelAuthChainExecution(step, state = {}) {
+  return acquireTopLevelAuthChainExecutionForNode(getNodeIdByStepForState(step, state), state);
+}
+
 const normalStepRegistry = buildStepRegistry(NORMAL_STEP_DEFINITIONS);
+const normalPhoneStepRegistry = buildStepRegistry(NORMAL_PHONE_STEP_DEFINITIONS);
+const normalPhoneBoundEmailReloginStepRegistry = buildStepRegistry(NORMAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS);
 const plusPayPalStepRegistry = buildStepRegistry(PLUS_PAYPAL_STEP_DEFINITIONS);
+const plusPayPalPhoneStepRegistry = buildStepRegistry(PLUS_PAYPAL_PHONE_STEP_DEFINITIONS);
+const plusPayPalPhoneBoundEmailReloginStepRegistry = buildStepRegistry(PLUS_PAYPAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS);
 const plusGoPayStepRegistry = buildStepRegistry(PLUS_GOPAY_STEP_DEFINITIONS);
+const plusGoPayPhoneStepRegistry = buildStepRegistry(PLUS_GOPAY_PHONE_STEP_DEFINITIONS);
+const plusGoPayPhoneBoundEmailReloginStepRegistry = buildStepRegistry(PLUS_GOPAY_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS);
 const plusGpcStepRegistry = buildStepRegistry(PLUS_GPC_STEP_DEFINITIONS);
+const plusGpcPhoneStepRegistry = buildStepRegistry(PLUS_GPC_PHONE_STEP_DEFINITIONS);
+const plusGpcPhoneBoundEmailReloginStepRegistry = buildStepRegistry(PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS);
 
 function getStepRegistryForState(state = {}) {
+  const activeFlowId = String(state?.activeFlowId || DEFAULT_ACTIVE_FLOW_ID).trim().toLowerCase() || DEFAULT_ACTIVE_FLOW_ID;
+  if (activeFlowId !== DEFAULT_ACTIVE_FLOW_ID) {
+    throw new Error(`当前尚未注册 flow=${activeFlowId} 的步骤执行器。`);
+  }
+  const signupMethod = getSignupMethodForStepDefinitions(state);
+  const useBoundEmailRelogin = signupMethod === SIGNUP_METHOD_PHONE
+    && Boolean(state?.phoneSignupReloginAfterBindEmailEnabled);
   if (!isPlusModeState(state)) {
+    if (signupMethod === SIGNUP_METHOD_PHONE) {
+      return useBoundEmailRelogin ? normalPhoneBoundEmailReloginStepRegistry : normalPhoneStepRegistry;
+    }
     return normalStepRegistry;
   }
   const paymentMethod = normalizePlusPaymentMethod(state?.plusPaymentMethod);
   if (paymentMethod === PLUS_PAYMENT_METHOD_GPC_HELPER) {
+    if (signupMethod === SIGNUP_METHOD_PHONE) {
+      return useBoundEmailRelogin ? plusGpcPhoneBoundEmailReloginStepRegistry : plusGpcPhoneStepRegistry;
+    }
     return plusGpcStepRegistry;
   }
-  return paymentMethod === PLUS_PAYMENT_METHOD_GOPAY ? plusGoPayStepRegistry : plusPayPalStepRegistry;
+  if (paymentMethod === PLUS_PAYMENT_METHOD_GOPAY) {
+    if (signupMethod === SIGNUP_METHOD_PHONE) {
+      return useBoundEmailRelogin ? plusGoPayPhoneBoundEmailReloginStepRegistry : plusGoPayPhoneStepRegistry;
+    }
+    return plusGoPayStepRegistry;
+  }
+  if (signupMethod === SIGNUP_METHOD_PHONE) {
+    return useBoundEmailRelogin ? plusPayPalPhoneBoundEmailReloginStepRegistry : plusPayPalPhoneStepRegistry;
+  }
+  return plusPayPalStepRegistry;
 }
 
 async function requestOAuthUrlFromPanel(state, options = {}) {
@@ -10895,6 +12901,9 @@ function getMailConfig(state) {
   if (provider === CLOUDFLARE_TEMP_EMAIL_PROVIDER) {
     return { provider: CLOUDFLARE_TEMP_EMAIL_PROVIDER, label: 'Cloudflare Temp Email' };
   }
+  if (provider === 'cloudmail') {
+    return { provider: 'cloudmail', label: 'Cloud Mail' };
+  }
   if (provider === '163') {
     return { source: 'mail-163', url: 'https://mail.163.com/js6/main.jsp?df=mail163_letter#module=mbox.ListModule%7C%7B%22fid%22%3A1%2C%22order%22%3A%22date%22%2C%22desc%22%3Atrue%7D', label: '163 邮箱' };
   }
@@ -10928,7 +12937,7 @@ function getMailConfig(state) {
       source: 'mail-2925',
       url: 'https://2925.com/#/mailList',
       label: '2925 邮箱',
-      inject: ['content/utils.js', 'content/mail-2925.js'],
+      inject: ['content/utils.js', 'content/operation-delay.js', 'content/mail-2925.js'],
       injectSource: 'mail-2925',
     };
   }
@@ -10995,125 +13004,6 @@ async function executeStep4(state) {
 
 async function executeStep5(state) {
   return step5Executor.executeStep5(state);
-}
-
-// ============================================================
-// Step 6 Cookie Cleanup
-// ============================================================
-
-function normalizeCookieDomainForMatch(domain) {
-  return String(domain || '').trim().replace(/^\.+/, '').toLowerCase();
-}
-
-function shouldClearPreLoginCookie(cookie) {
-  const domain = normalizeCookieDomainForMatch(cookie?.domain);
-  if (!domain) return false;
-  return PRE_LOGIN_COOKIE_CLEAR_DOMAINS.some((target) => (
-    domain === target || domain.endsWith(`.${target}`)
-  ));
-}
-
-function buildCookieRemovalUrl(cookie) {
-  const host = normalizeCookieDomainForMatch(cookie?.domain);
-  const path = String(cookie?.path || '/').startsWith('/')
-    ? String(cookie?.path || '/')
-    : `/${String(cookie?.path || '')}`;
-  return `https://${host}${path}`;
-}
-
-async function collectCookiesForPreLoginCleanup() {
-  if (!chrome.cookies?.getAll) {
-    return [];
-  }
-
-  const stores = chrome.cookies.getAllCookieStores
-    ? await chrome.cookies.getAllCookieStores()
-    : [{ id: undefined }];
-  const cookies = [];
-  const seen = new Set();
-
-  for (const store of stores) {
-    const storeId = store?.id;
-    const batch = await chrome.cookies.getAll(storeId ? { storeId } : {});
-    for (const cookie of batch || []) {
-      if (!shouldClearPreLoginCookie(cookie)) continue;
-      const key = [
-        cookie.storeId || storeId || '',
-        cookie.domain || '',
-        cookie.path || '',
-        cookie.name || '',
-        cookie.partitionKey ? JSON.stringify(cookie.partitionKey) : '',
-      ].join('|');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      cookies.push(cookie);
-    }
-  }
-
-  return cookies;
-}
-
-async function removeCookieDirectly(cookie) {
-  const details = {
-    url: buildCookieRemovalUrl(cookie),
-    name: cookie.name,
-  };
-
-  if (cookie.storeId) {
-    details.storeId = cookie.storeId;
-  }
-  if (cookie.partitionKey) {
-    details.partitionKey = cookie.partitionKey;
-  }
-
-  try {
-    const result = await chrome.cookies.remove(details);
-    return Boolean(result);
-  } catch (err) {
-    console.warn(LOG_PREFIX, '[removeCookieDirectly] failed', {
-      domain: cookie?.domain,
-      name: cookie?.name,
-      message: getErrorMessage(err),
-    });
-    return false;
-  }
-}
-
-async function runPreStep6CookieCleanup() {
-  await addLog(
-    `步骤 6：开始前等待 ${Math.round(STEP6_PRE_LOGIN_COOKIE_CLEAR_DELAY_MS / 1000)} 秒，然后直接删除 ChatGPT / OpenAI cookies...`,
-    'info'
-  );
-
-  await sleepWithStop(STEP6_PRE_LOGIN_COOKIE_CLEAR_DELAY_MS);
-
-  if (!chrome.cookies?.getAll || !chrome.cookies?.remove) {
-    await addLog('步骤 6：当前浏览器不支持 cookies API，无法直接删除 cookies。', 'warn');
-    return;
-  }
-
-  const cookies = await collectCookiesForPreLoginCleanup();
-  let removedCount = 0;
-
-  for (const cookie of cookies) {
-    throwIfStopped();
-    if (await removeCookieDirectly(cookie)) {
-      removedCount += 1;
-    }
-  }
-
-  if (chrome.browsingData?.removeCookies) {
-    try {
-      await chrome.browsingData.removeCookies({
-        since: 0,
-        origins: PRE_LOGIN_COOKIE_CLEAR_ORIGINS,
-      });
-    } catch (err) {
-      await addLog(`步骤 6：browsingData 补扫 cookies 失败：${getErrorMessage(err)}`, 'warn');
-    }
-  }
-
-  await addLog(`步骤 6：已直接删除 ${removedCount} 个 ChatGPT / OpenAI cookies，准备继续获取链接并登录。`, 'ok');
 }
 
 // ============================================================
@@ -11312,7 +13202,7 @@ async function getPostStep6AutoRestartDecision(step, error) {
     if (isPhoneSmsPlatformRateLimitFailure(normalizedMessage)) {
       return false;
     }
-    return /HeroSMS|phone verification did not succeed|number replacements|sms_timeout_after_resend|phone number is already linked|add-phone keeps rejecting current number|接码|手机号|手机验证码|步骤\s*9.*(?:手机号|验证码)|Step\s*9.*phone verification/i.test(normalizedMessage);
+    return /HeroSMS|phone verification did not succeed|number replacements|sms_timeout_after(?:_[a-z0-9_]+)?|phone number is already linked|add-phone keeps rejecting current number|手机验证码|短信验证码|接码|步骤\s*9[：:][\s\S]*(?:手机号验证|手机验证码|接码|没有可用手机号|无可用手机号)|(?:手机号验证|手机号码验证|手机号接码|手机号码接码)[\s\S]*(?:失败|超时|未成功|不可用|拒绝)|(?:手机号|手机号码)[\s\S]*(?:已绑定|被占用|不可用|拒绝|失败|超时|没有可用|无可用)|Step\s*9.*phone verification/i.test(normalizedMessage);
   };
 
   const normalizedStep = Number(step);
@@ -11325,14 +13215,24 @@ async function getPostStep6AutoRestartDecision(step, error) {
   const lastStepId = typeof getLastStepIdForState === 'function'
     ? getLastStepIdForState(latestState)
     : (typeof LAST_STEP_ID === 'number' ? LAST_STEP_ID : 10);
-  const currentStepKey = resolveStepKey(normalizedStep, latestState);
+  const currentNodeKey = resolveStepKey(normalizedStep, latestState);
   const confirmOauthStep = findStepIdByKeyForState('confirm-oauth', latestState);
-  const shouldRetryFromConfirmStep = currentStepKey === 'platform-verify'
+  const boundEmailReloginStep = findStepIdByKeyForState('relogin-bound-email', latestState);
+  const isBoundEmailReloginTailStep = [
+    'relogin-bound-email',
+    'fetch-bound-email-login-code',
+    'post-bound-email-phone-verification',
+  ].includes(currentNodeKey);
+  const shouldRetryFromConfirmStep = currentNodeKey === 'platform-verify'
     && Number.isFinite(confirmOauthStep)
     && confirmOauthStep > 0
     && confirmOauthStep < normalizedStep
     && isPlatformVerifyTransientRetryError(errorMessage);
-  const restartAnchorStep = shouldRetryFromConfirmStep ? confirmOauthStep : authChainStartStep;
+  const restartAnchorStep = shouldRetryFromConfirmStep
+    ? confirmOauthStep
+    : (isBoundEmailReloginTailStep && Number.isFinite(boundEmailReloginStep) && boundEmailReloginStep > 0
+      ? boundEmailReloginStep
+      : authChainStartStep);
   if (isPhoneSmsPlatformRateLimitFailure(errorMessage)) {
     return {
       shouldRestart: false,
@@ -11448,6 +13348,134 @@ async function getLoginAuthStateFromContent(options = {}) {
   }
 
   return result || {};
+}
+
+async function getStep5SubmitStateFromContent(options = {}) {
+  const result = await sendToContentScriptResilient(
+    'signup-page',
+    {
+      type: 'GET_STEP5_SUBMIT_STATE',
+      source: 'background',
+      payload: {},
+    },
+    {
+      timeoutMs: options.timeoutMs ?? 15000,
+      retryDelayMs: options.retryDelayMs ?? 600,
+      responseTimeoutMs: options.responseTimeoutMs ?? (options.timeoutMs ?? 15000),
+      logMessage: options.logMessage || '步骤 5：资料页正在切换，等待页面恢复后确认提交结果...',
+      logStep: 5,
+      logStepKey: options.logStepKey || 'fill-profile',
+    }
+  );
+
+  if (result?.error) {
+    throw new Error(result.error);
+  }
+
+  return result || {};
+}
+
+async function recoverStep5SubmitRetryPageOnTab(options = {}) {
+  const result = await sendToContentScriptResilient(
+    'signup-page',
+    {
+      type: 'RECOVER_STEP5_SUBMIT_RETRY_PAGE',
+      source: 'background',
+      payload: {
+        timeoutMs: options.timeoutMs ?? 12000,
+        maxClickAttempts: options.maxClickAttempts ?? 2,
+      },
+    },
+    {
+      timeoutMs: options.timeoutMs ?? 15000,
+      retryDelayMs: options.retryDelayMs ?? 600,
+      responseTimeoutMs: options.responseTimeoutMs ?? (options.timeoutMs ?? 15000),
+      logMessage: options.logMessage || '步骤 5：资料提交后正在尝试恢复认证重试页...',
+      logStep: 5,
+      logStepKey: options.logStepKey || 'fill-profile',
+    }
+  );
+
+  if (result?.error) {
+    throw new Error(result.error);
+  }
+
+  return result || {};
+}
+
+async function validateStep5PostCompletion(tabId, completionPayload = {}) {
+  if (!Number.isInteger(tabId)) {
+    throw new Error('步骤 5：缺少有效的资料页标签页，无法确认提交后的最终状态。');
+  }
+
+  const maxAuthRetryRecoveries = Math.max(1, Number(completionPayload?.maxAuthRetryRecoveries) || 2);
+  let authRetryRecoveryCount = 0;
+
+  while (true) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const currentUrl = String(tab?.url || completionPayload?.url || '').trim();
+    if (currentUrl && isLikelyLoggedInChatgptHomeUrl(currentUrl)) {
+      return {
+        successState: 'logged_in_home',
+        url: currentUrl,
+      };
+    }
+
+    const pageState = await getStep5SubmitStateFromContent({
+      timeoutMs: 15000,
+      responseTimeoutMs: 15000,
+      retryDelayMs: 500,
+      logMessage: '步骤 5：资料提交已触发页面跳转，正在确认最终页面状态...',
+    });
+
+    if (pageState.userAlreadyExistsBlocked) {
+      throw new Error('SIGNUP_USER_ALREADY_EXISTS::步骤 5：检测到 user_already_exists，当前轮将直接停止。');
+    }
+    if (pageState.maxCheckAttemptsBlocked) {
+      throw new Error('AUTH_MAX_CHECK_ATTEMPTS::max_check_attempts on step 5 auth retry page; restart the current auth step without clicking Retry.');
+    }
+
+    if (pageState.retryPage) {
+      if (authRetryRecoveryCount >= maxAuthRetryRecoveries) {
+        throw new Error(`步骤 5：资料提交后连续进入认证重试页 ${maxAuthRetryRecoveries} 次，页面仍未恢复。URL: ${pageState.url || currentUrl || 'unknown'}`);
+      }
+      authRetryRecoveryCount += 1;
+      await addLog(`步骤 5：提交完成信号后检测到认证重试页，正在自动恢复（${authRetryRecoveryCount}/${maxAuthRetryRecoveries}）...`, 'warn', {
+        step: 5,
+        stepKey: 'fill-profile',
+      });
+      await recoverStep5SubmitRetryPageOnTab({
+        timeoutMs: 15000,
+        retryDelayMs: 600,
+        logMessage: '步骤 5：资料提交后的认证重试页正在恢复，等待“重试”按钮重新就绪...',
+      });
+      await waitForTabStableComplete(tabId, {
+        timeoutMs: 30000,
+        retryDelayMs: 300,
+        stableMs: 1000,
+        initialDelayMs: 300,
+      }).catch(() => null);
+      continue;
+    }
+
+    if (pageState.successState === 'logged_in_home' || pageState.successState === 'oauth_consent' || pageState.successState === 'add_phone') {
+      return pageState;
+    }
+
+    if (pageState.errorText) {
+      throw new Error(`步骤 5：资料提交后页面返回错误：${pageState.errorText}。URL: ${pageState.url || currentUrl || 'unknown'}`);
+    }
+
+    if (pageState.profileVisible) {
+      throw new Error(`步骤 5：资料提交完成信号已收到，但页面仍停留在资料页，当前流程将直接报错。URL: ${pageState.url || currentUrl || 'unknown'}`);
+    }
+
+    if (pageState.unknownAuthPage) {
+      throw new Error(`步骤 5：资料提交后进入未识别的认证页，无法确认成功。URL: ${pageState.url || currentUrl || 'unknown'}`);
+    }
+
+    throw new Error(`步骤 5：资料提交后未能确认最终状态。URL: ${pageState.url || currentUrl || 'unknown'}`);
+  }
 }
 
 async function ensureStep8VerificationPageReady(options = {}) {
@@ -11581,12 +13609,13 @@ async function rerunStep7ForStep8Recovery(options = {}) {
   const authLoginStep = typeof getAuthChainStartStepId === 'function'
     ? getAuthChainStartStepId(initialState)
     : FINAL_OAUTH_CHAIN_START_STEP;
+  const authLoginNodeId = getNodeIdByStepForState(authLoginStep, initialState) || 'oauth-login';
   await addLog(logMessage, 'warn', {
     step: logStep,
     stepKey: logStepKey,
   });
-  await setStepStatus(authLoginStep, 'running');
-  await addLog('开始执行', 'info', { step: authLoginStep });
+  await setNodeStatus(authLoginNodeId, 'running');
+  await addLog('开始执行', 'info', { nodeId: authLoginNodeId });
 
   try {
     await step7Executor.executeStep7({
@@ -11596,18 +13625,18 @@ async function rerunStep7ForStep8Recovery(options = {}) {
   } catch (err) {
     const latestState = await getState();
     if (isStopError(err)) {
-      await setStepStatus(authLoginStep, 'stopped');
-      await addLog('已被用户停止', 'warn', { step: authLoginStep });
-      await appendManualAccountRunRecordIfNeeded(`step${authLoginStep}_stopped`, latestState, getErrorMessage(err));
+      await setNodeStatus(authLoginNodeId, 'stopped');
+      await addLog('已被用户停止', 'warn', { nodeId: authLoginNodeId });
+      await appendManualAccountRunRecordIfNeeded(`node:${authLoginNodeId}:stopped`, latestState, getErrorMessage(err));
       throw err;
     }
     if (isTerminalSecurityBlockedError(err)) {
       await handleCloudflareSecurityBlocked(err);
       throw new Error(STOP_ERROR_MESSAGE);
     }
-    await setStepStatus(authLoginStep, 'failed');
-    await addLog(`失败：${getErrorMessage(err)}`, 'error', { step: authLoginStep });
-    await appendManualAccountRunRecordIfNeeded(`step${authLoginStep}_failed`, latestState, getErrorMessage(err));
+    await setNodeStatus(authLoginNodeId, 'failed');
+    await addLog(`失败：${getErrorMessage(err)}`, 'error', { nodeId: authLoginNodeId });
+    await appendManualAccountRunRecordIfNeeded(`node:${authLoginNodeId}:failed`, latestState, getErrorMessage(err));
     throw err;
   }
 
@@ -11616,8 +13645,8 @@ async function rerunStep7ForStep8Recovery(options = {}) {
   }
 }
 
-async function executeStep6() {
-  return step6Executor.executeStep6();
+async function executeStep6(state = null) {
+  return step6Executor.executeStep6(state || await getState());
 }
 
 // ============================================================
@@ -11712,6 +13741,29 @@ function throwIfStep8SettledOrStopped(isSettled = false) {
   }
 }
 
+function isStep9AuthCallbackWaitPageUrl(rawUrl) {
+  if (!rawUrl) return false;
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = String(parsed.hostname || '').toLowerCase();
+    if (!['auth.openai.com', 'auth0.openai.com', 'accounts.openai.com'].includes(hostname)) {
+      return false;
+    }
+    const pathname = String(parsed.pathname || '');
+    return /\/api\/oauth\/oauth2\/auth(?:[/?#]|$)/i.test(pathname)
+      || /\/oauth\/oauth2\/auth(?:[/?#]|$)/i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function shouldDeferStep9CallbackTimeout(details = {}) {
+  const tabId = details?.tabId;
+  if (!Number.isInteger(tabId)) return false;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  return isStep9AuthCallbackWaitPageUrl(tab?.url || '');
+}
+
 async function ensureStep8SignupPageReady(tabId, options = {}) {
   const visibleStep = Math.floor(Number(options.visibleStep || options.logStep || options.step) || 0);
   await ensureContentScriptReadyOnTab('signup-page', tabId, {
@@ -11723,6 +13775,37 @@ async function ensureStep8SignupPageReady(tabId, options = {}) {
     logStep: visibleStep > 0 ? visibleStep : null,
     logStepKey: options.logStepKey || '',
   });
+}
+
+async function readAuthTabSnapshot(tabId) {
+  if (!Number.isInteger(tabId)) {
+    return null;
+  }
+  let tabSnapshot = null;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    tabSnapshot = {
+      url: String(tab?.url || ''),
+      title: String(tab?.title || ''),
+      text: '',
+    };
+  } catch {
+    tabSnapshot = null;
+  }
+  try {
+    const executionResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: () => ({
+        url: String(location.href || ''),
+        title: String(document.title || ''),
+        text: String(document.body?.innerText || document.documentElement?.innerText || '').trim(),
+      }),
+    });
+    return executionResults?.[0]?.result || tabSnapshot;
+  } catch {
+    return tabSnapshot;
+  }
 }
 
 async function getStep8PageState(tabId, responseTimeoutMs = 1500, visibleStep = 9) {
@@ -11756,22 +13839,12 @@ async function waitForStep8Ready(tabId, timeoutMs = STEP8_READY_WAIT_TIMEOUT_MS,
       throw new Error(`${CLOUDFLARE_SECURITY_BLOCK_ERROR_PREFIX}${CLOUDFLARE_SECURITY_BLOCK_USER_MESSAGE}`);
     }
     if (pageState?.addPhonePage || pageState?.phoneVerificationPage) {
-      const latestState = await getState();
-      if (!Boolean(latestState?.phoneVerificationEnabled)) {
-        const urlPart = pageState?.url ? ` URL: ${pageState.url}` : '';
-        throw new Error(
-          pageState?.phoneVerificationPage
-            ? `步骤 ${visibleStep}：当前认证页进入手机验证码页，但未开启接码功能，无法继续自动授权。${urlPart}`.trim()
-            : `步骤 ${visibleStep}：当前认证页进入手机号页面，但未开启接码功能，无法继续自动授权。${urlPart}`.trim()
-        );
-      }
-      await phoneVerificationHelpers.completePhoneVerificationFlow(tabId, pageState, { visibleStep });
-      recovered = false;
-      await sleepWithStop(250);
-      continue;
-    }
-    if (pageState?.addPhonePage) {
-      throw new Error(`步骤 ${visibleStep}：认证页进入了手机号页面，当前不是 OAuth 同意页，无法继续自动授权。`);
+      const urlPart = pageState?.url ? ` URL: ${pageState.url}` : '';
+      throw new Error(
+        pageState?.phoneVerificationPage
+          ? `步骤 ${visibleStep}：自动确认 OAuth 只处理 OAuth 授权页，当前仍在手机验证码页。${urlPart}`.trim()
+          : `步骤 ${visibleStep}：自动确认 OAuth 只处理 OAuth 授权页，当前仍在添加手机号页。${urlPart}`.trim()
+      );
     }
     if (pageState?.retryPage) {
       const retryUrl = String(pageState?.url || '').trim();
@@ -12059,7 +14132,8 @@ async function recoverOAuthLocalhostTimeout(details = {}) {
   const authLoginStep = typeof getAuthChainStartStepId === 'function'
     ? getAuthChainStartStepId(state || {})
     : FINAL_OAUTH_CHAIN_START_STEP;
-  const loginCodeStep = Number(visibleStep) >= 12 ? 11 : 8;
+  const authLoginNodeId = String(getNodeIdByStepForState(authLoginStep, state || {}) || 'oauth-login').trim();
+  const confirmNodeId = String(getNodeIdByStepForState(visibleStep, state || {}) || 'confirm-oauth').trim();
 
   await addLog(
     `检测到 OAuth localhost 回调等待窗口已过期，正在复核认证页并回到步骤 ${authLoginStep} 重拉授权链路。`,
@@ -12078,7 +14152,7 @@ async function recoverOAuthLocalhostTimeout(details = {}) {
     });
   } catch (inspectError) {
     await addLog(
-      `复核认证页状态失败（${getErrorMessage(inspectError)}），将先尝试按步骤 ${loginCodeStep} 收尾恢复。`,
+      `复核认证页状态失败（${getErrorMessage(inspectError)}），将按当前 OAuth 流程图重新执行授权前置节点。`,
       'warn',
       { step: visibleStep, stepKey: 'confirm-oauth' }
     );
@@ -12104,22 +14178,45 @@ async function recoverOAuthLocalhostTimeout(details = {}) {
   if (!step7Executor?.executeStep7 || !step8Executor?.executeStep8) {
     return null;
   }
+  const workflowNodeIds = getAutoRunWorkflowNodeIds(latestState);
+  const authStartIndex = workflowNodeIds.indexOf(authLoginNodeId);
+  const confirmIndex = workflowNodeIds.indexOf(confirmNodeId);
+  if (authStartIndex < 0 || confirmIndex < 0 || authStartIndex >= confirmIndex) {
+    return null;
+  }
+  const recoveryNodeIds = workflowNodeIds.slice(authStartIndex, confirmIndex);
+  const runRecoveryNode = async (nodeId) => {
+    const recoveryState = await getState();
+    const recoveryStep = getStepIdByNodeIdForState(nodeId, recoveryState);
+    const payload = {
+      ...recoveryState,
+      visibleStep: recoveryStep,
+      nodeId,
+    };
+    switch (nodeId) {
+      case 'oauth-login':
+        return step7Executor.executeStep7(payload);
+      case 'fetch-login-code':
+        return step8Executor.executeStep8(payload);
+      case 'post-login-phone-verification':
+        return step8Executor.executePostLoginPhoneVerification(payload);
+      case 'bind-email':
+        return step8Executor.executeBindEmail(payload);
+      case 'fetch-bind-email-code':
+        return step8Executor.executeFetchBindEmailCode(payload);
+      default:
+        throw new Error(`OAuth localhost 恢复不支持节点 ${nodeId}。`);
+    }
+  };
 
   await addLog(
-    `正在自动重开步骤 ${authLoginStep} -> ${loginCodeStep}，恢复到可继续捕获 localhost 回调的状态。`,
+    `正在自动重开 OAuth 前置节点：${recoveryNodeIds.join(' -> ')}。`,
     'warn',
     { step: visibleStep, stepKey: 'confirm-oauth' }
   );
-  await step7Executor.executeStep7({
-    ...latestState,
-    visibleStep: authLoginStep,
-  });
-
-  const stateAfterStep7 = await getState();
-  await step8Executor.executeStep8({
-    ...stateAfterStep7,
-    visibleStep: loginCodeStep,
-  });
+  for (const nodeId of recoveryNodeIds) {
+    await runRecoveryNode(nodeId);
+  }
 
   const recoveredState = await getState();
   const oauthUrl = String(recoveredState?.oauthUrl || state?.oauthUrl || '').trim();
@@ -12135,7 +14232,7 @@ async function recoverOAuthLocalhostTimeout(details = {}) {
   });
 
   await addLog(
-    `已恢复到步骤 ${authLoginStep} -> ${loginCodeStep} 收尾状态，并刷新 OAuth localhost 回调等待窗口，准备重试当前步骤。`,
+    `已恢复到自动确认 OAuth 前置状态，并刷新 OAuth localhost 回调等待窗口，准备重试当前步骤。`,
     'warn',
     { step: visibleStep, stepKey: 'confirm-oauth' }
   );
@@ -12147,7 +14244,7 @@ const step9Executor = self.MultiPageBackgroundStep9?.createStep9Executor({
   chrome,
   cleanupStep8NavigationListeners,
   clickWithDebugger,
-  completeStepFromBackground,
+  completeNodeFromBackground,
   ensureStep8SignupPageReady,
   getOAuthFlowStepTimeoutMs,
   getStep8CallbackUrlFromNavigation,
@@ -12166,6 +14263,7 @@ const step9Executor = self.MultiPageBackgroundStep9?.createStep9Executor({
   setStep8TabUpdatedListener,
   setWebNavCommittedListener,
   setWebNavListener,
+  shouldDeferStep9CallbackTimeout,
   sleepWithStop,
   STEP8_CLICK_RETRY_DELAY_MS,
   STEP8_MAX_ROUNDS,
@@ -12243,7 +14341,7 @@ async function executeContributionStep10(state) {
           step: platformVerifyStep,
           stepKey: 'platform-verify',
         });
-        await completeStepFromBackground(platformVerifyStep, {
+        await completeNodeFromBackground(state?.nodeId || 'platform-verify', {
           contributionStatus: status,
           contributionStatusMessage: latestState.contributionStatusMessage || '',
           localhostUrl: callbackUrl,

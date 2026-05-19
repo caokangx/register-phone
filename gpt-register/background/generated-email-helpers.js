@@ -14,6 +14,7 @@
       getCloudflareTempEmailAddressFromResponse,
       getCloudflareTempEmailConfig,
       getCustomEmailPoolEmail,
+      getRegistrationEmailBaseline,
       getState,
       ensureMail2925AccountForFlow,
       joinCloudflareTempEmailUrl,
@@ -21,11 +22,20 @@
       normalizeCloudflareTempEmailAddress,
       normalizeEmailGenerator,
       isGeneratedAliasProvider,
+      persistRegistrationEmailState = null,
       reuseOrCreateTab,
       sendToContentScript,
       setEmailState,
       throwIfStopped,
     } = deps;
+
+    async function persistResolvedEmailState(state = null, email, options = {}) {
+      if (typeof persistRegistrationEmailState === 'function') {
+        await persistRegistrationEmailState(state, email, options);
+        return;
+      }
+      await setEmailState(email, options);
+    }
 
     function generateCloudflareAliasLocalPart() {
       const letters = 'abcdefghijklmnopqrstuvwxyz';
@@ -59,7 +69,10 @@
       const localPart = String(options.localPart || '').trim().toLowerCase() || generateCloudflareAliasLocalPart();
       const aliasEmail = `${localPart}@${domain}`;
 
-      await setEmailState(aliasEmail);
+      await persistResolvedEmailState(latestState, aliasEmail, {
+        source: 'generated:cloudflare',
+        preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+      });
       await addLog(`Cloudflare 邮箱：已生成 ${aliasEmail}`, 'ok');
       return aliasEmail;
     }
@@ -161,14 +174,25 @@
         throw new Error('Cloudflare Temp Email 未返回可用邮箱地址。');
       }
 
-      await setEmailState(address);
+      await persistResolvedEmailState(latestState, address, {
+        source: 'generated:cloudflare-temp-email',
+        preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+      });
       await addLog(`Cloudflare Temp Email：已生成 ${address}`, 'ok');
       return address;
     }
 
+    function normalizeEmailForComparison(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
     async function fetchDuckEmail(options = {}) {
       throwIfStopped();
-      const { generateNew = true } = options;
+      const {
+        generateNew = true,
+        baselineEmail = '',
+        state = null,
+      } = options;
 
       await addLog(`Duck 邮箱：正在打开自动填充设置（${generateNew ? '生成新地址' : '复用当前地址'}）...`);
       await reuseOrCreateTab('duck-mail', DUCK_AUTOFILL_URL);
@@ -176,7 +200,10 @@
       const result = await sendToContentScript('duck-mail', {
         type: 'FETCH_DUCK_EMAIL',
         source: 'background',
-        payload: { generateNew },
+        payload: {
+          generateNew,
+          baselineEmail: normalizeEmailForComparison(baselineEmail),
+        },
       });
 
       if (result?.error) {
@@ -186,7 +213,10 @@
         throw new Error('未返回 Duck 邮箱地址。');
       }
 
-      await setEmailState(result.email);
+      await persistResolvedEmailState(state, result.email, {
+        source: 'generated:duck',
+        preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+      });
       await addLog(`Duck 邮箱：${result.generated ? '已生成' : '已读取'} ${result.email}`, 'ok');
       return result.email;
     }
@@ -204,7 +234,10 @@
         );
       }
 
-      await setEmailState(email);
+      await persistResolvedEmailState(latestState, email, {
+        source: 'generated:custom-pool',
+        preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+      });
       await addLog(`自定义邮箱池：已取用 ${email}`, 'ok');
       return email;
     }
@@ -243,7 +276,10 @@
       }
 
       const email = buildGeneratedAliasEmail(mergedState);
-      await setEmailState(email);
+      await persistResolvedEmailState(mergedState, email, {
+        source: `generated:${provider || 'alias'}`,
+        preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+      });
       await addLog(`${provider === 'gmail' ? 'Gmail +tag' : '2925'}：已生成 ${email}`, 'ok');
       return email;
     }
@@ -286,6 +322,9 @@
         const stateFetchMode = String(mergedState.icloudFetchMode || '').trim().toLowerCase();
         const icloudOptions = {
           generateNew: Boolean(options.generateNew) || stateFetchMode === 'always_new',
+          preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+          source: 'generated:icloud',
+          state: mergedState,
         };
         if (mergedState.icloudHostPreference !== undefined) {
           icloudOptions.hostPreference = mergedState.icloudHostPreference;
@@ -301,7 +340,22 @@
       if (generator === CLOUDFLARE_TEMP_EMAIL_GENERATOR) {
         return fetchCloudflareTempEmailAddress(mergedState, options);
       }
-      return fetchDuckEmail(options);
+      const resolvedDuckBaselineEmail = typeof getRegistrationEmailBaseline === 'function'
+        ? getRegistrationEmailBaseline(mergedState, {
+          preferredEmail: options.currentEmail,
+          fallbackEmail: options.baselineEmail,
+        })
+        : String(
+          options.currentEmail
+          || options.baselineEmail
+          || mergedState.email
+          || ''
+        ).trim();
+      return fetchDuckEmail({
+        ...options,
+        state: mergedState,
+        baselineEmail: resolvedDuckBaselineEmail,
+      });
     }
 
     return {

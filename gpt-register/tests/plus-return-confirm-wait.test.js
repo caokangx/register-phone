@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
@@ -12,7 +12,7 @@ test('Plus return confirm waits a fixed 20 seconds after return URL is detected'
     addLog: async (message, level = 'info') => {
       events.push({ type: 'log', message, level });
     },
-    completeStepFromBackground: async (step, payload) => {
+    completeNodeFromBackground: async (step, payload) => {
       events.push({ type: 'complete', step, payload });
     },
     getTabId: async (source) => (source === 'paypal-flow' ? 77 : null),
@@ -46,7 +46,7 @@ test('Plus return confirm waits a fixed 20 seconds after return URL is detected'
     events.find((event) => event.type === 'complete'),
     {
       type: 'complete',
-      step: 9,
+      step: 'plus-checkout-return',
       payload: { plusReturnUrl: 'https://chatgpt.com/backend-api/payments/success' },
     }
   );

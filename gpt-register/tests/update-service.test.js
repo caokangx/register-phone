@@ -7,7 +7,7 @@ const source = fs.readFileSync('sidepanel/update-service.js', 'utf8');
 function createUpdateService(options = {}) {
   const manifest = options.manifest || {
     version: '1.0',
-    version_name: 'Ultra1.0',
+    version_name: 'FlowPilot1.0',
   };
   const cache = new Map();
   const windowObject = {};
@@ -77,11 +77,11 @@ function createUpdateService(options = {}) {
   };
 }
 
-test('getReleaseSnapshot keeps Ultra releases ahead of historical Pro and legacy v releases', async () => {
+test('getReleaseSnapshot keeps FlowPilot releases ahead of historical Ultra, Pro, and legacy v releases', async () => {
   const { api } = createUpdateService({
     manifest: {
-      version: '1.0',
-      version_name: 'Ultra1.0',
+      version: '9.99',
+      version_name: 'Ultra9.99',
     },
     fetchImpl: async () => ({
       ok: true,
@@ -106,10 +106,19 @@ test('getReleaseSnapshot keeps Ultra releases ahead of historical Pro and legacy
             prerelease: false,
           },
           {
-            tag_name: 'Ultra1.1',
-            name: 'Ultra1.1',
-            html_url: 'https://example.com/Ultra1.1',
+            tag_name: 'Ultra9.99',
+            name: 'Ultra9.99',
+            html_url: 'https://example.com/Ultra9.99',
             published_at: '2026-04-19T00:00:00.000Z',
+            body: '- historical ultra release',
+            draft: false,
+            prerelease: false,
+          },
+          {
+            tag_name: 'FlowPilot1.0',
+            name: 'FlowPilot1.0',
+            html_url: 'https://example.com/FlowPilot1.0',
+            published_at: '2026-04-20T00:00:00.000Z',
             body: '- current release',
             draft: false,
             prerelease: false,
@@ -122,11 +131,11 @@ test('getReleaseSnapshot keeps Ultra releases ahead of historical Pro and legacy
   const snapshot = await api.getReleaseSnapshot({ force: true });
 
   assert.equal(snapshot.status, 'update-available');
-  assert.equal(snapshot.localVersion, 'Ultra1.0');
-  assert.equal(snapshot.latestVersion, 'Ultra1.1');
+  assert.equal(snapshot.localVersion, 'Ultra9.99');
+  assert.equal(snapshot.latestVersion, 'FlowPilot1.0');
   assert.deepEqual(
     snapshot.newerReleases.map((release) => release.displayVersion),
-    ['Ultra1.1']
+    ['FlowPilot1.0']
   );
 });
 
@@ -134,7 +143,7 @@ test('getReleaseSnapshot reorders cached releases before choosing latest version
   const { api, getFetchCalls } = createUpdateService({
     manifest: {
       version: '1.0',
-      version_name: 'Ultra1.0',
+      version_name: 'FlowPilot1.0',
     },
     cachedSnapshot: {
       fetchedAt: Date.now(),
@@ -158,12 +167,21 @@ test('getReleaseSnapshot reorders cached releases before choosing latest version
           notes: [],
         },
         {
-          version: '1.1',
-          displayVersion: 'Ultra1.1',
+          version: '9.99',
+          displayVersion: 'Ultra9.99',
           family: 'ultra',
           title: '',
-          url: 'https://example.com/Ultra1.1',
+          url: 'https://example.com/Ultra9.99',
           publishedAt: '2026-04-19T00:00:00.000Z',
+          notes: [],
+        },
+        {
+          version: '1.1',
+          displayVersion: 'FlowPilot1.1',
+          family: 'flowpilot',
+          title: '',
+          url: 'https://example.com/FlowPilot1.1',
+          publishedAt: '2026-04-20T00:00:00.000Z',
           notes: [],
         },
       ],
@@ -177,19 +195,19 @@ test('getReleaseSnapshot reorders cached releases before choosing latest version
 
   assert.equal(getFetchCalls(), 0);
   assert.equal(snapshot.status, 'update-available');
-  assert.equal(snapshot.latestVersion, 'Ultra1.1');
+  assert.equal(snapshot.latestVersion, 'FlowPilot1.1');
   assert.deepEqual(
     snapshot.newerReleases.map((release) => release.displayVersion),
-    ['Ultra1.1']
+    ['FlowPilot1.1']
   );
 });
 
 test('getReleaseSnapshot suppresses an ignored latest update until a newer release appears', async () => {
   let releases = [
     {
-      tag_name: 'Ultra1.1',
-      name: 'Ultra1.1',
-      html_url: 'https://example.com/Ultra1.1',
+      tag_name: 'FlowPilot1.1',
+      name: 'FlowPilot1.1',
+      html_url: 'https://example.com/FlowPilot1.1',
       published_at: '2026-04-19T00:00:00.000Z',
       body: '- current release',
       draft: false,
@@ -199,7 +217,7 @@ test('getReleaseSnapshot suppresses an ignored latest update until a newer relea
   const { api } = createUpdateService({
     manifest: {
       version: '1.0',
-      version_name: 'Ultra1.0',
+      version_name: 'FlowPilot1.0',
     },
     fetchImpl: async () => ({
       ok: true,
@@ -211,17 +229,17 @@ test('getReleaseSnapshot suppresses an ignored latest update until a newer relea
 
   const firstSnapshot = await api.getReleaseSnapshot({ force: true });
   assert.equal(firstSnapshot.status, 'update-available');
-  assert.equal(api.ignoreReleaseSnapshot(firstSnapshot), 'Ultra1.1');
+  assert.equal(api.ignoreReleaseSnapshot(firstSnapshot), 'FlowPilot1.1');
 
   const ignoredSnapshot = await api.getReleaseSnapshot({ force: true });
   assert.equal(ignoredSnapshot.status, 'ignored');
-  assert.equal(ignoredSnapshot.ignoredVersion, 'Ultra1.1');
+  assert.equal(ignoredSnapshot.ignoredVersion, 'FlowPilot1.1');
 
   releases = [
     {
-      tag_name: 'Ultra1.2',
-      name: 'Ultra1.2',
-      html_url: 'https://example.com/Ultra1.2',
+      tag_name: 'FlowPilot1.2',
+      name: 'FlowPilot1.2',
+      html_url: 'https://example.com/FlowPilot1.2',
       published_at: '2026-04-20T00:00:00.000Z',
       body: '- next release',
       draft: false,
@@ -232,5 +250,5 @@ test('getReleaseSnapshot suppresses an ignored latest update until a newer relea
 
   const newerSnapshot = await api.getReleaseSnapshot({ force: true });
   assert.equal(newerSnapshot.status, 'update-available');
-  assert.equal(newerSnapshot.latestVersion, 'Ultra1.2');
+  assert.equal(newerSnapshot.latestVersion, 'FlowPilot1.2');
 });

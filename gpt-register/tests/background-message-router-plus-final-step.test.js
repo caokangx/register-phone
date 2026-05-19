@@ -30,10 +30,10 @@ test('message router appends success record on Plus final step instead of hard-c
     deleteIcloudAlias: async () => {},
     deleteUsedIcloudAliases: async () => {},
     disableUsedLuckmailPurchases: async () => {},
-    doesStepUseCompletionSignal: () => false,
+    doesNodeUseCompletionSignal: () => false,
     ensureManualInteractionAllowed: async () => ({}),
-    executeStep: async () => {},
-    executeStepViaCompletionSignal: async () => {},
+    executeNode: async () => {},
+    executeNodeViaCompletionSignal: async () => {},
     exportSettingsBundle: async () => ({}),
     fetchGeneratedEmail: async () => '',
     finalizeStep3Completion: async () => {},
@@ -43,7 +43,9 @@ test('message router appends success record on Plus final step instead of hard-c
     getCurrentLuckmailPurchase: () => null,
     getPendingAutoRunTimerPlan: () => null,
     getSourceLabel: () => '',
-    getState: async () => ({ plusModeEnabled: true, stepStatuses: { 13: 'pending' } }),
+    getState: async () => ({ plusModeEnabled: true, nodeStatuses: { 'platform-verify': 'pending' } }),
+    getNodeIdsForState: () => ['open-chatgpt', 'oauth-login', 'fetch-login-code', 'confirm-oauth', 'platform-verify'],
+    getStepIdByNodeIdForState: (nodeId) => ({ 'oauth-login': 10, 'fetch-login-code': 11, 'confirm-oauth': 12, 'platform-verify': 13 }[nodeId] || 0),
     getLastStepIdForState: () => 13,
     getStepDefinitionForState: (step) => ({ id: step, key: step === 10 ? 'oauth-login' : 'platform-verify' }),
     getStepIdsForState: () => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
@@ -66,8 +68,8 @@ test('message router appends success record on Plus final step instead of hard-c
     normalizeHotmailAccounts: (items) => items,
     normalizeRunCount: (value) => value,
     AUTO_RUN_TIMER_KIND_SCHEDULED_START: 'scheduled',
-    notifyStepComplete: () => {},
-    notifyStepError: () => {},
+    notifyNodeComplete: () => {},
+    notifyNodeError: () => {},
     patchHotmailAccount: async () => {},
     patchMail2925Account: async () => {},
     registerTab: async () => {},
@@ -88,9 +90,9 @@ test('message router appends success record on Plus final step instead of hard-c
     setLuckmailPurchaseUsedState: async () => {},
     setPersistentSettings: async () => {},
     setState: async () => {},
-    setStepStatus: async () => {},
+    setNodeStatus: async () => {},
     skipAutoRunCountdown: async () => false,
-    skipStep: async () => {},
+    skipNode: async () => {},
     startAutoRunLoop: async () => {},
     syncHotmailAccounts: async () => {},
     testHotmailAccountMailAccess: async () => {},
@@ -98,7 +100,7 @@ test('message router appends success record on Plus final step instead of hard-c
     verifyHotmailAccount: async () => {},
   });
 
-  await router.handleMessage({ type: 'STEP_COMPLETE', step: 13, payload: {} }, {});
+  await router.handleMessage({ type: 'NODE_COMPLETE', nodeId: 'platform-verify', payload: { nodeId: 'platform-verify' } }, {});
 
   assert.equal(appendCalls.length, 1);
   assert.equal(appendCalls[0][0], 'success');

@@ -98,6 +98,39 @@ function getTargetEmailMatchState(text, targetEmail) {
   return { matches: false, hasExplicitEmail: false };
 }
 
+function normalizeRulePatternList(patterns = []) {
+  return Array.isArray(patterns) ? patterns : [];
+}
+
+function extractCodeByRulePatterns(text, patterns = []) {
+  const normalizedText = String(text || '');
+  for (const pattern of normalizeRulePatternList(patterns)) {
+    try {
+      const source = String(pattern?.source || '').trim();
+      if (!source) {
+        continue;
+      }
+      const flags = String(pattern?.flags || '').replace(/[^dgimsuvy]/g, '');
+      const match = normalizedText.match(new RegExp(source, flags));
+      if (!match) {
+        continue;
+      }
+      for (let index = 1; index < match.length; index += 1) {
+        const candidate = String(match[index] || '').trim();
+        if (candidate) {
+          return candidate;
+        }
+      }
+      if (String(match[0] || '').trim()) {
+        return String(match[0] || '').trim();
+      }
+    } catch (_) {
+      // Ignore invalid runtime rule patterns and continue with other candidates.
+    }
+  }
+  return null;
+}
+
 const MONTH_INDEX_MAP = {
   jan: 0,
   feb: 1,
@@ -165,16 +198,17 @@ function parseGmailTimestampText(rawText) {
   return null;
 }
 
-function extractVerificationCode(text) {
+function extractVerificationCode(text, options = {}) {
   const normalized = String(text || '');
+  const matchedByRule = extractCodeByRulePatterns(normalized, options?.codePatterns);
+  if (matchedByRule) {
+    return matchedByRule;
+  }
 
   const cnMatch = normalized.match(/(?:验证码|代码)[^0-9]{0,16}(\d{6})/i);
   if (cnMatch) return cnMatch[1];
 
-  const openAiLoginMatch = normalized.match(/(?:chatgpt\s+log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
-  if (openAiLoginMatch) return openAiLoginMatch[1];
-
-  const enMatch = normalized.match(/(?:verification\s+code|temporary\s+verification\s+code|your\s+chatgpt\s+code|code(?:\s+is)?)[^0-9]{0,16}(\d{6})/i);
+  const enMatch = normalized.match(/(?:verification\s+code|temporary\s+verification\s+code|log-?in\s+code|enter\s+this\s+code|code(?:\s+is)?)[^0-9]{0,24}(\d{6})/i);
   if (enMatch) return enMatch[1];
 
   const plainMatch = normalized.match(/\b(\d{6})\b/);
@@ -357,7 +391,7 @@ function collectThreadRows() {
     if (
       row.matches('tr.zA')
       || row.querySelector('.bog, .y6, .y2, .afn, [data-thread-id], [data-legacy-thread-id], [data-legacy-last-message-id]')
-      || /openai|chatgpt|verify|verification|code|验证码/i.test(text)
+      || /verify|verification|code|验证码|log-?in/i.test(text)
     ) {
       rows.push(row);
     }
@@ -545,6 +579,7 @@ async function openRowAndGetMessageText(row) {
 
 async function handlePollEmail(step, payload) {
   const {
+    codePatterns = [],
     senderFilters = [],
     subjectFilters = [],
     maxAttempts = 5,
@@ -618,7 +653,9 @@ async function handlePollEmail(step, payload) {
         }
 
         const previewTargetState = getTargetEmailMatchState(preview.combinedText, targetEmail);
-        const previewCode = extractVerificationCode(preview.combinedText);
+        const previewCode = extractVerificationCode(preview.combinedText, {
+          codePatterns,
+        });
         if (previewCode) {
           if (excludedCodeSet.has(previewCode)) {
             log(`步骤 ${step}：跳过排除的验证码：${previewCode}`, 'info');
@@ -644,7 +681,9 @@ async function handlePollEmail(step, payload) {
 
         const openedText = await openRowAndGetMessageText(row);
         const openedTargetState = getTargetEmailMatchState(openedText, targetEmail);
-        const bodyCode = extractVerificationCode(openedText);
+        const bodyCode = extractVerificationCode(openedText, {
+          codePatterns,
+        });
         if (!bodyCode) {
           continue;
         }

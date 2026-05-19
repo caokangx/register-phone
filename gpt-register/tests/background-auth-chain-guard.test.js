@@ -48,6 +48,71 @@ function extractFunction(name) {
   return source.slice(start, end);
 }
 
+const NODE_EXECUTE_COMPAT_HELPERS = `
+const AUTH_CHAIN_NODE_IDS = new Set(['oauth-login', 'fetch-login-code', 'confirm-oauth', 'platform-verify']);
+const STEP_NODE_IDS = {
+  1: 'open-chatgpt',
+  2: 'submit-signup-email',
+  3: 'fill-password',
+  4: 'fetch-signup-code',
+  5: 'fill-profile',
+  6: 'wait-registration-success',
+  7: 'oauth-login',
+  8: 'fetch-login-code',
+  9: 'confirm-oauth',
+  10: 'platform-verify',
+};
+const NODE_STEP_IDS = Object.fromEntries(Object.entries(STEP_NODE_IDS).map(([step, nodeId]) => [nodeId, Number(step)]));
+function isAuthChainNode(nodeId) {
+  return AUTH_CHAIN_NODE_IDS.has(String(nodeId || '').trim());
+}
+function getNodeIdByStepForState(step) {
+  const definition = typeof getStepDefinitionForState === 'function' ? getStepDefinitionForState(step) : null;
+  const definitionKey = String(definition?.key || '').trim();
+  return definitionKey && definitionKey !== 'test-step'
+    ? definitionKey
+    : String(STEP_NODE_IDS[Number(step)] || '').trim();
+}
+function getStepIdByNodeIdForState(nodeId) {
+  const normalizedNodeId = String(nodeId || '').trim();
+  return NODE_STEP_IDS[normalizedNodeId] || null;
+}
+function getNodeDefinitionForState(nodeId, state = {}) {
+  const step = getStepIdByNodeIdForState(nodeId, state);
+  const stepDefinition = typeof getStepDefinitionForState === 'function'
+    ? getStepDefinitionForState(step, state)
+    : null;
+  return stepDefinition
+    ? { nodeId: String(nodeId || '').trim(), legacyStepId: step, executeKey: String(stepDefinition.key || nodeId || '').trim() }
+    : null;
+}
+async function setNodeStatus(nodeId, status) {
+  return setStepStatus(getStepIdByNodeIdForState(nodeId), status);
+}
+function doesNodeUseCompletionSignal(nodeId, state = {}) {
+  return typeof doesStepUseCompletionSignal === 'function'
+    ? doesStepUseCompletionSignal(getStepIdByNodeIdForState(nodeId), state)
+    : false;
+}
+const rawGetStepRegistryForState = getStepRegistryForState;
+getStepRegistryForState = function getNodeAdaptedStepRegistryForState(state = {}) {
+  const registry = rawGetStepRegistryForState(state);
+  if (!registry || typeof registry !== 'object' || typeof registry.getNodeDefinition === 'function') {
+    return registry;
+  }
+  return {
+    ...registry,
+    getNodeDefinition(nodeId) {
+      return getNodeDefinitionForState(nodeId, state);
+    },
+    async executeNode(nodeId, payload = {}) {
+      const step = getStepIdByNodeIdForState(nodeId);
+      return registry.executeStep(step, payload);
+    },
+  };
+};
+`;
+
 test('throwIfStopped rethrows an explicit stop error even when stopRequested has been cleared', () => {
   const api = new Function(`
 const STOP_ERROR_MESSAGE = '流程已被用户停止。';
@@ -67,7 +132,7 @@ return {
   );
 });
 
-test('executeStep reuses the active top-level auth chain instead of starting a duplicate step', async () => {
+test('executeNode reuses the active top-level auth chain instead of starting a duplicate node', async () => {
   const api = new Function(`
 const LOG_PREFIX = '[test]';
 const STOP_ERROR_MESSAGE = '流程已被用户停止。';
@@ -137,14 +202,15 @@ function getStepDefinitionForState(step) {
   return { id: step, key: 'test-step' };
 }
 
+${NODE_EXECUTE_COMPAT_HELPERS}
 ${extractFunction('isStopError')}
 ${extractFunction('throwIfStopped')}
 ${extractFunction('isAuthChainStep')}
-${extractFunction('acquireTopLevelAuthChainExecution')}
-${extractFunction('executeStep')}
+${extractFunction('acquireTopLevelAuthChainExecutionForNode')}
+${extractFunction('executeNode')}
 
 return {
-  executeStep,
+  executeNode,
   releaseStep8() {
     if (releaseStep8) {
       releaseStep8();
@@ -156,9 +222,9 @@ return {
 };
 `)();
 
-  const firstRun = api.executeStep(8);
+  const firstRun = api.executeNode('fetch-login-code');
   await new Promise((resolve) => setImmediate(resolve));
-  const duplicateRun = api.executeStep(7);
+  const duplicateRun = api.executeNode('oauth-login');
   await new Promise((resolve) => setImmediate(resolve));
   api.releaseStep8();
 
@@ -173,7 +239,7 @@ return {
   assert.ok(events.logs.some(({ message }) => /复用当前授权链/.test(message)));
 });
 
-test('executeStep stops flow when browser-switch-required error is raised', async () => {
+test('executeNode stops flow when browser-switch-required error is raised', async () => {
   const api = new Function(`
 const LOG_PREFIX = '[test]';
 const STOP_ERROR_MESSAGE = '流程已被用户停止。';
@@ -235,17 +301,18 @@ function getStepDefinitionForState(step) {
   return { id: step, key: 'test-step' };
 }
 
+${NODE_EXECUTE_COMPAT_HELPERS}
 ${extractFunction('isStopError')}
 ${extractFunction('throwIfStopped')}
 ${extractFunction('isAuthChainStep')}
-${extractFunction('acquireTopLevelAuthChainExecution')}
+${extractFunction('acquireTopLevelAuthChainExecutionForNode')}
 ${extractFunction('isBrowserSwitchRequiredError')}
 ${extractFunction('getBrowserSwitchRequiredMessage')}
 ${extractFunction('handleBrowserSwitchRequired')}
-${extractFunction('executeStep')}
+${extractFunction('executeNode')}
 
 return {
-  executeStep,
+  executeNode,
   snapshot() {
     return events;
   },
@@ -253,7 +320,7 @@ return {
 `)();
 
   await assert.rejects(
-    () => api.executeStep(10),
+    () => api.executeNode('platform-verify'),
     /流程已被用户停止。/
   );
 
@@ -393,7 +460,7 @@ return {
   assert.match(events.logs[0].message, /授权后链总超时已关闭/);
 });
 
-test('executeStep retries fetch-network errors for step 4 with cooldown and bounded attempts', async () => {
+test('executeNode retries fetch-network errors for fetch-signup-code with cooldown and bounded attempts', async () => {
   const api = new Function(`
 const LOG_PREFIX = '[test]';
 const STOP_ERROR_MESSAGE = '流程已被用户停止。';
@@ -456,27 +523,28 @@ function getStepDefinitionForState(step) {
   return { id: step, key: 'fetch-signup-code' };
 }
 
+${NODE_EXECUTE_COMPAT_HELPERS}
 ${extractFunction('isStopError')}
 ${extractFunction('isRetryableContentScriptTransportError')}
 ${extractFunction('isStepFetchNetworkRetryableError')}
 ${extractFunction('getStepFetchNetworkRetryPolicy')}
 ${extractFunction('throwIfStopped')}
 ${extractFunction('isAuthChainStep')}
-${extractFunction('acquireTopLevelAuthChainExecution')}
+${extractFunction('acquireTopLevelAuthChainExecutionForNode')}
 ${extractFunction('isBrowserSwitchRequiredError')}
 ${extractFunction('getBrowserSwitchRequiredMessage')}
 ${extractFunction('handleBrowserSwitchRequired')}
-${extractFunction('executeStep')}
+${extractFunction('executeNode')}
 
 return {
-  executeStep,
+  executeNode,
   snapshot() {
     return events;
   },
 };
 `)();
 
-  await api.executeStep(4);
+  await api.executeNode('fetch-signup-code');
 
   const events = api.snapshot();
   assert.deepStrictEqual(events.registryCalls, [4, 4, 4]);

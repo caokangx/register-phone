@@ -79,6 +79,7 @@ return {
 
   assert.equal(api.resolveSignupMethod({ signupMethod: 'phone', phoneVerificationEnabled: true }), 'phone');
   assert.equal(api.resolveSignupMethod({ signupMethod: 'phone', phoneVerificationEnabled: false }), 'email');
+  // Plus 模式不再阻塞手机号注册（与 codex-oauth-automation-extension 一致）。
   assert.equal(api.resolveSignupMethod({ signupMethod: 'phone', phoneVerificationEnabled: true, plusModeEnabled: true }), 'phone');
   assert.equal(api.resolveSignupMethod({ signupMethod: 'phone', phoneVerificationEnabled: true, contributionMode: true }), 'email');
   assert.equal(api.resolveSignupMethod({ signupMethod: 'email', resolvedSignupMethod: 'phone', phoneVerificationEnabled: false }), 'phone');
@@ -94,6 +95,51 @@ return {
   assert.equal(await api.ensureResolvedSignupMethodForRun({ force: true }), 'email');
   assert.equal(api.state.resolvedSignupMethod, 'email');
   assert.equal(api.logs.some((entry) => /固定为邮箱注册/.test(entry.message)), true);
+});
+
+test('signup method resolution respects the shared flow capability registry when available', () => {
+  const api = new Function(`
+const self = {
+  MultiPageFlowCapabilities: {
+    createFlowCapabilityRegistry() {
+      return {
+        resolveSidepanelCapabilities({ state = {}, signupMethod = 'email' } = {}) {
+          const phoneAllowed = String(state?.activeFlowId || '').trim().toLowerCase() === 'openai';
+          return {
+            canUsePhoneSignup: phoneAllowed,
+            effectiveSignupMethod: signupMethod === 'phone' && phoneAllowed ? 'phone' : 'email',
+          };
+        },
+      };
+    },
+  },
+};
+const SIGNUP_METHOD_EMAIL = 'email';
+const SIGNUP_METHOD_PHONE = 'phone';
+${extractFunction('normalizeSignupMethod')}
+${extractFunction('canUsePhoneSignup')}
+${extractFunction('resolveSignupMethod')}
+return {
+  canUsePhoneSignup,
+  resolveSignupMethod,
+};
+`)();
+
+  assert.equal(api.canUsePhoneSignup({
+    activeFlowId: 'site-a',
+    phoneVerificationEnabled: true,
+    signupMethod: 'phone',
+  }), false);
+  assert.equal(api.resolveSignupMethod({
+    activeFlowId: 'site-a',
+    phoneVerificationEnabled: true,
+    signupMethod: 'phone',
+  }), 'email');
+  assert.equal(api.resolveSignupMethod({
+    activeFlowId: 'openai',
+    phoneVerificationEnabled: true,
+    signupMethod: 'phone',
+  }), 'phone');
 });
 
 test('background step definitions resolve titles from the frozen signup method', () => {
@@ -133,9 +179,11 @@ return {
   });
 
   assert.deepEqual(api.getCaptured(), [{
+    activeFlowId: 'openai',
     plusModeEnabled: true,
     plusPaymentMethod: 'gopay',
     signupMethod: 'phone',
+    phoneSignupReloginAfterBindEmailEnabled: false,
   }]);
   assert.equal(steps[0].title, '注册并输入手机号');
 });

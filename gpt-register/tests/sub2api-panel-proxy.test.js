@@ -51,8 +51,8 @@ function createSub2ApiPanelContext(fetchCalls = []) {
       removeItem(key) { storage.delete(`session:${key}`); },
     },
     log() {},
-    reportComplete(step, payload) {
-      context.completed.push({ step, payload });
+    reportComplete(nodeId, payload) {
+      context.completed.push({ nodeId, payload });
     },
     reportReady() {},
     reportError() {},
@@ -177,7 +177,8 @@ test('SUB2API step 10 uses the same proxy for code exchange and account creation
   assert.equal(exchangeCall.body.proxy_id, 7);
   assert.equal(createCall.body.proxy_id, 7);
   assert.equal(createCall.body.group_ids[0], 5);
-  assert.equal(context.completed[0].step, 10);
+  assert.equal(context.completed[0].nodeId, 'platform-verify');
+  assert.equal(context.completed[0].payload.visibleStep, 10);
 });
 
 test('SUB2API panel accepts Plus platform verify step 13', async () => {
@@ -202,7 +203,8 @@ test('SUB2API panel accepts Plus platform verify step 13', async () => {
 
   assert.equal(exchangeCall.body.code, 'callback-code');
   assert.equal(createCall.body.group_ids[0], 5);
-  assert.equal(context.completed[0].step, 13);
+  assert.equal(context.completed[0].nodeId, 'platform-verify');
+  assert.equal(context.completed[0].payload.visibleStep, 13);
 });
 
 test('SUB2API step 1 omits proxy_id when default proxy is empty', async () => {
@@ -253,28 +255,6 @@ test('SUB2API step 10 creates accounts in multiple configured groups', async () 
   assert.deepEqual(createCall.body.group_ids, [5, 9]);
 });
 
-test('SUB2API step 10 prefers configured group name arrays over single group id fallback', async () => {
-  const fetchCalls = [];
-  const context = createSub2ApiPanelContext(fetchCalls);
-
-  await vm.runInContext(`
-    step9_submitOpenAiCallback({
-      localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
-      sub2apiUrl: 'https://sub.example/admin/accounts',
-      sub2apiEmail: 'admin@example.com',
-      sub2apiPassword: 'secret',
-      sub2apiGroupName: 'codex',
-      sub2apiGroupNames: ['codex', 'codex-plus'],
-      sub2apiSessionId: 'session-1',
-      sub2apiOAuthState: 'oauth-state',
-      sub2apiGroupId: 5
-    })
-  `, context);
-
-  const createCall = fetchCalls.find((call) => call.path === '/api/v1/admin/accounts');
-  assert.deepEqual(createCall.body.group_ids, [5, 9]);
-});
-
 test('SUB2API step 10 omits proxy_id when no proxy is configured', async () => {
   const fetchCalls = [];
   const context = createSub2ApiPanelContext(fetchCalls);
@@ -298,4 +278,50 @@ test('SUB2API step 10 omits proxy_id when no proxy is configured', async () => {
 
   assert.equal(Object.hasOwn(exchangeCall.body, 'proxy_id'), false);
   assert.equal(Object.hasOwn(createCall.body, 'proxy_id'), false);
+});
+
+test('SUB2API step 10 creates account with configured account priority', async () => {
+  const fetchCalls = [];
+  const context = createSub2ApiPanelContext(fetchCalls);
+
+  await vm.runInContext(`
+    step9_submitOpenAiCallback({
+      localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
+      sub2apiUrl: 'https://sub.example/admin/accounts',
+      sub2apiEmail: 'admin@example.com',
+      sub2apiPassword: 'secret',
+      sub2apiGroupName: 'codex',
+      sub2apiSessionId: 'session-1',
+      sub2apiOAuthState: 'oauth-state',
+      sub2apiGroupId: 5,
+      sub2apiAccountPriority: 3
+    })
+  `, context);
+
+  const createCall = fetchCalls.find((call) => call.path === '/api/v1/admin/accounts');
+  assert.equal(createCall.body.priority, 3);
+});
+
+test('SUB2API account priority must be an integer greater than or equal to 1', async () => {
+  const fetchCalls = [];
+  const context = createSub2ApiPanelContext(fetchCalls);
+
+  await assert.rejects(
+    () => vm.runInContext(`
+      step9_submitOpenAiCallback({
+        localhostUrl: 'http://localhost:1455/auth/callback?code=callback-code&state=oauth-state',
+        sub2apiUrl: 'https://sub.example/admin/accounts',
+        sub2apiEmail: 'admin@example.com',
+        sub2apiPassword: 'secret',
+        sub2apiGroupName: 'codex',
+        sub2apiSessionId: 'session-1',
+        sub2apiOAuthState: 'oauth-state',
+        sub2apiGroupId: 5,
+        sub2apiAccountPriority: 0
+      })
+    `, context),
+    /SUB2API 账号优先级必须是大于等于 1 的整数/
+  );
+
+  assert.equal(fetchCalls.some((call) => call.path === '/api/v1/admin/accounts'), false);
 });

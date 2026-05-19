@@ -269,6 +269,48 @@ function findMailItems() {
   return [];
 }
 
+function isLikelyMail2925MailboxPage() {
+  const pageText = getPageTextSample(3000);
+  if (!pageText) {
+    return /#\/mailList/i.test(location.hash || location.href || '');
+  }
+
+  if (findRefreshButton() || findInboxLink()) {
+    return true;
+  }
+
+  return /#\/mailList/i.test(location.hash || location.href || '')
+    && /收件箱|刷新|删除|写信|邮件|mail/i.test(pageText)
+    && !(/欢迎使用邮箱|登录|login/i.test(pageText) && /密码|password/i.test(pageText));
+}
+
+async function waitForMailboxReady(timeoutMs = 12000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    if (typeof throwIfMail2925LimitReached === 'function') {
+      throwIfMail2925LimitReached();
+    }
+    const items = findMailItems();
+    if (items.length > 0) {
+      return { ready: true, items, empty: false };
+    }
+    if (getMail2925DisplayedMailboxEmail() || isLikelyMail2925MailboxPage()) {
+      return { ready: true, items: [], empty: true };
+    }
+    await sleep(500);
+  }
+
+  const items = findMailItems();
+  if (items.length > 0) {
+    return { ready: true, items, empty: false };
+  }
+  return {
+    ready: Boolean(getMail2925DisplayedMailboxEmail() || isLikelyMail2925MailboxPage()),
+    items,
+    empty: items.length === 0,
+  };
+}
+
 function findActionBySelectors(selectors = []) {
   for (const selector of selectors) {
     const candidates = document.querySelectorAll(selector);
@@ -501,7 +543,9 @@ async function ensureAgreementChecked() {
     if (isCheckboxChecked(checkbox)) {
       continue;
     }
-    simulateClick(checkbox);
+    await performOperationWithDelay({ stepKey: 'fetch-signup-code', kind: 'click', label: 'mail2925-agreement-checkbox' }, async () => {
+      simulateClick(checkbox);
+    });
     changed = true;
     await sleep(120);
   }
@@ -516,7 +560,7 @@ function detectMail2925ViewState() {
   }
 
   const mailboxEmail = getMail2925DisplayedMailboxEmail();
-  if (findMailItems().length > 0 || mailboxEmail) {
+  if (findMailItems().length > 0 || mailboxEmail || isLikelyMail2925MailboxPage()) {
     return { view: 'mailbox', limitMessage: '', mailboxEmail };
   }
 
@@ -668,7 +712,56 @@ function matchesMailFilters(text, senderFilters, subjectFilters) {
   return senderMatch || subjectMatch;
 }
 
-function extractStrictChatGPTVerificationCode(text) {
+function normalizeRulePatternList(patterns = []) {
+  return Array.isArray(patterns) ? patterns : [];
+}
+
+function extractCodeByRulePatterns(text, patterns = []) {
+  const normalizedText = String(text || '');
+  for (const pattern of normalizeRulePatternList(patterns)) {
+    try {
+      const source = String(pattern?.source || '').trim();
+      if (!source) {
+        continue;
+      }
+      const flags = String(pattern?.flags || '').replace(/[^dgimsuvy]/g, '');
+      const match = normalizedText.match(new RegExp(source, flags));
+      if (!match) {
+        continue;
+      }
+      for (let index = 1; index < match.length; index += 1) {
+        const candidate = String(match[index] || '').trim();
+        if (candidate) {
+          return candidate;
+        }
+      }
+      if (String(match[0] || '').trim()) {
+        return String(match[0] || '').trim();
+      }
+    } catch (_) {
+      // Ignore invalid runtime rule patterns and continue with other candidates.
+    }
+  }
+  return null;
+}
+
+function normalizeTargetEmailHints(hints = [], targetEmail = '') {
+  const normalizedHints = Array.isArray(hints) ? hints : [];
+  const collected = normalizedHints
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean);
+  const normalizedTarget = String(targetEmail || '').trim().toLowerCase();
+  if (normalizedTarget) {
+    collected.push(normalizedTarget);
+    const atIndex = normalizedTarget.indexOf('@');
+    if (atIndex > 0) {
+      collected.push(`${normalizedTarget.slice(0, atIndex)}=${normalizedTarget.slice(atIndex + 1)}`);
+    }
+  }
+  return [...new Set(collected)];
+}
+
+function extractLegacyStrictVerificationCode(text) {
   const normalized = String(text || '');
   const patterns = [
     /your\s+(?:temporary\s+)?chatgpt\s+(?:(?:log-?in|login)\s+)?code\s+is[\s\S]{0,80}?(\d{6})/i,
@@ -740,11 +833,16 @@ function findSafeStandaloneSixDigitCode(text) {
   return null;
 }
 
-function extractVerificationCode(text, strictChatGPTCodeOnly = false) {
-  const strictCode = extractStrictChatGPTVerificationCode(text);
-  if (strictChatGPTCodeOnly) {
-    return strictCode;
+function extractVerificationCode(text, options = {}) {
+  const legacyStrictMode = typeof options === 'boolean' ? options : false;
+  const strictMode = legacyStrictMode || Boolean(options?.strictMode);
+  const codePatterns = legacyStrictMode ? [] : options?.codePatterns;
+  const strictCode = extractLegacyStrictVerificationCode(text);
+  const matchedByRule = extractCodeByRulePatterns(text, codePatterns);
+  if (strictMode) {
+    return matchedByRule || strictCode;
   }
+  if (matchedByRule) return matchedByRule;
   if (strictCode) return strictCode;
 
   const normalized = String(text || '');
@@ -752,11 +850,8 @@ function extractVerificationCode(text, strictChatGPTCodeOnly = false) {
   const matchCn = normalized.match(/(?:代码为|验证码[^0-9]*?)[\s：:]*(\d{6})/);
   if (matchCn) return matchCn[1];
 
-  const matchOpenAiLogin = normalized.match(/(?:chatgpt\s+log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
-  if (matchOpenAiLogin) return matchOpenAiLogin[1];
-
-  const matchChatGPT = normalized.match(/your\s+chatgpt\s+code\s+is\s+(\d{6})/i);
-  if (matchChatGPT) return matchChatGPT[1];
+  const matchLoginCode = normalized.match(/(?:log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
+  if (matchLoginCode) return matchLoginCode[1];
 
   const matchEn = normalized.match(/code[:\s]+is[:\s]+(\d{6})|code[:\s]+(\d{6})/i);
   if (matchEn) return matchEn[1] || matchEn[2];
@@ -769,9 +864,9 @@ function extractEmails(text = '') {
   return [...new Set(matches.map((item) => item.toLowerCase()))];
 }
 
-function extractForwardedTargetEmails(text = '') {
+function extractForwardedTargetEmails(text = '', targetEmailHints = []) {
   const normalizedText = String(text || '').toLowerCase();
-  const matches = normalizedText.match(/bounce\+[a-z0-9._%+-]*-([a-z0-9._%+-]+)=([a-z0-9.-]+\.[a-z]{2,})@(?:tm\d*\.openai\.com|em\d+\.tm\.openai\.com)/gi) || [];
+  const matches = normalizedText.match(/bounce\+[a-z0-9._%+-]*-([a-z0-9._%+-]+)=([a-z0-9.-]+\.[a-z]{2,})@[a-z0-9.-]+\.[a-z]{2,}/gi) || [];
   const decoded = matches
     .map((candidate) => {
       const match = String(candidate || '').match(/bounce\+[a-z0-9._%+-]*-([a-z0-9._%+-]+)=([a-z0-9.-]+\.[a-z]{2,})@/i);
@@ -781,7 +876,19 @@ function extractForwardedTargetEmails(text = '') {
       return `${match[1].toLowerCase()}@${match[2].toLowerCase()}`;
     })
     .filter(Boolean);
-  return [...new Set(decoded)];
+  const hinted = normalizeTargetEmailHints(targetEmailHints)
+    .filter((hint) => hint.includes('@') || hint.includes('='))
+    .flatMap((hint) => {
+      if (hint.includes('@')) {
+        return normalizedText.includes(hint) ? [hint] : [];
+      }
+      const match = hint.match(/^([^=]+)=([^=]+)$/);
+      if (!match || !normalizedText.includes(hint)) {
+        return [];
+      }
+      return [`${match[1]}@${match[2]}`];
+    });
+  return [...new Set([...decoded, ...hinted])];
 }
 
 function emailMatchesTarget(candidate, targetEmail) {
@@ -794,19 +901,20 @@ function emailMatchesTarget(candidate, targetEmail) {
   return normalizedCandidate === normalizedTarget;
 }
 
-function getTargetEmailMatchState(text, targetEmail) {
+function getTargetEmailMatchState(text, targetEmail, options = {}) {
   const normalizedTarget = String(targetEmail || '').trim().toLowerCase();
   if (!normalizedTarget) {
     return { matches: true, hasExplicitEmail: false };
   }
 
   const normalizedText = String(text || '').toLowerCase();
-  if (normalizedText.includes(normalizedTarget)) {
+  const targetEmailHints = normalizeTargetEmailHints(options?.targetEmailHints, normalizedTarget);
+  if (targetEmailHints.some((hint) => normalizedText.includes(hint))) {
     return { matches: true, hasExplicitEmail: true };
   }
 
   const extractedEmails = extractEmails(normalizedText);
-  const forwardedTargetEmails = extractForwardedTargetEmails(normalizedText);
+  const forwardedTargetEmails = extractForwardedTargetEmails(normalizedText, targetEmailHints);
   if (!extractedEmails.length) {
     return forwardedTargetEmails.length
       ? {
@@ -922,7 +1030,8 @@ async function sleepRandom(minMs, maxMs = minMs) {
 }
 
 async function returnToInbox() {
-  if (findMailItems().length > 0) {
+  const currentMailbox = await waitForMailboxReady(1500);
+  if (currentMailbox.ready) {
     return true;
   }
 
@@ -934,7 +1043,8 @@ async function returnToInbox() {
   simulateClick(inboxLink);
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await sleep(250);
-    if (findMailItems().length > 0) {
+    const mailbox = await waitForMailboxReady(250);
+    if (mailbox.ready) {
       return true;
     }
   }
@@ -1052,6 +1162,11 @@ async function waitForMail2925View(targetView, timeoutMs = 45000) {
   return detectMail2925ViewState();
 }
 
+async function performOperationWithDelay(metadata, operation) {
+  const gate = window.CodexOperationDelay?.performOperationWithDelay;
+  return typeof gate === 'function' ? gate(metadata, operation) : operation();
+}
+
 async function ensureMail2925Session(payload = {}) {
   const email = String(payload?.email || '').trim();
   const password = String(payload?.password || '');
@@ -1135,13 +1250,19 @@ async function ensureMail2925Session(payload = {}) {
   }
 
   await ensureAgreementChecked();
-  fillInput(emailInput, email);
+  await performOperationWithDelay({ stepKey: 'fetch-signup-code', kind: 'fill', label: 'mail2925-login-email' }, async () => {
+    fillInput(emailInput, email);
+  });
   await sleep(150);
-  fillInput(passwordInput, password);
+  await performOperationWithDelay({ stepKey: 'fetch-signup-code', kind: 'fill', label: 'mail2925-login-password' }, async () => {
+    fillInput(passwordInput, password);
+  });
   await sleep(200);
   await sleep(1000);
   log(`步骤 0：2925 已定位到登录表单，准备点击“登录”，当前地址 ${location.href}`, 'info');
-  simulateClick(loginButton);
+  await performOperationWithDelay({ stepKey: 'fetch-signup-code', kind: 'submit', label: 'mail2925-login-submit' }, async () => {
+    simulateClick(loginButton);
+  });
   log(`步骤 0：2925 已点击“登录”，点击后地址 ${location.href}`, 'info');
 
   const finalState = await waitForMail2925View('mailbox', 40000);
@@ -1162,14 +1283,15 @@ async function ensureMail2925Session(payload = {}) {
 async function handlePollEmail(step, payload) {
   await ensureSeenCodesSession(step, payload);
   const {
+    codePatterns = [],
     senderFilters,
     subjectFilters,
     maxAttempts,
     intervalMs,
     filterAfterTimestamp = 0,
     excludeCodes = [],
-    strictChatGPTCodeOnly = false,
     targetEmail = '',
+    targetEmailHints = [],
     mail2925MatchTargetEmail = false,
   } = payload || {};
   const excludedCodeSet = new Set(excludeCodes.filter(Boolean));
@@ -1183,27 +1305,20 @@ async function handlePollEmail(step, payload) {
   let initialItems = [];
   let initialLoadUsedRefresh = false;
 
-  for (let i = 0; i < 20; i += 1) {
-    initialItems = findMailItems();
-    if (initialItems.length > 0) {
-      break;
-    }
-    await sleep(500);
-  }
-
-  if (initialItems.length === 0) {
+  const initialMailbox = await waitForMailboxReady(10000);
+  initialItems = initialMailbox.items;
+  if (!initialMailbox.ready || initialItems.length === 0) {
     initialLoadUsedRefresh = true;
     await returnToInbox();
     await refreshInbox();
-    await sleep(2000);
+    const refreshedMailbox = await waitForMailboxReady(12000);
     if (typeof throwIfMail2925LimitReached === 'function') {
       throwIfMail2925LimitReached();
     }
-    initialItems = findMailItems();
-  }
-
-  if (initialItems.length === 0) {
-    throw new Error('2925 邮箱列表未加载完成，请确认当前已打开收件箱。');
+    if (!refreshedMailbox.ready) {
+      throw new Error('2925 邮箱列表未加载完成，请确认当前已打开收件箱。');
+    }
+    initialItems = refreshedMailbox.items;
   }
 
   log(`步骤 ${step}：邮件列表已加载，共 ${initialItems.length} 封邮件`);
@@ -1220,7 +1335,11 @@ async function handlePollEmail(step, payload) {
       await sleepRandom(900, 1500);
     }
 
-    const items = findMailItems();
+    const mailbox = await waitForMailboxReady(3000);
+    if (!mailbox.ready) {
+      throw new Error('2925 邮箱列表未加载完成，请确认当前已打开收件箱。');
+    }
+    const items = mailbox.items;
     if (items.length > 0) {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index];
@@ -1236,21 +1355,25 @@ async function handlePollEmail(step, payload) {
           continue;
         }
         const previewTargetState = mail2925MatchTargetEmail
-          ? getTargetEmailMatchState(previewText, targetEmail)
+          ? getTargetEmailMatchState(previewText, targetEmail, { targetEmailHints })
           : { matches: true, hasExplicitEmail: false };
         if (mail2925MatchTargetEmail && previewTargetState.hasExplicitEmail && !previewTargetState.matches) {
           continue;
         }
 
-        const previewCode = extractVerificationCode(previewText, strictChatGPTCodeOnly);
+        const previewCode = extractVerificationCode(previewText, {
+          codePatterns,
+        });
         const openedText = await openMailAndDeleteAfterRead(item, step);
         const openedTargetState = mail2925MatchTargetEmail
-          ? getTargetEmailMatchState(openedText, targetEmail)
+          ? getTargetEmailMatchState(openedText, targetEmail, { targetEmailHints })
           : { matches: true, hasExplicitEmail: false };
         if (mail2925MatchTargetEmail && openedTargetState.hasExplicitEmail && !openedTargetState.matches) {
           continue;
         }
-        const bodyCode = extractVerificationCode(openedText, strictChatGPTCodeOnly);
+        const bodyCode = extractVerificationCode(openedText, {
+          codePatterns,
+        });
         const candidateCode = bodyCode || previewCode;
 
         if (!candidateCode) {

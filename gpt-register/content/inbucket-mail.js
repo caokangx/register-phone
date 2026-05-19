@@ -60,12 +60,55 @@ function normalizeText(value) {
   return (value || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-function extractVerificationCode(text) {
+function normalizeRulePatternList(patterns = []) {
+  return Array.isArray(patterns) ? patterns : [];
+}
+
+function extractCodeByRulePatterns(text, patterns = []) {
+  const normalizedText = String(text || '');
+  for (const pattern of normalizeRulePatternList(patterns)) {
+    try {
+      const source = String(pattern?.source || '').trim();
+      if (!source) {
+        continue;
+      }
+      const flags = String(pattern?.flags || '').replace(/[^dgimsuvy]/g, '');
+      const match = normalizedText.match(new RegExp(source, flags));
+      if (!match) {
+        continue;
+      }
+      for (let index = 1; index < match.length; index += 1) {
+        const candidate = String(match[index] || '').trim();
+        if (candidate) {
+          return candidate;
+        }
+      }
+      if (String(match[0] || '').trim()) {
+        return String(match[0] || '').trim();
+      }
+    } catch (_) {
+      // Ignore invalid runtime rule patterns and continue with other candidates.
+    }
+  }
+  return null;
+}
+
+function matchesKeywordHints(text, keywords = []) {
+  const normalizedText = normalizeText(text);
+  const normalizedKeywords = Array.isArray(keywords) ? keywords : [];
+  return normalizedKeywords.some((keyword) => normalizedText.includes(normalizeText(keyword)));
+}
+
+function extractVerificationCode(text, options = {}) {
+  const matchedByRule = extractCodeByRulePatterns(text, options?.codePatterns);
+  if (matchedByRule) {
+    return matchedByRule;
+  }
   const matchCn = text.match(/(?:代码为|验证码[^0-9]*?)[\s：:]*(\d{6})/);
   if (matchCn) return matchCn[1];
 
-  const matchOpenAiLogin = text.match(/(?:chatgpt\s+log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
-  if (matchOpenAiLogin) return matchOpenAiLogin[1];
+  const matchLoginCode = text.match(/(?:log-?in\s+code|enter\s+this\s+code)[^0-9]{0,24}(\d{6})/i);
+  if (matchLoginCode) return matchLoginCode[1];
 
   const matchEn = text.match(/code[:\s]+is[:\s]+(\d{6})|code[:\s]+(\d{6})/i);
   if (matchEn) return matchEn[1] || matchEn[2];
@@ -76,7 +119,7 @@ function extractVerificationCode(text) {
   return null;
 }
 
-function rowMatchesFilters(mail, senderFilters, subjectFilters, targetEmail) {
+function rowMatchesFilters(mail, senderFilters, subjectFilters, targetEmail, options = {}) {
   const sender = normalizeText(mail.sender);
   const subject = normalizeText(mail.subject);
   const mailbox = normalizeText(mail.mailbox);
@@ -87,8 +130,12 @@ function rowMatchesFilters(mail, senderFilters, subjectFilters, targetEmail) {
   const subjectMatch = subjectFilters.some(f => subject.includes(f.toLowerCase()) || combined.includes(f.toLowerCase()));
   const mailboxMatch = Boolean(targetLocal) && mailbox.includes(targetLocal);
   const forwardedDuck = /duckduckgo|forward(?:ed)?\s*by/i.test(mail.combinedText);
-  const code = extractVerificationCode(mail.combinedText);
-  const keywordMatch = /openai|chatgpt|verify|verification|confirm|log-?in|验证码|代码/.test(combined);
+  const code = extractVerificationCode(mail.combinedText, {
+    codePatterns: options?.codePatterns,
+  });
+  const keywordMatch = options?.requiredKeywords?.length
+    ? matchesKeywordHints(combined, options.requiredKeywords)
+    : /verify|verification|confirm|log-?in|验证码|代码/.test(combined);
 
   if (mailboxMatch) return { matched: true, mailboxMatch, code };
   if (senderMatch || subjectMatch) return { matched: true, mailboxMatch: false, code };
@@ -170,6 +217,8 @@ async function deleteCurrentMailboxMessage(step) {
 
 async function handleMailboxPollEmail(step, payload) {
   const {
+    codePatterns = [],
+    requiredKeywords = [],
     senderFilters = [],
     subjectFilters = [],
     maxAttempts = 20,
@@ -208,14 +257,19 @@ async function handleMailboxPollEmail(step, payload) {
       if (seenMailIds.has(mail.mailId)) continue;
       if (!useFallback && existingMailIds.has(mail.mailId)) continue;
 
-      const match = rowMatchesFilters(mail, senderFilters, subjectFilters, '');
+      const match = rowMatchesFilters(mail, senderFilters, subjectFilters, '', {
+        codePatterns,
+        requiredKeywords,
+      });
       if (!match.matched) continue;
 
       candidates.push({ ...mail, code: match.code });
     }
 
     for (const mail of candidates) {
-      const code = mail.code || extractVerificationCode(mail.combinedText);
+      const code = mail.code || extractVerificationCode(mail.combinedText, {
+        codePatterns,
+      });
       if (!code) continue;
       if (excludedCodeSet.has(code)) {
         log(`步骤 ${step}：跳过排除的验证码：${code}`, 'info');

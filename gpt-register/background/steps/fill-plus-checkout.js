@@ -2,606 +2,41 @@
   root.MultiPageBackgroundPlusCheckoutBilling = factory();
 })(typeof self !== 'undefined' ? self : globalThis, function createBackgroundPlusCheckoutBillingModule() {
   const PLUS_CHECKOUT_SOURCE = 'plus-checkout';
-  const PLUS_CHECKOUT_INJECT_FILES = ['content/utils.js', 'content/plus-checkout.js'];
-  const PLUS_CHECKOUT_URL_PATTERN = /^https:\/\/chatgpt\.com\/checkout(?:\/|$)/i;
-  const PLUS_CHECKOUT_FRAME_READY_DELAY_MS = 500;
-  const PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS = 3;
-  const PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS = 20000;
-  const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
-  const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
-  const PLUS_PAYMENT_METHOD_GPC_HELPER = 'gpc-helper';
-  const DEFAULT_GPC_HELPER_API_URL = 'https://gopay.hwork.pro';
-  const PAYMENT_METHOD_CONFIGS = {
-    [PLUS_PAYMENT_METHOD_PAYPAL]: {
-      id: PLUS_PAYMENT_METHOD_PAYPAL,
-      label: 'PayPal',
-      selectMessageType: 'PLUS_CHECKOUT_SELECT_PAYPAL',
-      redirectPattern: /paypal\./i,
-    },
-    [PLUS_PAYMENT_METHOD_GOPAY]: {
-      id: PLUS_PAYMENT_METHOD_GOPAY,
-      label: 'GoPay',
-      selectMessageType: 'PLUS_CHECKOUT_SELECT_GOPAY',
-      redirectPattern: /gopay|gojek|midtrans|xendit|stripe|checkout/i,
-    },
-  };
-  const MEIGUODIZHI_ADDRESS_ENDPOINT = 'https://www.meiguodizhi.com/api/v1/dz';
-  const MEIGUODIZHI_COUNTRY_CONFIG = {
-    AR: { path: '/ar-address', city: 'Buenos Aires', aliases: ['ar', 'argentina', '阿根廷'] },
-    AU: { path: '/au-address', city: 'Sydney', aliases: ['au', 'aus', 'australia', '澳大利亚'] },
-    CA: { path: '/ca-address', city: 'Toronto', aliases: ['ca', 'canada', '加拿大'] },
-    CN: { path: '/cn-address', city: 'Shanghai', aliases: ['cn', 'china', '中国'] },
-    DE: { path: '/de-address', city: 'Berlin', aliases: ['de', 'deu', 'germany', 'deutschland', '德国'] },
-    ES: { path: '/es-address', city: 'Madrid', aliases: ['es', 'esp', 'spain', '西班牙'] },
-    FR: { path: '/fr-address', city: 'Paris', aliases: ['fr', 'fra', 'france', '法国'] },
-    GB: { path: '/uk-address', city: 'London', aliases: ['gb', 'uk', 'united kingdom', 'britain', 'england', '英国'] },
-    HK: { path: '/hk-address', city: 'Hong Kong', aliases: ['hk', 'hong kong', '香港'] },
-    ID: { path: '/id-address', city: 'Jakarta', aliases: ['id', 'indonesia', '印度尼西亚', '印尼'] },
-    IT: { path: '/it-address', city: 'Rome', aliases: ['it', 'ita', 'italy', '意大利'] },
-    JP: { path: '/jp-address', city: 'Tokyo', aliases: ['jp', 'jpn', 'japan', '日本', '日本国'] },
-    KR: { path: '/kr-address', city: 'Seoul', aliases: ['kr', 'kor', 'korea', 'south korea', '韩国'] },
-    MY: { path: '/my-address', city: 'Kuala Lumpur', aliases: ['my', 'malaysia', '马来西亚'] },
-    NL: { path: '/nl-address', city: 'Amsterdam', aliases: ['nl', 'netherlands', 'holland', '荷兰'] },
-    PH: { path: '/ph-address', city: 'Manila', aliases: ['ph', 'philippines', '菲律宾'] },
-    RU: { path: '/ru-address', city: 'Moscow', aliases: ['ru', 'russia', '俄罗斯'] },
-    SG: { path: '/sg-address', city: 'Singapore', aliases: ['sg', 'singapore', '新加坡'] },
-    TH: { path: '/th-address', city: 'Bangkok', aliases: ['th', 'thailand', '泰国'] },
-    TR: { path: '/tr-address', city: 'Istanbul', aliases: ['tr', 'turkey', 'turkiye', '土耳其'] },
-    TW: { path: '/tw-address', city: 'Taipei', aliases: ['tw', 'taiwan', '台湾'] },
-    US: { path: '/', city: 'New York', aliases: ['us', 'usa', 'united states', 'united states of america', 'america', '美国'] },
-    VN: { path: '/vn-address', city: 'Ho Chi Minh City', aliases: ['vn', 'vietnam', '越南'] },
-  };
+  const PLUS_CHECKOUT_INJECT_FILES = ['content/utils.js', 'content/operation-delay.js', 'content/plus-checkout.js'];
+  const HOSTED_CHECKOUT_URL_PATTERN = /^https?:\/\/(?:pay\.openai\.com|checkout\.stripe\.com)\//i;
+  const HOSTED_CHECKOUT_REDIRECT_TIMEOUT_MS = 60000;
 
   function createPlusCheckoutBillingExecutor(deps = {}) {
     const {
-      addLog,
-      broadcastDataUpdate,
+      addLog: rawAddLog = async () => {},
       chrome,
-      completeStepFromBackground,
+      completeNodeFromBackground,
       ensureContentScriptReadyOnTabUntilStopped,
-      fetch: fetchImpl = null,
-      generateRandomName,
-      getAddressSeedForCountry,
       getState,
       getTabId,
       isTabAlive,
-      markCurrentRegistrationAccountUsed,
+      queryTabsInAutomationWindow = null,
+      sendTabMessageUntilStopped,
       setState,
       sleepWithStop,
       waitForTabCompleteUntilStopped,
-      probeIpProxyExit = null,
       throwIfStopped = () => {},
     } = deps;
 
-    function isPlusCheckoutUrl(url = '') {
-      return PLUS_CHECKOUT_URL_PATTERN.test(String(url || ''));
-    }
-
-    function normalizeText(value = '') {
-      return String(value || '').replace(/\s+/g, ' ').trim();
-    }
-
-    function normalizeEmailForCheckout(value = '') {
-      const email = normalizeText(value).toLowerCase();
-      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
-    }
-
-    function buildCheckoutEmailLocalPart(value = '') {
-      const normalized = normalizeText(value)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '')
-        .slice(0, 32);
-      return normalized || `run${Date.now().toString(36)}`;
-    }
-
-    function resolvePlusCheckoutContactEmail(state = {}) {
-      const configuredEmail = normalizeEmailForCheckout(state?.email);
-      if (configuredEmail) {
-        return configuredEmail;
-      }
-
-      const accountIdentifier = normalizeText(
-        state?.accountIdentifier
-        || state?.signupPhoneNumber
-        || state?.phoneNumber
-        || ''
-      );
-      return `${buildCheckoutEmailLocalPart(accountIdentifier)}@example.com`;
-    }
-
-    function isGpcHelperCheckout(state = {}) {
-      return normalizePlusPaymentMethod(state?.plusPaymentMethod) === PLUS_PAYMENT_METHOD_GPC_HELPER
-        || (normalizeText(state?.plusCheckoutSource) === PLUS_PAYMENT_METHOD_GPC_HELPER
-          && Boolean(state?.gopayHelperReferenceId));
-    }
-
-    function compactCountryText(value = '') {
-      return normalizeText(value).toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
-    }
-
-    function normalizePlusPaymentMethod(value = '') {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (rootScope.GoPayUtils?.normalizePlusPaymentMethod) {
-        return rootScope.GoPayUtils.normalizePlusPaymentMethod(value);
-      }
-      const normalized = String(value || '').trim().toLowerCase();
-      if (normalized === PLUS_PAYMENT_METHOD_GPC_HELPER) {
-        return PLUS_PAYMENT_METHOD_GPC_HELPER;
-      }
-      return normalized === PLUS_PAYMENT_METHOD_GOPAY ? PLUS_PAYMENT_METHOD_GOPAY : PLUS_PAYMENT_METHOD_PAYPAL;
-    }
-
-    function getPaymentMethodConfig(method = PLUS_PAYMENT_METHOD_PAYPAL) {
-      return PAYMENT_METHOD_CONFIGS[normalizePlusPaymentMethod(method)] || PAYMENT_METHOD_CONFIGS[PLUS_PAYMENT_METHOD_PAYPAL];
-    }
-
-    function normalizeGpcHelperBaseUrl(apiUrl = '') {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (rootScope.GoPayUtils?.normalizeGpcHelperBaseUrl) {
-        return rootScope.GoPayUtils.normalizeGpcHelperBaseUrl(apiUrl);
-      }
-      let normalized = String(apiUrl || DEFAULT_GPC_HELPER_API_URL).trim().replace(/\/+$/g, '');
-      normalized = normalized.replace(/\/api\/checkout\/start$/i, '');
-      normalized = normalized.replace(/\/api\/gopay\/(?:otp|pin)$/i, '');
-      normalized = normalized.replace(/\/api\/card\/balance(?:\?.*)?$/i, '');
-      return normalized || DEFAULT_GPC_HELPER_API_URL;
-    }
-
-    async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 30000) {
-      const fetcher = typeof fetchImpl === 'function'
-        ? fetchImpl
-        : (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
-      if (typeof fetcher !== 'function') {
-        throw new Error('当前运行环境不支持 fetch，无法调用 GPC API。');
-      }
-      const controller = typeof AbortController === 'function' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 30000)) : null;
-      try {
-        const response = await fetcher(url, { ...options, ...(controller ? { signal: controller.signal } : {}) });
-        const data = await response.json().catch(() => ({}));
-        return { response, data };
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
-    }
-
-    function buildGpcOtpPayload(input = {}) {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (rootScope.GoPayUtils?.buildGpcOtpPayload) {
-        return rootScope.GoPayUtils.buildGpcOtpPayload(input);
-      }
-      const payload = {
-        reference_id: String(input.reference_id ?? input.referenceId ?? '').trim(),
-        otp: String(input.otp ?? input.code ?? '').trim().replace(/[^\d]/g, ''),
-        card_key: String(input.card_key ?? input.cardKey ?? '').trim(),
-      };
-      const gopayGuid = String(input.gopay_guid ?? input.gopayGuid ?? '').trim();
-      const redirectUrl = String(input.redirect_url ?? input.redirectUrl ?? '').trim();
-      const flowId = String(input.flow_id ?? input.flowId ?? '').trim();
-      if (flowId) payload.flow_id = flowId;
-      if (gopayGuid) payload.gopay_guid = gopayGuid;
-      if (redirectUrl) payload.redirect_url = redirectUrl;
-      return payload;
-    }
-
-    function buildGpcOtpRetryPayload(input = {}) {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (rootScope.GoPayUtils?.buildGpcOtpRetryPayload) {
-        return rootScope.GoPayUtils.buildGpcOtpRetryPayload(input);
-      }
-      const basePayload = buildGpcOtpPayload(input);
-      return { ...basePayload, code: basePayload.otp };
-    }
-
-    function buildGpcPinPayload(input = {}) {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (rootScope.GoPayUtils?.buildGpcPinPayload) {
-        return rootScope.GoPayUtils.buildGpcPinPayload(input);
-      }
-      const payload = {
-        reference_id: String(input.reference_id ?? input.referenceId ?? '').trim(),
-        challenge_id: String(input.challenge_id ?? input.challengeId ?? '').trim(),
-        gopay_guid: String(input.gopay_guid ?? input.gopayGuid ?? '').trim(),
-        pin: String(input.pin ?? '').trim().replace(/[^\d]/g, ''),
-        card_key: String(input.card_key ?? input.cardKey ?? '').trim(),
-      };
-      const redirectUrl = String(input.redirect_url ?? input.redirectUrl ?? '').trim();
-      const flowId = String(input.flow_id ?? input.flowId ?? '').trim();
-      if (flowId) payload.flow_id = flowId;
-      if (redirectUrl) payload.redirect_url = redirectUrl;
-      return payload;
-    }
-
-    function buildGpcPinRetryPayload(input = {}) {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (rootScope.GoPayUtils?.buildGpcPinRetryPayload) {
-        return rootScope.GoPayUtils.buildGpcPinRetryPayload(input);
-      }
-      const basePayload = buildGpcPinPayload(input);
-      return { ...basePayload, challengeId: basePayload.challenge_id };
-    }
-
-    function getGpcResponseErrorDetail(payload = {}, status = 0) {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (rootScope.GoPayUtils?.extractGpcResponseErrorDetail) {
-        return rootScope.GoPayUtils.extractGpcResponseErrorDetail(payload, status);
-      }
-      if (payload && typeof payload === 'object') {
-        return payload.detail || payload.message || payload.error || payload.error_description || payload.reason || `HTTP ${status || 0}`;
-      }
-      return `HTTP ${status || 0}`;
-    }
-
-    async function postGpcJsonWithFallback(apiUrl, endpointPath, primaryPayload, fallbackPayload, timeoutMs = 30000) {
-      const requestUrl = `${apiUrl}${endpointPath}`;
-      const send = (payload) => fetchJsonWithTimeout(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }, timeoutMs);
-      const firstResponse = await send(primaryPayload);
-      if (firstResponse?.response?.ok || !fallbackPayload) {
-        return { ...firstResponse, retried: false, payload: primaryPayload };
-      }
-      const status = Number(firstResponse?.response?.status || 0);
-      if (status !== 400 && status !== 422) {
-        return { ...firstResponse, retried: false, payload: primaryPayload };
-      }
-      const firstDetail = getGpcResponseErrorDetail(firstResponse?.data, status);
-      await addLog(`步骤 7：GPC 接口返回 ${status}（${firstDetail}），使用兼容字段重试。`, 'warn');
-      const secondResponse = await send(fallbackPayload);
-      return {
-        ...secondResponse,
-        retried: true,
-        payload: fallbackPayload,
-        firstError: firstDetail,
-        firstStatus: status,
-      };
-    }
-
-    function getStateInternal() {
-      if (typeof getState === 'function') {
-        return getState();
-      }
-      return Promise.resolve({});
-    }
-
-    async function requestGpcOtpInput({ title = '', message = '', referenceId = '' }) {
-      const requestId = `otp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const payload = {
-        plusManualConfirmationPending: true,
-        plusManualConfirmationRequestId: requestId,
-        plusManualConfirmationStep: 7,
-        plusManualConfirmationMethod: 'gopay-otp',
-        plusManualConfirmationTitle: title || 'GPC OTP 验证',
-        plusManualConfirmationMessage: message || '请输入 OTP 验证码',
-        gopayHelperOtpRequestId: requestId,
-        gopayHelperOtpReferenceId: referenceId,
-        gopayHelperResolvedOtp: '',
-      };
-      await setState(payload);
-      if (typeof broadcastDataUpdate === 'function') {
-        broadcastDataUpdate(payload);
-      }
-      return new Promise((resolve, reject) => {
-        const checkInterval = setInterval(async () => {
-          try {
-            throwIfStopped();
-            const currentState = await getStateInternal();
-            if (!currentState?.plusManualConfirmationPending || currentState?.plusManualConfirmationRequestId !== requestId) {
-              clearInterval(checkInterval);
-              const resolvedOtp = String(currentState?.gopayHelperResolvedOtp || '').trim().replace(/[^\d]/g, '');
-              if (resolvedOtp) {
-                resolve(resolvedOtp);
-              } else {
-                reject(new Error('OTP 输入已取消'));
-              }
-            }
-          } catch (error) {
-            clearInterval(checkInterval);
-            reject(error);
-          }
-        }, 500);
+    function addLog(message, level = 'info', options = {}) {
+      return rawAddLog(message, level, {
+        step: 7,
+        stepKey: 'plus-checkout-billing',
+        ...(options && typeof options === 'object' ? options : {}),
       });
     }
 
-    async function executeGpcHelperBilling(state = {}) {
-      const referenceId = String(state?.gopayHelperReferenceId || '').trim();
-      const apiUrl = normalizeGpcHelperBaseUrl(state?.gopayHelperApiUrl || '');
-      const cardKey = String(state?.gopayHelperCardKey || state?.gpcCardKey || state?.cardKey || '').trim();
-      if (!referenceId) {
-        throw new Error('步骤 7：GPC 模式缺少 reference_id，请先执行步骤 6。');
-      }
-      if (!apiUrl) {
-        throw new Error('步骤 7：GPC 模式缺少 API 地址。');
-      }
-      if (!cardKey) {
-        throw new Error('步骤 7：GPC 模式缺少卡密。');
-      }
-      await addLog(`步骤 7：GPC 模式开始 OTP 验证（reference_id: ${referenceId}）...`, 'info');
-      await addLog('步骤 7：等待用户输入 OTP...', 'info');
-      const otp = await requestGpcOtpInput({
-        title: 'GPC OTP 验证',
-        message: `请输入收到的 OTP 验证码（reference_id: ${referenceId}）`,
-        referenceId,
-      });
-
-      const flowId = state?.gopayHelperFlowId
-        || state?.gopayHelperStartPayload?.flow_id
-        || state?.gopayHelperStartPayload?.flowId
-        || state?.gopayHelperBalancePayload?.flow_id
-        || state?.gopayHelperBalancePayload?.flowId
-        || '';
-      const baseInput = {
-        reference_id: referenceId,
-        otp,
-        card_key: cardKey,
-        gopay_guid: state?.gopayHelperGoPayGuid || '',
-        redirect_url: state?.gopayHelperRedirectUrl || '',
-        flow_id: flowId,
-      };
-      await addLog('步骤 7：正在提交 OTP...', 'info');
-      const otpResponse = await postGpcJsonWithFallback(
-        apiUrl,
-        '/api/gopay/otp',
-        buildGpcOtpPayload(baseInput),
-        buildGpcOtpRetryPayload(baseInput),
-        30000
-      );
-      if (!otpResponse?.response?.ok) {
-        throw new Error(`步骤 7：OTP 验证失败：${getGpcResponseErrorDetail(otpResponse?.data, otpResponse?.response?.status || 0)}`);
-      }
-
-      const otpData = otpResponse?.data || {};
-      const challengeId = String(
-        otpData?.challenge_id
-        || otpData?.challengeId
-        || state?.gopayHelperChallengeId
-        || state?.gopayHelperStartPayload?.challenge_id
-        || state?.gopayHelperStartPayload?.challengeId
-        || ''
-      ).trim();
-      const nextFlowId = String(otpData?.flow_id || otpData?.flowId || baseInput.flow_id || '').trim();
-      const gopayGuid = String(otpData?.gopay_guid || otpData?.gopayGuid || state?.gopayHelperGoPayGuid || '').trim();
-      const redirectUrl = String(otpData?.redirect_url || otpData?.redirectUrl || state?.gopayHelperRedirectUrl || '').trim();
-      if (!challengeId) {
-        throw new Error('步骤 7：GPC OTP 验证后未返回 challenge_id。');
-      }
-      const pin = String(state?.gopayHelperPin || '').trim().replace(/[^\d]/g, '');
-      if (!pin) {
-        throw new Error('步骤 7：GPC 模式缺少 PIN 配置。');
-      }
-
-      await setState({
-        gopayHelperChallengeId: challengeId,
-        gopayHelperFlowId: nextFlowId,
-        gopayHelperGoPayGuid: gopayGuid,
-        gopayHelperRedirectUrl: redirectUrl,
-      });
-
-      await addLog('步骤 7：正在提交 PIN...', 'info');
-      const pinInput = {
-        reference_id: referenceId,
-        challenge_id: challengeId,
-        gopay_guid: gopayGuid,
-        redirect_url: redirectUrl,
-        flow_id: nextFlowId,
-        pin,
-        card_key: cardKey,
-      };
-      const pinResponse = await postGpcJsonWithFallback(
-        apiUrl,
-        '/api/gopay/pin',
-        buildGpcPinPayload(pinInput),
-        buildGpcPinRetryPayload(pinInput),
-        30000
-      );
-      if (!pinResponse?.response?.ok) {
-        throw new Error(`步骤 7：PIN 验证失败：${getGpcResponseErrorDetail(pinResponse?.data, pinResponse?.response?.status || 0)}`);
-      }
-
-      await setState({
-        plusCheckoutSource: PLUS_PAYMENT_METHOD_GPC_HELPER,
-        gopayHelperPinPayload: pinResponse?.data || null,
-      });
-      await addLog('步骤 7：GPC 支付完成，准备继续下一步。', 'ok');
-      await completeStepFromBackground(7, {
-        plusCheckoutSource: PLUS_PAYMENT_METHOD_GPC_HELPER,
-      });
+    function isHostedCheckoutUrl(url = '') {
+      return HOSTED_CHECKOUT_URL_PATTERN.test(String(url || ''));
     }
 
-    function resolveMeiguodizhiCountryCode(value = '') {
-      const normalized = normalizeText(value);
-      const upper = normalized.toUpperCase();
-      if (MEIGUODIZHI_COUNTRY_CONFIG[upper]) {
-        return upper;
-      }
-      const compact = compactCountryText(normalized);
-      const match = Object.entries(MEIGUODIZHI_COUNTRY_CONFIG).find(([code, config]) => (
-        compact === code.toLowerCase()
-        || (config.aliases || []).some((alias) => {
-          const compactAlias = compactCountryText(alias);
-          return compact === compactAlias || (compactAlias.length >= 4 && compact.includes(compactAlias));
-        })
-      ));
-      return match?.[0] || '';
-    }
-
-    function hasCompleteAddressFallback(seed) {
-      const fallback = seed?.fallback || {};
-      return Boolean(
-        normalizeText(fallback.address1)
-        && normalizeText(fallback.city)
-        && normalizeText(fallback.postalCode)
-      );
-    }
-
-    function normalizePostalCodeForCountry(countryCode, rawPostalCode = '', fallbackPostalCode = '') {
-      const normalizedCountry = resolveMeiguodizhiCountryCode(countryCode) || normalizeText(countryCode).toUpperCase();
-      const postalCode = normalizeText(rawPostalCode);
-      const fallback = normalizeText(fallbackPostalCode);
-      if (normalizedCountry !== 'KR') {
-        return postalCode;
-      }
-      if (/^\d{5}$/.test(postalCode)) {
-        return postalCode;
-      }
-      if (/^\d{5}$/.test(fallback)) {
-        return fallback;
-      }
-      return '04524';
-    }
-
-    function buildDirectAddressSeed(countryCode, apiAddress, fallbackSeed) {
-      const address1 = normalizeText(apiAddress?.Trans_Address || apiAddress?.Address);
-      const city = normalizeText(apiAddress?.City);
-      const region = normalizeText(apiAddress?.State_Full || apiAddress?.State);
-      const postalCode = normalizePostalCodeForCountry(
-        countryCode,
-        apiAddress?.Zip_Code,
-        fallbackSeed?.fallback?.postalCode
-      );
-      if (!address1 || !city || !postalCode) {
-        return null;
-      }
-      return {
-        ...(fallbackSeed || {}),
-        countryCode,
-        query: [address1, city].filter(Boolean).join(', '),
-        source: 'meiguodizhi',
-        skipAutocomplete: true,
-        fallback: {
-          ...(fallbackSeed?.fallback || {}),
-          address1,
-          city,
-          region,
-          postalCode,
-        },
-      };
-    }
-
-    async function fetchMeiguodizhiAddressSeed(countryCode, fallbackSeed) {
-      if (typeof fetchImpl !== 'function') {
-        return null;
-      }
-      const countryConfig = MEIGUODIZHI_COUNTRY_CONFIG[countryCode];
-      if (!countryConfig?.path) {
-        return null;
-      }
-      const path = countryConfig.path;
-      const city = normalizeText(fallbackSeed?.fallback?.city || fallbackSeed?.query || countryConfig.city);
-      const response = await fetchImpl(MEIGUODIZHI_ADDRESS_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          city,
-          path,
-          method: 'refresh',
-        }),
-      });
-      if (!response?.ok) {
-        throw new Error(`HTTP ${response?.status || 0}`);
-      }
-      const data = await response.json();
-      if (data?.status !== 'ok') {
-        throw new Error(data?.message || data?.status || 'unknown response');
-      }
-      return buildDirectAddressSeed(countryCode, data.address || {}, fallbackSeed);
-    }
-
-    function getLocalAddressSeed(countryCode) {
-      if (typeof getAddressSeedForCountry !== 'function') {
-        return null;
-      }
-      const seed = getAddressSeedForCountry(countryCode, {
-        fallbackCountry: 'DE',
-      });
-      return seed?.countryCode === countryCode ? seed : null;
-    }
-
-    function buildMeiguodizhiLookupSeed(countryCode) {
-      const config = MEIGUODIZHI_COUNTRY_CONFIG[countryCode];
-      if (!config) {
-        return null;
-      }
-      return {
-        countryCode,
-        query: config.city,
-        fallback: {
-          address1: '',
-          city: config.city,
-          region: '',
-          postalCode: '',
-        },
-      };
-    }
-
-    function resolveBillingAddressCountry(state = {}, countryOverride = '', paymentMethod = PLUS_PAYMENT_METHOD_PAYPAL) {
-      const normalizedPaymentMethod = normalizePlusPaymentMethod(paymentMethod || state?.plusPaymentMethod);
-      const checkoutCountry = resolveMeiguodizhiCountryCode(countryOverride);
-      const savedCheckoutCountry = resolveMeiguodizhiCountryCode(state.plusCheckoutCountry);
-      const exitCountry = resolveMeiguodizhiCountryCode(
-        state.ipProxyAppliedExitRegion
-        || state.ipProxyExitRegion
-        || ''
-      );
-
-      if (normalizedPaymentMethod === PLUS_PAYMENT_METHOD_GOPAY) {
-        const countryCode = exitCountry || checkoutCountry || savedCheckoutCountry || 'ID';
-        return {
-          countryCode,
-          requestedCountry: exitCountry
-            || normalizeText(countryOverride)
-            || normalizeText(state.plusCheckoutCountry)
-            || 'ID',
-          source: exitCountry ? 'proxy_exit' : (checkoutCountry ? 'checkout_page' : (savedCheckoutCountry ? 'checkout_state' : 'gopay_fallback')),
-        };
-      }
-
-      const countryCode = checkoutCountry || savedCheckoutCountry || exitCountry || 'DE';
-      return {
-        countryCode,
-        requestedCountry: normalizeText(countryOverride)
-          || normalizeText(state.plusCheckoutCountry)
-          || exitCountry
-          || 'DE',
-        source: checkoutCountry ? 'checkout_page' : (savedCheckoutCountry ? 'checkout_state' : (exitCountry ? 'proxy_exit' : 'paypal_fallback')),
-      };
-    }
-
-    async function resolveBillingAddressSeed(state = {}, countryOverride = '', options = {}) {
-      const paymentMethod = normalizePlusPaymentMethod(options.paymentMethod || state?.plusPaymentMethod);
-      const countryResolution = resolveBillingAddressCountry(state, countryOverride, paymentMethod);
-      const countryCode = countryResolution.countryCode;
-      const requestedCountry = countryResolution.requestedCountry;
-      if (paymentMethod === PLUS_PAYMENT_METHOD_GOPAY && countryResolution.source === 'proxy_exit') {
-        await addLog(`步骤 7：GoPay 账单地址将按当前代理出口地区 ${countryCode} 填写。`, 'info');
-      }
-      const localSeed = getLocalAddressSeed(countryCode);
-      const lookupSeed = localSeed || buildMeiguodizhiLookupSeed(countryCode);
-      if (!lookupSeed) {
-        throw new Error(`步骤 7：无法识别账单国家或地区：${requestedCountry || '空'}`);
-      }
-      try {
-        const remoteSeed = await fetchMeiguodizhiAddressSeed(countryCode, lookupSeed);
-        if (hasCompleteAddressFallback(remoteSeed)) {
-          await addLog(
-            `步骤 7：已从 meiguodizhi 接口获取账单地址（${remoteSeed.fallback.city} / ${remoteSeed.fallback.postalCode}），将跳过 Google 地址推荐。`,
-            'info'
-          );
-          return remoteSeed;
-        }
-        await addLog('步骤 7：meiguodizhi 接口返回的地址字段不完整，回退到本地地址种子。', 'warn');
-      } catch (error) {
-        await addLog(`步骤 7：meiguodizhi 地址接口不可用，回退到本地地址种子：${error?.message || String(error || '')}`, 'warn');
-      }
-
-      if (hasCompleteAddressFallback(localSeed)) {
-        return localSeed;
-      }
-      throw new Error(`步骤 7：${requestedCountry} 的 meiguodizhi 地址不可用，且没有本地兜底地址。`);
+    function isPayPalUrl(url = '') {
+      return /^https?:\/\/[^/]*paypal\.com\//i.test(String(url || ''));
     }
 
     async function getAlivePlusCheckoutTabId(tabId) {
@@ -612,870 +47,116 @@
         return tabId;
       }
       const tab = await chrome.tabs.get(tabId).catch(() => null);
-      return tab && isPlusCheckoutUrl(tab.url) ? tabId : null;
+      if (!tab) {
+        return null;
+      }
+      const url = String(tab.url || '');
+      if (isHostedCheckoutUrl(url) || isPayPalUrl(url)) {
+        return tabId;
+      }
+      return null;
     }
 
-    async function getCurrentPlusCheckoutTabId() {
+    async function getCurrentHostedCheckoutTabId() {
       if (!chrome?.tabs?.query) {
         return null;
       }
-
-      const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
-      const activeCheckoutTab = activeTabs.find((tab) => Number.isInteger(tab?.id) && isPlusCheckoutUrl(tab.url));
+      const queryTabs = typeof queryTabsInAutomationWindow === 'function'
+        ? queryTabsInAutomationWindow
+        : (queryInfo) => chrome.tabs.query(queryInfo);
+      const activeTabs = await queryTabs({ active: true, currentWindow: true }).catch(() => []);
+      const activeCheckoutTab = activeTabs.find((tab) => Number.isInteger(tab?.id) && isHostedCheckoutUrl(tab.url));
       if (activeCheckoutTab) {
         return activeCheckoutTab.id;
       }
-
-      const checkoutTabs = await chrome.tabs.query({ url: 'https://chatgpt.com/checkout/*' }).catch(() => []);
-      const checkoutTab = checkoutTabs.find((tab) => Number.isInteger(tab?.id) && isPlusCheckoutUrl(tab.url));
-      return checkoutTab?.id || null;
+      const candidates = await queryTabs({}).catch(() => []);
+      const hosted = (Array.isArray(candidates) ? candidates : []).find(
+        (tab) => Number.isInteger(tab?.id) && isHostedCheckoutUrl(tab.url),
+      );
+      return hosted?.id || null;
     }
 
-    async function getCheckoutFrames(tabId) {
-      if (!chrome?.webNavigation?.getAllFrames) {
-        return [{ frameId: 0, url: '' }];
+    async function getCheckoutTabId(state = {}) {
+      const registeredTabId = await getTabId(PLUS_CHECKOUT_SOURCE);
+      if (registeredTabId && await isTabAlive(PLUS_CHECKOUT_SOURCE)) {
+        const aliveRegistered = await getAlivePlusCheckoutTabId(registeredTabId);
+        if (aliveRegistered) {
+          return aliveRegistered;
+        }
       }
-      const frames = await chrome.webNavigation.getAllFrames({ tabId }).catch(() => null);
-      if (!Array.isArray(frames) || !frames.length) {
-        return [{ frameId: 0, url: '' }];
+      const storedTabId = Number(state.plusCheckoutTabId) || 0;
+      if (storedTabId) {
+        const aliveStored = await getAlivePlusCheckoutTabId(storedTabId);
+        if (aliveStored) {
+          return aliveStored;
+        }
       }
-      return frames
-        .filter((frame) => Number.isInteger(frame?.frameId))
-        .sort((left, right) => Number(left.frameId) - Number(right.frameId));
+      const currentHosted = await getCurrentHostedCheckoutTabId();
+      if (currentHosted) {
+        await addLog('步骤 7：检测到当前已在 hosted 订阅页，直接接管当前标签页。', 'info');
+        return currentHosted;
+      }
+      throw new Error('步骤 7：未找到 hosted Plus Checkout 标签页。请先完成步骤 6。');
     }
 
-    async function pingCheckoutFrame(tabId, frameId) {
-      try {
-        const pong = await chrome.tabs.sendMessage(tabId, {
-          type: 'PING',
-          source: 'background',
-          payload: {},
-        }, {
-          frameId: Number.isInteger(frameId) ? frameId : 0,
-        });
-        return Boolean(pong?.ok && (!pong.source || pong.source === PLUS_CHECKOUT_SOURCE));
-      } catch {
-        return false;
-      }
-    }
-
-    async function ensurePlusCheckoutFrameReady(tabId, frameId) {
-      if (await pingCheckoutFrame(tabId, frameId)) {
-        return true;
-      }
-      if (!chrome?.scripting?.executeScript) {
-        return false;
-      }
-
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId, frameIds: [frameId] },
-          func: (injectedSource) => {
-            window.__MULTIPAGE_SOURCE = injectedSource;
-          },
-          args: [PLUS_CHECKOUT_SOURCE],
-        });
-        await chrome.scripting.executeScript({
-          target: { tabId, frameIds: [frameId] },
-          files: PLUS_CHECKOUT_INJECT_FILES,
-        });
-      } catch {
-        // If the frame was already injected or navigated mid-injection, ping once more below.
-      }
-
-      await sleepWithStop(PLUS_CHECKOUT_FRAME_READY_DELAY_MS);
-      return await pingCheckoutFrame(tabId, frameId);
-    }
-
-    async function ensurePlusCheckoutFramesReady(tabId, frames) {
-      const checkedFrames = [];
-      for (const frame of frames) {
-        const ready = await ensurePlusCheckoutFrameReady(tabId, frame.frameId);
-        checkedFrames.push({ ...frame, ready });
-      }
-      return checkedFrames;
-    }
-
-    async function sendFrameMessage(tabId, frameId, message) {
-      return chrome.tabs.sendMessage(tabId, message, {
-        frameId: Number.isInteger(frameId) ? frameId : 0,
-      });
-    }
-
-    async function syncCheckoutEmailInPageContext(tabId, email) {
-      const normalizedEmail = normalizeEmailForCheckout(email);
-      if (!normalizedEmail || !chrome?.scripting?.executeScript) {
-        return { skipped: true };
-      }
-
-      const results = await chrome.scripting.executeScript({
-        target: { tabId, frameIds: [0] },
-        world: 'MAIN',
-        args: [normalizedEmail],
-        func: async (contactEmail) => {
-          const normalized = String(contactEmail || '').trim().toLowerCase();
-          if (!normalized) {
-            return { ok: false, error: 'missing-contact-email' };
-          }
-
-          const state = window.__MULTIPAGE_PLUS_CHECKOUT_RUNTIME_EMAIL_STATE__
-            || (window.__MULTIPAGE_PLUS_CHECKOUT_RUNTIME_EMAIL_STATE__ = {
-              lastEmail: '',
-              patchedConfirms: new WeakSet(),
-              patchedLoadActions: new WeakSet(),
-            });
-          state.lastEmail = normalized;
-
-          function normalizeRuntimeEmail(value = '') {
-            return String(value || '').trim().toLowerCase();
-          }
-
-          function isObjectLike(value) {
-            return (typeof value === 'object' && value !== null) || typeof value === 'function';
-          }
-
-          function isPromiseLike(value) {
-            return value && typeof value.then === 'function';
-          }
-
-          function isPlainObject(value) {
-            if (!value || typeof value !== 'object') return false;
-            const proto = Object.getPrototypeOf(value);
-            return proto === Object.prototype || proto === null;
-          }
-
-          function safeGet(target, key) {
-            try {
-              return target?.[key];
-            } catch {
-              return undefined;
-            }
-          }
-
-          function safeOwnPropertyNames(target) {
-            try {
-              return Object.getOwnPropertyNames(target);
-            } catch {
-              return [];
-            }
-          }
-
-          function shouldInspectProperty(key, depth) {
-            if (depth < 2) {
-              return true;
-            }
-            return /stripe|checkout|payment|action|confirm|session|customer|email|element/i.test(String(key || ''));
-          }
-
-          function patchConfirm(target, stats) {
-            const originalConfirm = safeGet(target, 'confirm');
-            if (typeof originalConfirm !== 'function' || state.patchedConfirms.has(target)) {
-              return;
-            }
-
-            target.confirm = function patchedConfirm(...args) {
-              const emailFromState = normalizeRuntimeEmail(state.lastEmail);
-              if (emailFromState) {
-                if (args.length === 0 || args[0] == null) {
-                  args = [{ email: emailFromState }];
-                } else if (isPlainObject(args[0]) && !normalizeRuntimeEmail(args[0].email)) {
-                  args = [{ ...args[0], email: emailFromState }, ...args.slice(1)];
-                }
-              }
-              return originalConfirm.apply(this, args);
-            };
-
-            state.patchedConfirms.add(target);
-            stats.patchedConfirms += 1;
-          }
-
-          function patchLoadedActions(result, stats) {
-            const actions = result && typeof result === 'object' && result.actions
-              ? result.actions
-              : result;
-            if (isObjectLike(actions)) {
-              patchConfirm(actions, stats);
-            }
-            return actions;
-          }
-
-          function patchLoadActions(target, stats) {
-            const originalLoadActions = safeGet(target, 'loadActions');
-            if (typeof originalLoadActions !== 'function' || state.patchedLoadActions.has(target)) {
-              return;
-            }
-
-            target.loadActions = function patchedLoadActions(...args) {
-              const outcome = originalLoadActions.apply(this, args);
-              if (isPromiseLike(outcome)) {
-                return outcome.then((result) => {
-                  patchLoadedActions(result, stats);
-                  return result;
-                });
-              }
-              patchLoadedActions(outcome, stats);
-              return outcome;
-            };
-
-            state.patchedLoadActions.add(target);
-            stats.patchedLoadActions += 1;
-          }
-
-          async function tryUpdateEmail(target, stats) {
-            const updateEmail = safeGet(target, 'updateEmail');
-            if (typeof updateEmail !== 'function') {
-              return false;
-            }
-
-            stats.updateAttempts += 1;
-            try {
-              const outcome = updateEmail.call(target, normalized);
-              const resolved = isPromiseLike(outcome) ? await outcome : outcome;
-              const error = resolved?.error
-                || (resolved?.type && resolved.type !== 'success' ? resolved : null);
-              if (error) {
-                stats.lastUpdateError = String(error.message || error.code || error.type || error);
-                return false;
-              }
-              stats.updateApplied += 1;
-              return true;
-            } catch (error) {
-              stats.lastUpdateError = String(error?.message || error);
-              return false;
-            }
-          }
-
-          async function tryLoadActionsAndUpdate(target, stats) {
-            const loadActions = safeGet(target, 'loadActions');
-            if (typeof loadActions !== 'function') {
-              return false;
-            }
-
-            stats.loadActionsAttempts += 1;
-            try {
-              const outcome = loadActions.call(target);
-              const resolved = isPromiseLike(outcome) ? await outcome : outcome;
-              const actions = patchLoadedActions(resolved, stats);
-              if (isObjectLike(actions)) {
-                return await tryUpdateEmail(actions, stats);
-              }
-              return false;
-            } catch (error) {
-              stats.lastLoadActionsError = String(error?.message || error);
-              return false;
-            }
-          }
-
-          function collectCandidates(stats) {
-            const queue = [
-              { value: window, depth: 0 },
-              { value: document, depth: 0 },
-              { value: document.documentElement, depth: 0 },
-              { value: document.body, depth: 0 },
-              { value: document.getElementById('email'), depth: 0 },
-              { value: document.querySelector('form'), depth: 0 },
-            ].filter((entry) => isObjectLike(entry.value));
-            const visited = new WeakSet();
-            const candidates = [];
-            let scannedObjects = 0;
-
-            while (queue.length && scannedObjects < 2000) {
-              const current = queue.shift();
-              const value = current?.value;
-              const depth = Number(current?.depth) || 0;
-              if (!isObjectLike(value) || visited.has(value)) {
-                continue;
-              }
-              visited.add(value);
-              scannedObjects += 1;
-
-              const hasUpdateEmail = typeof safeGet(value, 'updateEmail') === 'function';
-              const hasConfirm = typeof safeGet(value, 'confirm') === 'function';
-              const hasLoadActions = typeof safeGet(value, 'loadActions') === 'function';
-              if (hasUpdateEmail || hasConfirm || hasLoadActions) {
-                candidates.push(value);
-              }
-
-              if (depth >= 4) {
-                continue;
-              }
-
-              let traversedChildren = 0;
-              for (const key of safeOwnPropertyNames(value)) {
-                if (traversedChildren >= 250) {
-                  break;
-                }
-                if (!shouldInspectProperty(key, depth)) {
-                  continue;
-                }
-                const child = safeGet(value, key);
-                if (!isObjectLike(child)) {
-                  continue;
-                }
-                queue.push({ value: child, depth: depth + 1 });
-                traversedChildren += 1;
-              }
-            }
-
-            stats.scannedObjects = scannedObjects;
-            return candidates;
-          }
-
-          const stats = {
-            ok: true,
-            email: normalized,
-            candidateCount: 0,
-            scannedObjects: 0,
-            patchedConfirms: 0,
-            patchedLoadActions: 0,
-            updateAttempts: 0,
-            updateApplied: 0,
-            loadActionsAttempts: 0,
-            lastUpdateError: '',
-            lastLoadActionsError: '',
-          };
-
-          const candidates = collectCandidates(stats);
-          stats.candidateCount = candidates.length;
-          for (const candidate of candidates) {
-            patchConfirm(candidate, stats);
-            patchLoadActions(candidate, stats);
-          }
-
-          for (const candidate of candidates) {
-            const applied = await tryUpdateEmail(candidate, stats);
-            if (applied) {
-              break;
-            }
-          }
-
-          if (stats.updateApplied === 0) {
-            for (const candidate of candidates) {
-              const applied = await tryLoadActionsAndUpdate(candidate, stats);
-              if (applied) {
-                break;
-              }
-            }
-          }
-
-          return stats;
-        },
-      });
-
-      return results?.[0]?.result || { ok: true };
-    }
-
-    async function waitForPaymentRedirectAfterSubmit(tabId, paymentMethod = PLUS_PAYMENT_METHOD_PAYPAL) {
-      const paymentConfig = getPaymentMethodConfig(paymentMethod);
+    async function waitForPayPalRedirect(tabId) {
       const startedAt = Date.now();
-      while (Date.now() - startedAt < PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS) {
+      while (Date.now() - startedAt < HOSTED_CHECKOUT_REDIRECT_TIMEOUT_MS) {
+        throwIfStopped();
         const tab = await chrome.tabs.get(tabId).catch(() => null);
         if (!tab) {
-          throw new Error(`步骤 7：checkout 标签页已关闭，无法继续等待 ${paymentConfig.label} 跳转。`);
+          throw new Error('步骤 7：checkout 标签页已关闭，无法继续等待 PayPal 跳转。');
         }
         const url = String(tab.url || '');
-        if (paymentConfig.redirectPattern.test(url) && !isPlusCheckoutUrl(url)) {
+        if (isPayPalUrl(url)) {
           await waitForTabCompleteUntilStopped(tabId);
           await sleepWithStop(1000);
           return true;
         }
-        if (url && !isPlusCheckoutUrl(url)) {
-          await addLog(`步骤 7：点击订阅后页面跳转到非 ${paymentConfig.label} 识别地址：${url}`, 'warn');
-          return false;
+        if (url && !isHostedCheckoutUrl(url)) {
+          await addLog(`步骤 7：提交后页面跳转到非预期地址：${url}`, 'warn');
         }
         await sleepWithStop(500);
       }
       return false;
     }
 
-    async function waitForPayPalRedirectAfterSubmit(tabId) {
-      return waitForPaymentRedirectAfterSubmit(tabId, PLUS_PAYMENT_METHOD_PAYPAL);
-    }
-
-    async function inspectCheckoutFrame(tabId, frame) {
-      try {
-        const result = await sendFrameMessage(tabId, frame.frameId, {
-          type: 'PLUS_CHECKOUT_GET_STATE',
-          source: 'background',
-          payload: {},
-        });
-        if (result?.error) {
-          return { frame, error: result.error };
-        }
-        return { frame: { ...frame, ready: true }, result: result || {} };
-      } catch (error) {
-        const readyError = frame.ready === false ? 'content-script-not-ready' : '';
-        const message = error?.message || String(error || '');
-        return { frame, error: readyError ? `${readyError}: ${message}` : message };
-      }
-    }
-
-    function isPaymentFrameUrl(url = '') {
-      return /elements-inner-payment|componentName=payment/i.test(String(url || ''));
-    }
-
-    function isAddressFrameUrl(url = '') {
-      return /elements-inner-address|componentName=address/i.test(String(url || ''));
-    }
-
-    function isAutocompleteFrameUrl(url = '') {
-      return /elements-inner-autocompl/i.test(String(url || ''));
-    }
-
-    function buildFrameSummary(inspections) {
-      return inspections
-        .map((item) => {
-          const flags = [];
-          if (item.result?.hasPayPal) flags.push('paypal');
-          if (item.result?.hasGoPay) flags.push('gopay');
-          if (item.result?.billingFieldsVisible) flags.push('billing');
-          if (item.result?.hasSubscribeButton) flags.push('subscribe');
-          if (!flags.length && item.error) flags.push(item.error);
-          if (!flags.length) flags.push('no-match');
-          return `${item.frame.frameId}:${item.frame.url || 'about:blank'}:${flags.join(',')}`;
-        })
-        .slice(0, 8)
-        .join(' | ');
-    }
-
-    async function inspectCheckoutFrames(tabId, frames) {
-      const inspections = [];
-      for (const frame of frames) {
-        const inspection = await inspectCheckoutFrame(tabId, frame);
-        inspections.push(inspection);
-      }
-      return inspections;
-    }
-
-    function pickPaymentFrame(inspections, paymentMethod = PLUS_PAYMENT_METHOD_PAYPAL) {
-      const normalizedPaymentMethod = normalizePlusPaymentMethod(paymentMethod);
-      if (normalizedPaymentMethod === PLUS_PAYMENT_METHOD_GOPAY) {
-        return inspections.find((item) => item.result?.hasGoPay || item.result?.gopayCandidates?.length)
-          || inspections.find((item) => isPaymentFrameUrl(item.frame.url))
-          || null;
-      }
-      return inspections.find((item) => item.result?.hasPayPal || item.result?.paypalCandidates?.length)
-        || inspections.find((item) => isPaymentFrameUrl(item.frame.url))
-        || null;
-    }
-
-    function pickBillingFrame(inspections) {
-      return inspections.find((item) => item.result?.billingFieldsVisible)
-        || inspections.find((item) => isAddressFrameUrl(item.frame.url))
-        || null;
-    }
-
-    function pickSubscribeFrame(inspections) {
-      return inspections.find((item) => item.result?.hasSubscribeButton)
-        || inspections.find((item) => item.frame.frameId === 0)
-        || null;
-    }
-
-    function findCheckoutAmountInspection(inspections = []) {
-      return inspections.find((item) => item.result?.checkoutAmountSummary?.hasTodayDue)
-        || null;
-    }
-
-    async function inspectCheckoutAmountSummary(tabId) {
-      const frames = await getReadyCheckoutFrames(tabId);
-      const inspections = await inspectCheckoutFrames(tabId, frames);
-      const amountInspection = findCheckoutAmountInspection(inspections);
-      return amountInspection?.result?.checkoutAmountSummary || null;
-    }
-
-    async function ensureFreeTrialAmount(tabId, state = {}, options = {}) {
-      const phaseLabel = String(options.phaseLabel || '').trim() || '提交前';
-      const amountSummary = await inspectCheckoutAmountSummary(tabId);
-      if (!amountSummary?.hasTodayDue) {
-        await addLog(`步骤 7：${phaseLabel}未能识别 checkout 的“今日应付金额”，为避免误判将继续执行。`, 'warn');
-        return;
-      }
-
-      if (amountSummary.isZero) {
-        await addLog(`步骤 7：${phaseLabel}已确认今日应付金额为 ${amountSummary.rawAmount || '0'}，继续执行。`, 'ok');
-        return;
-      }
-
-      const amountLabel = amountSummary.rawAmount || (
-        Number.isFinite(Number(amountSummary.amount)) ? String(amountSummary.amount) : '未知金额'
-      );
-      await addLog(`步骤 7：${phaseLabel}检测到今日应付金额不是 0（${amountLabel}），说明当前账号没有免费试用资格，将跳过支付提交。`, 'warn');
-      if (typeof markCurrentRegistrationAccountUsed === 'function') {
-        await markCurrentRegistrationAccountUsed(state, {
-          reason: 'plus-checkout-non-free-trial',
-          logPrefix: 'Plus Checkout：当前账号没有免费试用资格',
-        });
-      }
-      throw new Error(`PLUS_CHECKOUT_NON_FREE_TRIAL::步骤 7：今日应付金额不是 0（${amountLabel}），当前账号没有免费试用资格，已跳过支付提交。`);
-    }
-
-    async function getReadyCheckoutFrames(tabId) {
-      return ensurePlusCheckoutFramesReady(tabId, await getCheckoutFrames(tabId));
-    }
-
-    async function resolveOptionalFrameByUrl(tabId, predicate) {
-      const frames = await getCheckoutFrames(tabId);
-      const frame = frames.find((item) => predicate(item.url));
-      if (!frame) {
-        return null;
-      }
-      const ready = await ensurePlusCheckoutFrameReady(tabId, frame.frameId);
-      return {
-        frame,
-        ready,
-      };
-    }
-
-    async function resolvePaymentFrame(tabId, frames, paymentMethod = PLUS_PAYMENT_METHOD_PAYPAL) {
-      const inspections = await inspectCheckoutFrames(tabId, frames);
-      const picked = pickPaymentFrame(inspections, paymentMethod);
-      if (picked) {
-        return {
-          frameId: picked.frame.frameId,
-          frameUrl: picked.frame.url || '',
-          ready: picked.frame.ready !== false,
-          inspections,
-        };
-      }
-
-      return {
-        frameId: null,
-        frameUrl: '',
-        inspections,
-      };
-    }
-
-    async function waitForBillingFrame(tabId) {
-      while (true) {
-        const frames = await getReadyCheckoutFrames(tabId);
-        const inspections = await inspectCheckoutFrames(tabId, frames);
-        const picked = pickBillingFrame(inspections);
-        if (picked) {
-          return {
-            frameId: picked.frame.frameId,
-            frameUrl: picked.frame.url || '',
-            countryText: picked.result?.countryText || '',
-            ready: picked.frame.ready !== false,
-            inspections,
-          };
-        }
-        await sleepWithStop(250);
-      }
-    }
-
-    async function waitForSubscribeFrame(tabId, candidateFrames) {
-      const frames = candidateFrames.length ? candidateFrames : [{ frameId: 0, url: '' }];
-      while (true) {
-        const readyFrames = await ensurePlusCheckoutFramesReady(tabId, frames);
-        const inspections = await inspectCheckoutFrames(tabId, readyFrames);
-        const picked = pickSubscribeFrame(inspections);
-        if (picked) {
-          return picked.frame;
-        }
-        await sleepWithStop(250);
-      }
-    }
-
-    async function getCheckoutTabId(state = {}) {
-      const registeredTabId = await getTabId(PLUS_CHECKOUT_SOURCE);
-      if (registeredTabId && await isTabAlive(PLUS_CHECKOUT_SOURCE)) {
-        const aliveRegisteredTabId = await getAlivePlusCheckoutTabId(registeredTabId);
-        if (aliveRegisteredTabId) {
-          return aliveRegisteredTabId;
-        }
-      }
-      const storedTabId = Number(state.plusCheckoutTabId) || 0;
-      if (storedTabId) {
-        const aliveStoredTabId = await getAlivePlusCheckoutTabId(storedTabId);
-        if (aliveStoredTabId) {
-          return aliveStoredTabId;
-        }
-      }
-      const currentCheckoutTabId = await getCurrentPlusCheckoutTabId();
-      if (currentCheckoutTabId) {
-        await addLog('步骤 7：检测到当前已在 Plus Checkout 页面，直接接管当前标签页。', 'info');
-        return currentCheckoutTabId;
-      }
-      throw new Error('步骤 7：未找到 Plus Checkout 标签页。请先打开 Plus Checkout 页面，或完成步骤 6。');
-    }
-
-    async function executePlusCheckoutBilling(state = {}, options = {}) {
-      if (isGpcHelperCheckout(state)) {
-        await executeGpcHelperBilling(state);
-        return;
-      }
-      const skipCompletion = Boolean(options?.skipCompletion);
-      const completionStepId = Number.isFinite(Number(options?.stepId)) && Number(options.stepId) > 0
-        ? Number(options.stepId)
-        : 7;
-      const paymentMethod = normalizePlusPaymentMethod(state?.plusPaymentMethod);
-      const isGoPayCheckout = paymentMethod === PLUS_PAYMENT_METHOD_GOPAY;
-      const paymentConfig = getPaymentMethodConfig(paymentMethod);
+    async function executePlusCheckoutBilling(state = {}) {
       const tabId = await getCheckoutTabId(state);
-      await addLog('步骤 7：正在等待 Plus Checkout 页面加载完成...', 'info');
+      await addLog('步骤 7：正在等待 hosted Plus Checkout 页面加载完成...', 'info');
       await waitForTabCompleteUntilStopped(tabId);
       await sleepWithStop(1000);
-
       await ensureContentScriptReadyOnTabUntilStopped(PLUS_CHECKOUT_SOURCE, tabId, {
         inject: PLUS_CHECKOUT_INJECT_FILES,
         injectSource: PLUS_CHECKOUT_SOURCE,
-        logMessage: '步骤 7：Checkout 页面仍在加载，等待账单填写脚本就绪...',
+        logMessage: '步骤 7：Checkout 页面仍在加载，等待 hosted 自动化脚本就绪...',
       });
-      const readyFrames = await getReadyCheckoutFrames(tabId);
-      await ensureFreeTrialAmount(tabId, state, {
-        phaseLabel: 'Checkout 页面加载后',
-      });
-      const paymentFrame = await resolvePaymentFrame(tabId, readyFrames, paymentMethod);
-      if (paymentFrame.frameId === null) {
-        const frameSummary = buildFrameSummary(paymentFrame.inspections);
-        throw new Error(`步骤 7：未在主页面或 iframe 中发现 ${paymentConfig.label} DOM，无法自动切换付款方式。frame 摘要：${frameSummary}`);
-      }
-      if (!paymentFrame.ready) {
-        throw new Error(`步骤 7：已定位到 ${paymentConfig.label} 所在 iframe（frameId=${paymentFrame.frameId}），但账单脚本无法注入该 iframe。请提供该 iframe 的控制台结构或截图。`);
-      }
 
-      if (paymentFrame.frameId !== 0) {
-        await addLog(`步骤 7：${paymentConfig.label} 位于 checkout iframe（frameId=${paymentFrame.frameId}），将改为在该 frame 内操作。`, 'info');
-      }
-
-      const randomName = generateRandomName();
-      const fullName = [randomName.firstName, randomName.lastName].filter(Boolean).join(' ');
-      const contactEmail = resolvePlusCheckoutContactEmail(state);
-
-      await addLog(`步骤 7：正在切换 ${paymentConfig.label} 付款方式...`, 'info');
-      const paymentResult = await sendFrameMessage(tabId, paymentFrame.frameId, {
-        type: paymentConfig.selectMessageType,
+      await addLog('步骤 7：正在驱动 hosted 页面选择 PayPal、填写账单地址并提交订阅...', 'info');
+      const result = await sendTabMessageUntilStopped(tabId, PLUS_CHECKOUT_SOURCE, {
+        type: 'RUN_HOSTED_CHECKOUT_FLOW',
         source: 'background',
-        payload: { paymentMethod },
+        payload: {},
       });
-      if (paymentResult?.error) {
-        throw new Error(paymentResult.error);
-      }
-
-      const contactEmailResult = await sendFrameMessage(tabId, 0, {
-        type: 'PLUS_CHECKOUT_FILL_CONTACT_EMAIL',
-        source: 'background',
-        payload: {
-          contactEmail,
-        },
-      });
-      if (contactEmailResult?.error) {
-        throw new Error(contactEmailResult.error);
-      }
-
-      const billingFrame = await waitForBillingFrame(tabId);
-      if (!billingFrame.ready) {
-        throw new Error(`步骤 7：已定位到账单地址 iframe（frameId=${billingFrame.frameId}），但账单脚本无法注入该 iframe。请提供该 iframe 的控制台结构或截图。`);
-      }
-      if (billingFrame.frameId !== paymentFrame.frameId) {
-        await addLog(`步骤 7：账单地址位于 checkout iframe（frameId=${billingFrame.frameId}），将改为在该 frame 内填写。`, 'info');
-      }
-
-      let billingState = state;
-      if (paymentMethod === PLUS_PAYMENT_METHOD_GOPAY && typeof probeIpProxyExit === 'function') {
-        const staleExitRegion = normalizeText(
-          state?.ipProxyAppliedExitRegion
-          || state?.ipProxyExitRegion
-          || ''
-        );
-        try {
-          await addLog('步骤 7：GoPay 账单地址准备按代理出口填写，正在重新检测当前出口地区...', 'info');
-          const probeResult = await probeIpProxyExit({
-            state,
-            timeoutMs: 12000,
-            authRebindRetry: true,
-            detectWhenDisabled: true,
-          });
-          const routing = probeResult?.proxyRouting || {};
-          const probedExitRegion = normalizeText(routing.exitRegion || '');
-          const probedExitIp = normalizeText(routing.exitIp || '');
-          const probedExitSource = normalizeText(routing.exitSource || '');
-          const probeEndpoint = normalizeText(routing.endpoint || routing.exitEndpoint || '');
-          const probeReason = normalizeText(routing.reason || '');
-          const probeError = normalizeText(routing.exitError || routing.error || '');
-          if (probedExitRegion) {
-            billingState = {
-              ...(state || {}),
-              ipProxyAppliedExitRegion: probedExitRegion,
-              ipProxyExitRegion: probedExitRegion,
-              ipProxyAppliedExitIp: probedExitIp,
-              ipProxyAppliedExitSource: probedExitSource,
-            };
-            const sourceSuffix = probedExitSource ? `，来源 ${probedExitSource}` : '';
-            const endpointSuffix = probeEndpoint ? `，检测地址 ${probeEndpoint}` : '';
-            await addLog(`步骤 7：当前代理出口复测结果：${probedExitRegion}${probedExitIp ? ` / ${probedExitIp}` : ''}${sourceSuffix}${endpointSuffix}。`, 'info');
-          } else {
-            billingState = {
-              ...(state || {}),
-              ipProxyAppliedExitRegion: '',
-              ipProxyExitRegion: '',
-              ipProxyAppliedExitIp: probedExitIp,
-              ipProxyAppliedExitSource: probedExitSource,
-            };
-            await addLog(
-              `步骤 7：代理出口复测没有返回国家/地区代码，已清空旧出口地区${staleExitRegion ? ` ${staleExitRegion}` : ''}，不会继续沿用旧地区。${probeReason ? `状态：${probeReason}。` : ''}${probeError ? `诊断：${probeError}` : ''}`,
-              'warn'
-            );
-          }
-        } catch (error) {
-          billingState = {
-            ...(state || {}),
-            ipProxyAppliedExitRegion: '',
-            ipProxyExitRegion: '',
-          };
-          await addLog(`步骤 7：代理出口复测失败，已清空旧出口地区${staleExitRegion ? ` ${staleExitRegion}` : ''}，不会继续沿用旧地区：${error?.message || String(error || '未知错误')}`, 'warn');
-        }
-      }
-      if (paymentMethod === PLUS_PAYMENT_METHOD_GOPAY
-        && typeof probeIpProxyExit === 'function'
-        && !resolveMeiguodizhiCountryCode(billingState?.ipProxyAppliedExitRegion || billingState?.ipProxyExitRegion || '')) {
-        throw new Error('步骤 7：GoPay 账单地址需要当前代理出口国家/地区，但本次复测没有拿到国家码；已停止填写，避免误用旧的 KR/ID 地区。请先点 IP 代理“检测出口”，确认显示 JP 后再继续。');
-      }
-      const addressSeed = await resolveBillingAddressSeed(billingState, billingFrame.countryText, { paymentMethod });
-      if (!addressSeed) {
-        throw new Error('步骤 7：未找到可用的本地账单地址种子。');
-      }
-
-      await addLog(`步骤 7：正在填写账单地址（${addressSeed.countryCode} / ${addressSeed.query}）...`, 'info');
-      const autocompleteFrame = await resolveOptionalFrameByUrl(tabId, isAutocompleteFrameUrl);
-      let result = null;
-      if (!addressSeed.skipAutocomplete && autocompleteFrame?.frame && autocompleteFrame.frame.frameId !== billingFrame.frameId) {
-        if (!autocompleteFrame.ready) {
-          throw new Error('步骤 7：发现 Google 地址推荐 iframe，但无法注入账单脚本。请提供该 iframe 的控制台结构。');
-        }
-        await addLog(`步骤 7：Google 地址推荐位于独立 iframe（frameId=${autocompleteFrame.frame.frameId}），将拆分输入与选择动作。`, 'info');
-
-        const queryResult = await sendFrameMessage(tabId, billingFrame.frameId, {
-          type: 'PLUS_CHECKOUT_FILL_ADDRESS_QUERY',
-          source: 'background',
-          payload: {
-            fullName,
-            addressSeed,
-            contactEmail,
-          },
-        });
-        if (queryResult?.error) {
-          throw new Error(queryResult.error);
-        }
-
-        const suggestionResult = await sendFrameMessage(tabId, autocompleteFrame.frame.frameId, {
-          type: 'PLUS_CHECKOUT_SELECT_ADDRESS_SUGGESTION',
-          source: 'background',
-          payload: {
-            addressSeed,
-          },
-        });
-        const suggestionError = suggestionResult?.error || '';
-        if (suggestionError) {
-          await addLog(`步骤 7：Google 地址推荐不可用，将改用本地地址字段兜底：${suggestionError}`, 'warn');
-        }
-
-        const structuredResult = await sendFrameMessage(tabId, billingFrame.frameId, {
-          type: 'PLUS_CHECKOUT_ENSURE_BILLING_ADDRESS',
-          source: 'background',
-          payload: {
-            addressSeed,
-            overwriteStructuredAddress: Boolean(suggestionError),
-          },
-        });
-        if (structuredResult?.error) {
-          throw new Error(structuredResult.error);
-        }
-
-        result = {
-          ...structuredResult,
-          selectedAddressText: suggestionError ? '' : (suggestionResult?.selectedAddressText || ''),
-        };
-      } else {
-        result = await sendFrameMessage(tabId, billingFrame.frameId, {
-          type: 'PLUS_CHECKOUT_FILL_BILLING_ADDRESS',
-          source: 'background',
-          payload: {
-            fullName,
-            addressSeed,
-            contactEmail,
-          },
-        });
-
-        if (result?.error) {
-          throw new Error(result.error);
-        }
+      if (result?.error) {
+        throw new Error(result.error);
       }
 
       await setState({
         plusCheckoutTabId: tabId,
-        plusBillingCountryText: result?.countryText || '',
-        plusBillingAddress: result?.structuredAddress || null,
-      });
-      await ensureFreeTrialAmount(tabId, state, {
-        phaseLabel: '提交订阅前',
+        plusBillingAddress: result?.address || null,
       });
 
-      let submitCompleted = false;
-      let lastSubmitError = '';
-      for (let attempt = 1; attempt <= PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS; attempt += 1) {
-        await addLog(
-          attempt === 1
-            ? '步骤 7：账单地址已填写完成，等待 3 秒让 checkout 完成校验...'
-            : `步骤 7：准备第 ${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS} 次重新提交账单地址...`,
-          attempt === 1 ? 'info' : 'warn'
-        );
-        await sleepWithStop(3000);
-        const runtimeEmailSync = await syncCheckoutEmailInPageContext(tabId, contactEmail).catch((error) => ({
-          ok: false,
-          error: error?.message || String(error || ''),
-        }));
-        if (runtimeEmailSync?.ok === false) {
-          await addLog(`步骤 7：同步 Checkout 内部联系邮箱失败，将继续尝试提交：${runtimeEmailSync.error || '未知错误'}`, 'warn');
-        } else if (attempt === 1 && Number(runtimeEmailSync?.candidateCount || 0) === 0) {
-          await addLog('步骤 7：未在页面主世界发现可写入 email 的 Checkout runtime，将继续按表单路径提交。', 'warn');
-        }
-        await addLog('步骤 7：正在定位订阅按钮...', 'info');
-        const subscribeFrame = await waitForSubscribeFrame(tabId, [
-          { frameId: 0, url: '' },
-          { frameId: paymentFrame.frameId, url: paymentFrame.frameUrl || '' },
-          { frameId: billingFrame.frameId, url: billingFrame.frameUrl || '' },
-        ]);
-        const subscribeResult = await sendFrameMessage(tabId, subscribeFrame.frameId, {
-          type: 'PLUS_CHECKOUT_CLICK_SUBSCRIBE',
-          source: 'background',
-          payload: {
-            beforeClickDelayMs: attempt === 1 ? 700 : 1200,
-            paymentMethod,
-          },
-        });
-        if (subscribeResult?.error) {
-          lastSubmitError = subscribeResult.error;
-          await addLog(`步骤 7：点击订阅失败（${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS}）：${lastSubmitError}`, 'warn');
-          continue;
-        }
-
-        if (isGoPayCheckout) {
-          submitCompleted = true;
-          lastSubmitError = '';
-          await addLog(`步骤 7：账单地址与订阅提交已完成，下一步将进入步骤 8 等待并接管 ${paymentConfig.label} 页面。`, 'ok');
-          break;
-        }
-        await addLog(`步骤 7：账单地址已提交，正在等待跳转到 ${paymentConfig.label}（${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS}）...`, 'info');
-        const redirectedToPayment = await waitForPaymentRedirectAfterSubmit(tabId, paymentMethod);
-        if (redirectedToPayment) {
-          submitCompleted = true;
-          lastSubmitError = '';
-          break;
-        }
-        lastSubmitError = `提交后 ${Math.round(PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS / 1000)} 秒内未跳转到 ${paymentConfig.label}`;
-        await addLog(`步骤 7：${lastSubmitError}，将重试提交。`, 'warn');
+      await addLog('步骤 7：账单地址已提交，正在等待跳转到 PayPal...', 'info');
+      const redirected = await waitForPayPalRedirect(tabId);
+      if (!redirected) {
+        throw new Error('步骤 7：提交订阅后未在 60 秒内跳转到 PayPal。');
       }
 
-      if (!submitCompleted) {
-        throw new Error(`步骤 7：多次提交账单地址后仍未跳转到 ${paymentConfig.label}。${lastSubmitError}`);
-      }
-
-      if (!skipCompletion) {
-        await completeStepFromBackground(completionStepId, {
-          plusBillingCountryText: result?.countryText || '',
-        });
-      }
+      await completeNodeFromBackground('plus-checkout-billing', {
+        plusCheckoutTabId: tabId,
+        plusBillingAddress: result?.address || null,
+      });
     }
 
     return {
