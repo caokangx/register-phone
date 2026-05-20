@@ -6470,6 +6470,7 @@ async function refreshFreeReusablePhoneStateFallback(mutationResult = {}, option
 }
 
 async function loadHeroSmsCountries() {
+
   const countrySelect = selectHeroSmsCountry || selectHeroSmsCountryFallback;
   if (!countrySelect) {
     return;
@@ -6562,7 +6563,10 @@ async function loadHeroSmsCountries() {
     });
     clearTimeout(timeoutId);
     const payload = await response.json();
-    const countries = Array.isArray(payload?.value) ? payload.value : (Array.isArray(payload) ? payload : []);
+    const rawCountries = payload?.value ?? payload;
+    const countries = Array.isArray(rawCountries)
+      ? rawCountries
+      : (rawCountries && typeof rawCountries === 'object' ? Object.values(rawCountries) : []);
     if (!countries.length) {
       throw new Error('国家列表为空');
     }
