@@ -10,6 +10,7 @@ const STATUS_ICONS = {
   skipped: '跳',
 };
 
+const LOG_AUTO_SCROLL_THRESHOLD_PX = 24;
 const logArea = document.getElementById('log-area');
 const btnOpenAccountRecords = document.getElementById('btn-open-account-records');
 const accountRecordsOverlay = document.getElementById('account-records-overlay');
@@ -11877,7 +11878,15 @@ function updateStatusDisplay(state) {
   }
 }
 
+function isLogAreaNearBottom(element) {
+  if (!element) {
+    return true;
+  }
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= LOG_AUTO_SCROLL_THRESHOLD_PX;
+}
+
 function appendLog(entry) {
+  const shouldStickToBottom = isLogAreaNearBottom(logArea);
   const time = new Date(entry.timestamp).toLocaleTimeString('zh-CN', {
     hour12: false,
     timeZone: DISPLAY_TIMEZONE,
@@ -11898,7 +11907,9 @@ function appendLog(entry) {
 
   line.innerHTML = html;
   logArea.appendChild(line);
-  logArea.scrollTop = logArea.scrollHeight;
+  if (shouldStickToBottom) {
+    logArea.scrollTop = logArea.scrollHeight;
+  }
 }
 
 function escapeHtml(text) {
