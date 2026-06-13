@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sub2api OpenAI 自动登录</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <h1>sub2api OpenAI 自动登录</h1>
+
+  <section class="card">
+    <h2>配置</h2>
+
+    <label for="sub2apiUrl">SUB2API 网址</label>
+    <input id="sub2apiUrl" type="text" placeholder="https://your-sub2api.com" />
+
+    <label for="sub2apiEmail">SUB2API 登录邮箱</label>
+    <input id="sub2apiEmail" type="text" placeholder="admin@example.com" autocomplete="off" />
+
+    <label for="sub2apiPassword">SUB2API 登录密码</label>
+    <input id="sub2apiPassword" type="password" placeholder="登录密码" autocomplete="off" />
+
+    <label>分组（可多选）</label>
+    <div id="groupList" class="group-list"><span class="muted">点「加载分组」从 SUB2API 拉取</span></div>
+    <button id="btnLoadGroups" class="btn-secondary" type="button">加载分组</button>
+
+    <label for="proxyPreference">代理（SUB2API 代理名称或 ID，留空=不用）</label>
+    <input id="proxyPreference" type="text" placeholder="留空表示不使用代理" />
+
+    <div class="row">
+      <div class="col">
+        <label for="emailPrefix">邮箱前缀</label>
+        <input id="emailPrefix" type="text" placeholder="prefix" />
+      </div>
+      <div class="col">
+        <label for="emailDomain">邮箱域名</label>
+        <input id="emailDomain" type="text" placeholder="example.com" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <label for="loopCount">循环次数</label>
+        <input id="loopCount" type="number" min="1" placeholder="留空=一直循环" />
+      </div>
+      <div class="col">
+        <label for="roundTimeoutSec">单轮超时(秒)</label>
+        <input id="roundTimeoutSec" type="number" min="60" max="1800" placeholder="180" />
+      </div>
+      <div class="col">
+        <label for="loopDelaySec">轮间等待(秒)</label>
+        <input id="loopDelaySec" type="number" min="0" max="3600" placeholder="0" />
+      </div>
+    </div>
+
+    <div class="sms-header">
+      <label class="checkbox-label" for="smsEnabled">
+        <input id="smsEnabled" type="checkbox" /> 启用接码（手机验证时自动取号收码）
+      </label>
+    </div>
+    <div id="smsFields" class="sms-fields">
+      <label for="smsApiKey">接码 API Key</label>
+      <input id="smsApiKey" type="text" placeholder="HeroSMS api_key" autocomplete="off" />
+      <label for="smsBaseUrl">接码接口地址</label>
+      <input id="smsBaseUrl" type="text" placeholder="https://hero-sms.com/stubs/handler_api.php" />
+
+      <label for="smsCountrySelect">国家</label>
+      <div class="inline-row">
+        <select id="smsCountrySelect"></select>
+        <button id="btnLoadCountries" class="btn-secondary inline-btn" type="button">刷新</button>
+      </div>
+
+      <div class="sms-platform">接码平台：HeroSMS / OpenAI（服务代码固定 dr）</div>
+
+      <div class="row">
+        <div class="col">
+          <label for="smsDialCode">国家区号</label>
+          <input id="smsDialCode" type="text" placeholder="66" />
+        </div>
+        <div class="col">
+          <label for="smsCodeTimeoutSec">收码超时(秒)</label>
+          <input id="smsCodeTimeoutSec" type="number" min="15" max="600" placeholder="120" />
+        </div>
+        <div class="col">
+          <label for="smsMaxReplacements">换号上限</label>
+          <input id="smsMaxReplacements" type="number" min="0" max="20" placeholder="3" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <label for="smsMinPrice">价格下限</label>
+          <input id="smsMinPrice" type="text" placeholder="不限" />
+        </div>
+        <div class="col">
+          <label for="smsMaxPrice">价格上限</label>
+          <input id="smsMaxPrice" type="text" placeholder="不限" />
+        </div>
+      </div>
+      <label class="checkbox-label sms-fixed" for="smsFixedPrice">
+        <input id="smsFixedPrice" type="checkbox" /> 指定挡位（取号时精确按「价格上限」这一档）
+      </label>
+
+      <div class="inline-row sms-query">
+        <button id="btnQueryBalance" class="btn-secondary" type="button">查余额</button>
+        <span id="smsBalance" class="muted">余额未查询</span>
+      </div>
+      <div class="sms-query">
+        <button id="btnQueryPrice" class="btn-secondary" type="button">查价格（多档位）</button>
+        <div id="smsPrice" class="muted price-result">价格未查询</div>
+      </div>
+    </div>
+
+    <button id="btnSave" class="btn-secondary" type="button">保存配置</button>
+  </section>
+
+  <section class="card">
+    <h2>运行</h2>
+    <div class="actions">
+      <button id="btnStart" class="btn-primary" type="button">开始</button>
+      <button id="btnStop" class="btn-secondary" type="button">停止</button>
+    </div>
+    <div id="status" class="status muted">空闲</div>
+
+    <div class="steps-header">
+      <span>当前轮进度</span>
+      <span id="stepProgress">0 / 7</span>
+    </div>
+    <div id="stepBar" class="step-bar"></div>
+
+    <div class="log-header">
+      <span>各轮结果</span>
+      <span id="resultsSummary" class="muted">尚未运行</span>
+    </div>
+    <div id="resultsArea" class="results-area"><span class="muted">暂无结果</span></div>
+
+    <div class="log-header">
+      <span>日志</span>
+      <button id="btnClearLog" class="link-btn" type="button">清空</button>
+    </div>
+    <div id="logArea" class="log-area"></div>
+  </section>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

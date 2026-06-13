@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "sub2api OpenAI 自动登录",
+  "version": "1.0",
+  "description": "从 sub2api 生成 OpenAI 授权链接并自动完成 SSO 登录与授权码交换",
+  "permissions": [
+    "storage",
+    "tabs",
+    "cookies",
+    "browsingData",
+    "webRequest",
+    "webNavigation",
+    "scripting",
+    "sidePanel",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/auto-login.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "sub2api OpenAI 自动登录",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
