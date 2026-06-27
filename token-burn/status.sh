@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$SCRIPT_DIR/env.sh" ]] && source "$SCRIPT_DIR/env.sh"
+PRETTY_JSON=(python3 "$SCRIPT_DIR/pretty-json.py")
 
 is_running() {
   local dir="$1"
@@ -12,7 +13,7 @@ is_running() {
 
 echo "========== 3-day Campaign =========="
 if [[ -f "$SCRIPT_DIR/campaign.json" ]]; then
-  python3 -m json.tool "$SCRIPT_DIR/campaign.json"
+  "${PRETTY_JSON[@]}" "$SCRIPT_DIR/campaign.json"
 else
   echo "(no campaign.json — run bootstrap.sh or run-daily-campaign.sh --reset)"
 fi
@@ -20,7 +21,7 @@ fi
 echo ""
 echo "========== Last Random Pick =========="
 if [[ -f "$SCRIPT_DIR/last-random.json" ]]; then
-  python3 -m json.tool "$SCRIPT_DIR/last-random.json"
+  "${PRETTY_JSON[@]}" "$SCRIPT_DIR/last-random.json"
 else
   echo "(none)"
 fi

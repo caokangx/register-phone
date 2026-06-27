@@ -324,7 +324,16 @@ PY
 
 show_status() {{
   if [[ -f "$PROGRESS_FILE" ]]; then
-    python3 -m json.tool "$PROGRESS_FILE"
+    python3 - "$PROGRESS_FILE" <<'PY'
+import json, sys
+path = sys.argv[1]
+d = json.load(open(path, encoding="utf-8"))
+print(f"Project: {{d['project']}} | Task {{d['current']}}/{{d['total']}} ({{d['percent']}}%) | {{d['status']}}")
+if d.get("last_task"):
+    print(d["last_task"])
+print()
+print(json.dumps(d, ensure_ascii=False, indent=2))
+PY
   else
     echo "No progress yet. Run ./run.sh first."
   fi

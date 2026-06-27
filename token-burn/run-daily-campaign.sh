@@ -71,7 +71,7 @@ campaign_reset() {
   rm -f "$CAMPAIGN_FILE"
   campaign_read > /dev/null
   echo "Campaign reset. New 3-day window starts today."
-  campaign_read | python3 -m json.tool
+  python3 "$SCRIPT_DIR/pretty-json.py" "$CAMPAIGN_FILE"
 }
 
 campaign_record_run() {
@@ -116,7 +116,7 @@ fi
 STATE=$(campaign_read)
 
 if $SHOW_STATUS; then
-  echo "$STATE" | python3 -m json.tool
+  python3 "$SCRIPT_DIR/pretty-json.py" "$CAMPAIGN_FILE" 2>/dev/null || echo "No campaign.json yet."
   exit 0
 fi
 
@@ -141,7 +141,7 @@ else
 fi
 
 if $DRY_RUN; then
-  echo "$STATE" | python3 -m json.tool
+  echo "$STATE" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin), ensure_ascii=False, indent=2))"
   "$SCRIPT_DIR/run-random.sh" --dry-run
   exit 0
 fi
