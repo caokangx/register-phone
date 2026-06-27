@@ -100,8 +100,8 @@ fi
 
 if $RUN_NOW; then
   if [[ "$IMMEDIATE" == "true" ]]; then
-    echo "==> Starting a random repo now (no delay)..."
-    ./run-random.sh --skip-running
+    echo "==> Starting today's campaign immediately (no 9-15 delay)..."
+    ./run-daily-campaign.sh --immediate
   else
     echo "==> Starting today's campaign run in background (with 9-15 random delay)..."
     nohup ./run-daily-campaign.sh >> "$LOG_DIR/campaign.log" 2>&1 &
@@ -111,6 +111,7 @@ fi
 
 echo ""
 echo "==> Ready."
-echo "    Status:  $SCRIPT_DIR/run-daily-campaign.sh --status"
+echo "    Status:  $SCRIPT_DIR/status.sh"
+echo "    Campaign: $SCRIPT_DIR/run-daily-campaign.sh --status"
 echo "    Logs:    tail -f $LOG_DIR/campaign.log"
 echo "    Dry run: $SCRIPT_DIR/run-daily-campaign.sh --dry-run"

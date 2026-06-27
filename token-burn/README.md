@@ -62,14 +62,21 @@ crontab -e
 ```bash
 cd ~/Documents/register-phone/token-burn
 
-# 查看 3 天窗口、已跑次数、下次是否还会执行
+# 推荐：一条命令看全部（3 天窗口 + 当前跑的是哪个项目 + 任务进度）
+./status.sh
+
+# 仅看 3 天 campaign 窗口（runs 只有走 run-daily-campaign.sh 才会记录）
 ./run-daily-campaign.sh --status
 
-# 模拟今天会抽哪个仓库（不真正启动）
-./run-daily-campaign.sh --dry-run
+# 看当前正在跑的项目任务进度（1/100、2/100 …）
+./<项目名>/run.sh --status          # 例如 ./redis/run.sh --status
+tail -f <项目名>/logs/main.log       # 例如 tail -f redis/logs/main.log
 
-# 重新开始新的 3 天（会清掉旧记录）
-./run-daily-campaign.sh --reset
+# 最近一次随机抽选
+cat last-random.json
+
+# 哪些项目在后台运行
+./run-random.sh --list
 ```
 
 ### 行为说明
@@ -81,7 +88,10 @@ cd ~/Documents/register-phone/token-burn
 | 触发时刻 | 9:00 cron 唤醒 → 随机 sleep 0–6h → 实际在 9:00–15:00 间启动 |
 | 抽选规则 | 调用 `run-random.sh` 随机选一个项目 |
 | 状态文件 | `campaign.json`（起止日期、历史运行记录） |
-| 日志 | `logs/campaign.log` |
+| 任务进度 | `<项目>/progress.json`（当前第几条 / 100） |
+| 日志 | `logs/campaign.log`、`<项目>/logs/main.log` |
+
+> **注意**：`bootstrap.sh --now --immediate` 旧版本直接调 `run-random.sh`，`campaign.json` 的 `runs` 会为空。任务进度请看 `last-random.json` 和对应项目的 `run.sh --status`。新版本已改为走 `run-daily-campaign.sh --immediate` 并写入 `runs`。
 
 ### Cron 与环境变量（重要）
 

@@ -22,6 +22,7 @@ Options:
   --reset          Clear campaign state and start a new 3-day window today
   --status         Show campaign state
   --dry-run        Show what would happen without sleeping or running
+  --immediate      Skip 9-15 random delay and start now (still records run)
   -h, --help       Show this help
 
 Cron (recommended):
@@ -94,12 +95,14 @@ PY
 RESET=false
 DRY_RUN=false
 SHOW_STATUS=false
+IMMEDIATE=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --reset) RESET=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     --status) SHOW_STATUS=true; shift ;;
+    --immediate) IMMEDIATE=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -131,7 +134,11 @@ DELAY=$((RANDOM % (WINDOW_SECONDS + 1)))
 DELAY_H=$((DELAY / 3600))
 DELAY_M=$(((DELAY % 3600) / 60))
 
-echo "[$(date)] Campaign day $DAY/3 | random delay ${DELAY_H}h ${DELAY_M}m → run between 09:00–15:00"
+if [[ "$IMMEDIATE" == "true" ]]; then
+  echo "[$(date)] Campaign day $DAY/3 | immediate start (no delay)"
+else
+  echo "[$(date)] Campaign day $DAY/3 | random delay ${DELAY_H}h ${DELAY_M}m → run between 09:00–15:00"
+fi
 
 if $DRY_RUN; then
   echo "$STATE" | python3 -m json.tool
@@ -139,7 +146,9 @@ if $DRY_RUN; then
   exit 0
 fi
 
-sleep "$DELAY"
+if [[ "$IMMEDIATE" != "true" ]]; then
+  sleep "$DELAY"
+fi
 
 "$SCRIPT_DIR/run-random.sh" --dry-run
 PICK=$(python3 -c "import json; print(json.load(open('$SCRIPT_DIR/last-random.json'))['project'])")
