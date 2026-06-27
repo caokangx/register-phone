@@ -31,5 +31,12 @@ venv/
 # Claude Code local state
 .claude/
 
+# token-burn local env (proxy, PATH; machine-specific)
+/token-burn/env.sh
+/token-burn/*/workspace/
+/token-burn/*/logs/
+/token-burn/campaign.json
+/token-burn/last-random.json
+
 # Logs
 *.log

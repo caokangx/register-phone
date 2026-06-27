@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -f "$SCRIPT_DIR/env.sh" ]] && source "$SCRIPT_DIR/env.sh"
 LAST_PICK_FILE="$SCRIPT_DIR/last-random.json"
 
 usage() {
@@ -17,6 +18,8 @@ Options:
   --skip-running       Exclude projects that already have a live background PID
   --dry-run            Print the chosen project without starting it
   --list               List all eligible projects and exit
+  --stop               Stop the last randomly started project
+  --stop-all           Stop all projects currently running in background
   -h, --help           Show this help
 
 Examples:
@@ -24,7 +27,51 @@ Examples:
   ./run-random.sh --skip-running
   ./run-random.sh --dry-run
   ./run-random.sh --foreground
+  ./run-random.sh --stop
+  ./run-random.sh --stop-all
 EOF
+}
+
+stop_project() {
+  local dir="$1"
+  local name
+  name=$(basename "$dir")
+  if is_running "$dir"; then
+    echo "Stopping $name ..."
+    "$dir/run.sh" --stop
+  else
+    echo "$name is not running."
+  fi
+}
+
+stop_all_running() {
+  collect_projects
+  local found=false
+  for dir in "${PROJECTS[@]}"; do
+    if is_running "$dir"; then
+      found=true
+      stop_project "$dir"
+    fi
+  done
+  if ! $found; then
+    echo "No background project runners are active."
+  fi
+}
+
+stop_last_pick() {
+  if [[ ! -f "$LAST_PICK_FILE" ]]; then
+    echo "No last-random.json found. Use --stop-all or --list." >&2
+    exit 1
+  fi
+  local name
+  name=$(python3 -c "import json; print(json.load(open('$LAST_PICK_FILE'))['project'])")
+  local dir="$SCRIPT_DIR/$name"
+  if [[ ! -f "$dir/run.sh" ]]; then
+    echo "Last pick '$name' has no run.sh." >&2
+    exit 1
+  fi
+  echo "Last random pick: $name"
+  stop_project "$dir"
 }
 
 collect_projects() {
@@ -68,6 +115,8 @@ while [[ $# -gt 0 ]]; do
     --foreground|-f) MODE="foreground"; shift ;;
     --skip-running) SKIP_RUNNING=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --stop) stop_last_pick; exit 0 ;;
+    --stop-all) stop_all_running; exit 0 ;;
     --list)
       collect_projects
       if [[ ${#PROJECTS[@]} -eq 0 ]]; then

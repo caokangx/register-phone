@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -f "$SCRIPT_DIR/env.sh" ]] && source "$SCRIPT_DIR/env.sh"
 CAMPAIGN_FILE="${CAMPAIGN_FILE:-$SCRIPT_DIR/campaign.json}"
 LOG_DIR="$SCRIPT_DIR/logs"
 CAMPAIGN_DAYS="${CAMPAIGN_DAYS:-3}"

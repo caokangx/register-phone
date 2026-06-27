@@ -10,14 +10,10 @@
 
 在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 进入 `token-burn` → 重置 3 天窗口 → 安装每天 9:00 的 cron → 立即在后台跑今天这一轮（9:00–15:00 随机延迟）：
 
-```bash
-git clone git@github.com:caokangx/register-phone.git ~/Documents/register-phone && ~/Documents/register-phone/token-burn/bootstrap.sh --now
-```
-
 没有配置 GitHub SSH 时，用 HTTPS：
 
 ```bash
-git clone https://github.com/caokangx/register-phone.git ~/Documents/register-phone && ~/Documents/register-phone/token-burn/bootstrap.sh --now
+git clone https://github.com/caokangx/register-phone.git ~/Documents/register-phone && ~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
 ```
 
 仓库已存在时，只需：
@@ -40,6 +36,8 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 ```
 
 前置条件：已安装并登录 `claude`、`git`、`python3`。
+
+首次运行会自动从 `env.example.sh` 生成 `env.sh`（含 `HOME`、`PATH`、代理配置）。**Cron 不会读取你终端里的环境变量**，见下文说明。
 
 ---
 
@@ -84,6 +82,33 @@ cd ~/Documents/register-phone/token-burn
 | 抽选规则 | 调用 `run-random.sh` 随机选一个项目 |
 | 状态文件 | `campaign.json`（起止日期、历史运行记录） |
 | 日志 | `logs/campaign.log` |
+
+### Cron 与环境变量（重要）
+
+**Cron 不会自动读取你交互式 shell 的环境变量。**
+
+| 变量 | 为什么不传会出问题 |
+|------|-------------------|
+| `HOME` | `claude` 配置、凭证通常在 `$HOME/.claude` |
+| `PATH` | Cron 默认 PATH 很短，找不到 `~/.local/bin/claude` |
+| `http_proxy` / `https_proxy` | 不会继承终端里的代理，git clone / API 可能失败 |
+
+你在终端里 `export` 过的变量，**Cron 任务里默认都没有**（不读 `~/.bashrc`、`~/.zshrc`）。
+
+**推荐做法**（已内置）：编辑 `token-burn/env.sh`：
+
+```bash
+cp ~/Documents/register-phone/token-burn/env.example.sh ~/Documents/register-phone/token-burn/env.sh
+# 按机器修改 HOME、代理地址
+```
+
+`run-daily-campaign.sh` / `run-random.sh` / 各项目 `run.sh` 启动时会自动 `source env.sh`，**无需在 crontab 里再手写 export**。
+
+若仍想在 crontab 里显式写（等价做法）：
+
+```bash
+0 9 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+```
 
 ---
 
@@ -172,6 +197,12 @@ cd ~/Documents/register-phone/token-burn
 
 # 前台运行（占用当前终端）
 ./run-random.sh --foreground
+
+# 停止最近一次随机启动的项目
+./run-random.sh --stop
+
+# 停止所有正在后台运行的项目
+./run-random.sh --stop-all
 ```
 
 最近一次抽选记录在 `last-random.json`：
@@ -321,6 +352,8 @@ python3 generate.py
 | `./run-random.sh --skip-running` | 跳过已在运行的项目 |
 | `./run-random.sh --list` | 列出所有可选项目 |
 | `./run-random.sh --foreground` | 随机选中后前台运行 |
+| `./run-random.sh --stop` | 停止最近一次随机启动的项目 |
+| `./run-random.sh --stop-all` | 停止所有正在后台运行的项目 |
 
 ## `run.sh` 命令参考
 

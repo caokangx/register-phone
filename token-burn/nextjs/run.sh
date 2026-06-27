@@ -9,6 +9,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOKEN_BURN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+[[ -f "$TOKEN_BURN_DIR/env.sh" ]] && source "$TOKEN_BURN_DIR/env.sh"
 PROJECT_ID="nextjs"
 REPO_URL="https://github.com/vercel/next.js.git"
 PROJECT_NAME="nextjs"

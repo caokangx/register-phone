@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -f "$SCRIPT_DIR/env.sh" ]] && source "$SCRIPT_DIR/env.sh"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
 CRON_LINE="0 9 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1"
@@ -70,6 +71,11 @@ for d in "$SCRIPT_DIR"/*/; do
   [[ -f "$d/run.sh" ]] && chmod +x "$d/run.sh"
 done
 mkdir -p "$LOG_DIR"
+
+if [[ ! -f "$SCRIPT_DIR/env.sh" && -f "$SCRIPT_DIR/env.example.sh" ]]; then
+  cp "$SCRIPT_DIR/env.example.sh" "$SCRIPT_DIR/env.sh"
+  echo "==> Created env.sh from env.example.sh (edit proxy/HOME if needed)"
+fi
 
 cd "$SCRIPT_DIR"
 

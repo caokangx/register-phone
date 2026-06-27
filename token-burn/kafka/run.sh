@@ -9,6 +9,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOKEN_BURN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+[[ -f "$TOKEN_BURN_DIR/env.sh" ]] && source "$TOKEN_BURN_DIR/env.sh"
 PROJECT_ID="kafka"
 REPO_URL="https://github.com/apache/kafka.git"
 PROJECT_NAME="kafka"

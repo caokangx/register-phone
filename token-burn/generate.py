@@ -273,6 +273,8 @@ RUN_SH = r'''#!/usr/bin/env bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOKEN_BURN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+[[ -f "$TOKEN_BURN_DIR/env.sh" ]] && source "$TOKEN_BURN_DIR/env.sh"
 PROJECT_ID="{id}"
 REPO_URL="{repo}"
 PROJECT_NAME="{id}"
