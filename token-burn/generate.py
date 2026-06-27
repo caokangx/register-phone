@@ -10,13 +10,15 @@ Full spec and copy-paste AI prompt:
 
 from __future__ import annotations
 
+import argparse
 import json
 import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent  # Documents/register-phone/token-burn
+CATALOG_PATH = ROOT / "projects_catalog.json"
 
-PROJECTS = [
+BASE_PROJECTS = [
     {
         "id": "kubernetes",
         "name": "Kubernetes",
@@ -175,6 +177,18 @@ PROJECTS = [
         ],
     },
 ]
+
+
+def load_projects() -> list[dict]:
+    if CATALOG_PATH.exists():
+        data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        projects = data.get("projects", data)
+        if isinstance(projects, list) and projects:
+            return projects
+    return list(BASE_PROJECTS)
+
+
+PROJECTS = load_projects()
 
 
 def phase_for_index(i: int) -> str:
@@ -474,7 +488,7 @@ def write_manifest(projects: list[dict], root: Path) -> None:
 
 
 MASTER_RUN_ALL = r'''#!/usr/bin/env bash
-# Run all 10 projects sequentially or in parallel
+# Run all projects sequentially or in parallel
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -564,27 +578,54 @@ esac
 '''
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate token-burn project runners")
+    parser.add_argument(
+        "--only-new",
+        action="store_true",
+        help="Skip projects that already have tasks.txt and run.sh",
+    )
+    parser.add_argument("--limit", type=int, default=0, help="Max projects to generate (0 = all)")
+    parser.add_argument("--offset", type=int, default=0, help="Skip first N projects in catalog")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     root = ROOT
     root.mkdir(parents=True, exist_ok=True)
 
-    for project in PROJECTS:
+    projects = load_projects()
+    if args.offset:
+        projects = projects[args.offset :]
+    if args.limit:
+        projects = projects[: args.limit]
+
+    generated = 0
+    skipped = 0
+    for project in projects:
         out_dir = root / project["id"]
+        if args.only_new and (out_dir / "tasks.txt").exists() and (out_dir / "run.sh").exists():
+            skipped += 1
+            continue
         out_dir.mkdir(parents=True, exist_ok=True)
         write_tasks(project, out_dir)
         write_run_sh(project, out_dir)
-        print(f"Generated {out_dir}")
+        generated += 1
+        if generated <= 20 or generated % 100 == 0:
+            print(f"Generated {out_dir}")
+        elif generated == 21:
+            print("... (suppressing per-project output)")
 
-    write_manifest(PROJECTS, root)
+    all_projects = load_projects()
+    write_manifest(all_projects, root)
 
     master = root / "run-all.sh"
     master.write_text(MASTER_RUN_ALL, encoding="utf-8")
     master.chmod(0o755)
 
-  # README for user - actually user rule says don't create markdown unless asked
-  # Skip README
-
-    print(f"\nDone. {len(PROJECTS)} projects × 100 tasks = {len(PROJECTS)*100} prompts")
+    print(f"\nDone. generated={generated} skipped={skipped} catalog={len(all_projects)}")
+    print(f"Total prompts in catalog: {len(all_projects) * 100}")
     print(f"Location: {root}")
 
 

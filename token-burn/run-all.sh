@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run all 10 projects sequentially or in parallel
+# Run all projects sequentially or in parallel
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
