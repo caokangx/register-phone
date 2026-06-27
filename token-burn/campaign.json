@@ -2,5 +2,10 @@
   "start_date": "2026-06-27",
   "end_date": "2026-06-29",
   "max_days": 3,
+  "schedule": {
+    "runs_per_day": 2,
+    "morning": "09:00-12:00",
+    "afternoon": "14:00-18:00"
+  },
   "runs": []
 }

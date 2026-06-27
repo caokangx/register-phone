@@ -6,7 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$SCRIPT_DIR/env.sh" ]] && source "$SCRIPT_DIR/env.sh"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
-CRON_LINE="0 9 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1"
+CRON_MORNING="0 9 * * * $SCRIPT_DIR/run-daily-campaign.sh --slot morning >> $LOG_DIR/campaign.log 2>&1"
+CRON_AFTERNOON="0 14 * * * $SCRIPT_DIR/run-daily-campaign.sh --slot afternoon >> $LOG_DIR/campaign.log 2>&1"
 
 INSTALL_CRON=true
 RESET_CAMPAIGN=true
@@ -17,19 +18,17 @@ usage() {
   cat <<EOF
 Usage: ./bootstrap.sh [options]
 
-Prepare and start the 3-day token-burn schedule in this environment.
+Prepare the 3-day schedule (2 random repo runs per day):
+  morning   09:00–12:00
+  afternoon 14:00–18:00
 
 Options:
-  --no-cron        Do not install crontab entry
+  --no-cron        Do not install crontab entries
   --no-reset       Keep existing campaign.json window
-  --now            Run today's job immediately (still random 9-15 delay unless --immediate)
-  --immediate      With --now: skip random delay and start a repo now
+  --now            Run today's morning slot now (random delay unless --immediate)
+  --immediate      With --now: run morning slot immediately
   --no-pull        Skip git pull in register-phone repo
   -h, --help       Show this help
-
-Typical first-time setup (from anywhere):
-  git clone git@github.com:caokangx/register-phone.git ~/Documents/register-phone \\
-    && ~/Documents/register-phone/token-burn/bootstrap.sh
 EOF
 }
 
@@ -67,6 +66,7 @@ if $PULL && [[ -d "$REPO_DIR/.git" ]]; then
 fi
 
 chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
+chmod +x "$SCRIPT_DIR"/*.py 2>/dev/null || true
 for d in "$SCRIPT_DIR"/*/; do
   [[ -f "$d/run.sh" ]] && chmod +x "$d/run.sh"
 done
@@ -80,7 +80,7 @@ fi
 cd "$SCRIPT_DIR"
 
 if $RESET_CAMPAIGN; then
-  echo "==> Reset 3-day campaign window..."
+  echo "==> Reset 3-day campaign window (2 runs/day)..."
   ./run-daily-campaign.sh --reset
 else
   echo "==> Campaign status (no reset):"
@@ -88,10 +88,11 @@ else
 fi
 
 if $INSTALL_CRON; then
-  echo "==> Installing crontab (daily 09:00 trigger)..."
+  echo "==> Installing crontab (09:00 morning + 14:00 afternoon)..."
   tmp="$(mktemp)"
   crontab -l 2>/dev/null | grep -v 'run-daily-campaign.sh' > "$tmp" || true
-  echo "$CRON_LINE" >> "$tmp"
+  echo "$CRON_MORNING" >> "$tmp"
+  echo "$CRON_AFTERNOON" >> "$tmp"
   crontab "$tmp"
   rm -f "$tmp"
   echo "    Crontab installed:"
@@ -100,11 +101,11 @@ fi
 
 if $RUN_NOW; then
   if [[ "$IMMEDIATE" == "true" ]]; then
-    echo "==> Starting today's campaign immediately (no 9-15 delay)..."
-    ./run-daily-campaign.sh --immediate
+    echo "==> Starting morning slot immediately..."
+    ./run-daily-campaign.sh --slot morning --immediate
   else
-    echo "==> Starting today's campaign run in background (with 9-15 random delay)..."
-    nohup ./run-daily-campaign.sh >> "$LOG_DIR/campaign.log" 2>&1 &
+    echo "==> Starting morning slot in background (09:00–12:00 random delay)..."
+    nohup ./run-daily-campaign.sh --slot morning >> "$LOG_DIR/campaign.log" 2>&1 &
     echo "    PID: $!"
   fi
 fi
@@ -114,4 +115,3 @@ echo "==> Ready."
 echo "    Status:  $SCRIPT_DIR/status.sh"
 echo "    Campaign: $SCRIPT_DIR/run-daily-campaign.sh --status"
 echo "    Logs:    tail -f $LOG_DIR/campaign.log"
-echo "    Dry run: $SCRIPT_DIR/run-daily-campaign.sh --dry-run"

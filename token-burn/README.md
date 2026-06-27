@@ -8,7 +8,7 @@
 
 ## 新环境一键启动
 
-在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 进入 `token-burn` → 重置 3 天窗口 → 安装每天 9:00 的 cron → 立即在后台跑今天这一轮（9:00–15:00 随机延迟）：
+在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 重置 3 天窗口 → 安装 cron（每天 2 轮）→ 立刻跑上午档：
 
 ```bash
 git clone https://github.com/caokangx/register-phone.git ~/Documents/register-phone && ~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
@@ -17,23 +17,26 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 仓库已存在时，只需：
 
 ```bash
-~/Documents/register-phone/token-burn/bootstrap.sh --now
+~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
 ```
+
 ## 查看状态
 
-```~/Documents/register-phone/token-burn/status.sh```
+```bash
+~/Documents/register-phone/token-burn/status.sh
+```
 
 其他选项：
 
 ```bash
-# 只初始化 + 装 cron，不立刻跑（等明天 9 点起自动触发）
+# 只初始化 + 装 cron，不立刻跑
 ~/Documents/register-phone/token-burn/bootstrap.sh
 
-# 立刻随机选一个仓库开工（跳过 9-15 点等待）
+# 立刻跑上午档（跳过 9-12 点随机等待）
 ~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
 
 # 不重置 3 天窗口、不改 cron
-~/Documents/register-phone/token-burn/bootstrap.sh --no-reset --no-cron --now
+~/Documents/register-phone/token-burn/bootstrap.sh --no-reset --no-cron
 ```
 
 前置条件：已安装并登录 `claude`、`git`、`python3`。
@@ -44,7 +47,14 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 
 ## 3 天定时任务（最常用）
 
-**需求**：连续 3 天，每天在 **9:00–15:00 之间随机一个时刻**，自动随机选一个仓库并后台执行其 100 条任务；第 4 天起自动停止。
+**需求**：连续 **3 天**，每天 **2 轮**，各随机选一个仓库后台执行 100 条任务；第 4 天起自动停止。
+
+| 轮次 | Cron 触发 | 随机等待 | 实际开工时段 |
+|------|-----------|----------|--------------|
+| 上午 `morning` | 每天 **9:00** | 0–3 小时 | **9:00–12:00** |
+| 下午 `afternoon` | 每天 **14:00** | 0–4 小时 | **14:00–18:00** |
+
+3 天共最多 **6 次**仓库任务（每天 2 次 × 3 天）。
 
 ### 第一步：加入 crontab
 
@@ -52,10 +62,17 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 crontab -e
 ```
 
-粘贴下面这一行（每天 9:00 唤醒，再随机等待 0–6 小时后开工）：
+粘贴下面**两行**：
 
 ```bash
-0 9 * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0 9  * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot morning   >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0 14 * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot afternoon >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+```
+
+或用 `bootstrap.sh` 自动安装（会删掉旧的单行 cron）：
+
+```bash
+~/Documents/register-phone/token-burn/bootstrap.sh
 ```
 
 ### 第二步：确认状态
@@ -90,14 +107,16 @@ cat last-random.json
 | 项 | 说明 |
 |----|------|
 | 持续天数 | 从**首次触发**起连续 3 个自然日（含当天） |
-| 每天次数 | 最多 1 次（随机 1 个仓库） |
-| 触发时刻 | 9:00 cron 唤醒 → 随机 sleep 0–6h → 实际在 9:00–15:00 间启动 |
+| 每天次数 | **2 次**（上午档 + 下午档，各随机 1 个仓库） |
+| 上午档 | 9:00 cron → 随机 sleep 0–3h → **9:00–12:00** 开工 |
+| 下午档 | 14:00 cron → 随机 sleep 0–4h → **14:00–18:00** 开工 |
+| 去重 | 同一档位当天已跑过则跳过，避免重复触发 |
 | 抽选规则 | 调用 `run-random.sh` 随机选一个项目 |
 | 状态文件 | `campaign.json`（起止日期、历史运行记录） |
 | 任务进度 | `<项目>/progress.json`（当前第几条 / 100） |
 | 日志 | `logs/campaign.log`、`<项目>/logs/main.log` |
 
-> **注意**：`bootstrap.sh --now --immediate` 旧版本直接调 `run-random.sh`，`campaign.json` 的 `runs` 会为空。任务进度请看 `last-random.json` 和对应项目的 `run.sh --status`。新版本已改为走 `run-daily-campaign.sh --immediate` 并写入 `runs`。
+> **注意**：`campaign.json` 的 `runs` 每条会带 `slot`（`morning` / `afternoon`）。`--status` 可看到当天两档完成情况。
 
 ### Cron 与环境变量（重要）
 
@@ -123,7 +142,8 @@ cp ~/Documents/register-phone/token-burn/env.example.sh ~/Documents/register-pho
 若仍想在 crontab 里显式写（等价做法）：
 
 ```bash
-0 9 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0 9  * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot morning >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0 14 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot afternoon >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
 ```
 
 ---
@@ -149,7 +169,7 @@ token-burn/
 ├── generate.py            # 一键生成/再生成全部文件
 ├── manifest.json          # 当前批次项目清单
 ├── run-random.sh          # 随机选一个项目运行
-├── run-daily-campaign.sh  # 3 天定时：每天 9–15 点随机触发
+├── run-daily-campaign.sh  # 3 天定时：每天 9–12、14–18 各一轮
 ├── bootstrap.sh           # 新环境一键初始化 + 启动
 ├── aggregate-usage.py     # 从 task_*.log 汇总 token / 费用
 ├── status.sh              # 统一状态（含 token 统计）
@@ -356,9 +376,11 @@ python3 generate.py
 
 | 命令 | 说明 |
 |------|------|
-| `./run-daily-campaign.sh` | 今日若在 3 天窗口内：随机延迟后启动 1 个仓库 |
-| `./run-daily-campaign.sh --status` | 查看 3 天窗口与历史运行 |
-| `./run-daily-campaign.sh --dry-run` | 预览今日会抽哪个仓库 |
+| `./run-daily-campaign.sh --slot morning` | 上午档：9:00–12:00 随机开工 |
+| `./run-daily-campaign.sh --slot afternoon` | 下午档：14:00–18:00 随机开工 |
+| `./run-daily-campaign.sh --slot morning --immediate` | 上午档立刻开工 |
+| `./run-daily-campaign.sh --status` | 查看 3 天窗口、runs、当天两档状态 |
+| `./run-daily-campaign.sh --dry-run --slot morning` | 预览上午档会抽哪个仓库 |
 | `./run-daily-campaign.sh --reset` | 重置，从今天起重新计 3 天 |
 
 ## `run-random.sh` 命令参考
