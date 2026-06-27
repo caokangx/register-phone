@@ -1,0 +1,85 @@
+{
+  "generated_at": "2026-06-27T08:35:10.239181Z",
+  "projects": [
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "repo": "https://github.com/kubernetes/kubernetes.git",
+      "domain": "容器编排与分布式系统",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/kubernetes",
+      "tasks": 100
+    },
+    {
+      "id": "golang",
+      "name": "Go",
+      "repo": "https://github.com/golang/go.git",
+      "domain": "编程语言编译器与运行时",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/golang",
+      "tasks": 100
+    },
+    {
+      "id": "react",
+      "name": "React",
+      "repo": "https://github.com/facebook/react.git",
+      "domain": "前端 UI 库与并发渲染",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/react",
+      "tasks": 100
+    },
+    {
+      "id": "nextjs",
+      "name": "Next.js",
+      "repo": "https://github.com/vercel/next.js.git",
+      "domain": "全栈 React 框架",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/nextjs",
+      "tasks": 100
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "repo": "https://github.com/redis/redis.git",
+      "domain": "内存数据库与持久化",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/redis",
+      "tasks": 100
+    },
+    {
+      "id": "prometheus",
+      "name": "Prometheus",
+      "repo": "https://github.com/prometheus/prometheus.git",
+      "domain": "云原生监控与时序数据库",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/prometheus",
+      "tasks": 100
+    },
+    {
+      "id": "grpc-go",
+      "name": "gRPC-Go",
+      "repo": "https://github.com/grpc/grpc-go.git",
+      "domain": "高性能 RPC 框架",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/grpc-go",
+      "tasks": 100
+    },
+    {
+      "id": "kafka",
+      "name": "Apache Kafka",
+      "repo": "https://github.com/apache/kafka.git",
+      "domain": "分布式流处理平台",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/kafka",
+      "tasks": 100
+    },
+    {
+      "id": "pytorch",
+      "name": "PyTorch",
+      "repo": "https://github.com/pytorch/pytorch.git",
+      "domain": "深度学习框架",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/pytorch",
+      "tasks": 100
+    },
+    {
+      "id": "istio",
+      "name": "Istio",
+      "repo": "https://github.com/istio/istio.git",
+      "domain": "服务网格与流量治理",
+      "dir": "/Users/yikangcao/Documents/register-phone/token-burn/istio",
+      "tasks": 100
+    }
+  ]
+}
