@@ -10,8 +10,6 @@
 
 在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 进入 `token-burn` → 重置 3 天窗口 → 安装每天 9:00 的 cron → 立即在后台跑今天这一轮（9:00–15:00 随机延迟）：
 
-没有配置 GitHub SSH 时，用 HTTPS：
-
 ```bash
 git clone https://github.com/caokangx/register-phone.git ~/Documents/register-phone && ~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
 ```
@@ -21,6 +19,9 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 ```bash
 ~/Documents/register-phone/token-burn/bootstrap.sh --now
 ```
+## 查看状态
+
+```~/Documents/register-phone/token-burn/status.sh```
 
 其他选项：
 
