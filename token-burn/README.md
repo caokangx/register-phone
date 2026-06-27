@@ -63,8 +63,13 @@ crontab -e
 ```bash
 cd ~/Documents/register-phone/token-burn
 
-# 推荐：一条命令看全部（3 天窗口 + 当前跑的是哪个项目 + 任务进度）
+# 推荐：一条命令看全部（3 天窗口 + 任务进度 + Token 消耗）
 ./status.sh
+
+# 仅看 Token / 费用汇总（解析 logs/task_*.log 里的 Claude JSON result）
+python3 aggregate-usage.py
+python3 aggregate-usage.py --project nextjs
+python3 aggregate-usage.py --json
 
 # 仅看 3 天 campaign 窗口（runs 只有走 run-daily-campaign.sh 才会记录）
 ./run-daily-campaign.sh --status
@@ -146,6 +151,8 @@ token-burn/
 ├── run-random.sh          # 随机选一个项目运行
 ├── run-daily-campaign.sh  # 3 天定时：每天 9–15 点随机触发
 ├── bootstrap.sh           # 新环境一键初始化 + 启动
+├── aggregate-usage.py     # 从 task_*.log 汇总 token / 费用
+├── status.sh              # 统一状态（含 token 统计）
 ├── run-all.sh             # 批量调度所有项目
 │
 ├── kubernetes/            # 每个项目一个目录

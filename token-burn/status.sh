@@ -53,6 +53,14 @@ if ! $found; then
 fi
 
 echo ""
+echo "========== Token Usage =========="
+if [[ -f "$SCRIPT_DIR/aggregate-usage.py" ]]; then
+  python3 "$SCRIPT_DIR/aggregate-usage.py" "$SCRIPT_DIR" || echo "(failed to parse usage logs)"
+else
+  echo "(aggregate-usage.py not found)"
+fi
+
+echo ""
 echo "========== Quick Logs =========="
 echo "  tail -f $SCRIPT_DIR/logs/campaign.log"
 for dir in "$SCRIPT_DIR"/*/; do
