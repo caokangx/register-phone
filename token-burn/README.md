@@ -1,6 +1,6 @@
 # Token Burn
 
-批量克隆 GitHub 中大型开源仓库，并通过 [Claude Code](https://code.claude.com/) 在同一会话上下文中顺序执行 100 条循序渐进的源码分析任务。
+批量克隆 GitHub 中大型开源仓库，并通过 [Claude Code](https://code.claude.com/) 在同一会话上下文中顺序执行 30 条循序渐进的源码分析任务。
 
 主要用于：**自动化、长时间、大批量地跑 Claude Code 分析流程**（会消耗大量 token，请注意费用）。
 
@@ -8,7 +8,7 @@
 
 ## 新环境一键启动
 
-在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 重置 3 天窗口 → 安装 cron（每天 2 轮）→ 立刻跑上午档：
+在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 重置 3 天窗口 → 安装 cron（每天 10 轮）→ 立刻跑一轮：
 
 ```bash
 git clone https://github.com/caokangx/register-phone.git ~/Documents/register-phone && ~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
@@ -32,7 +32,7 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 # 只初始化 + 装 cron，不立刻跑
 ~/Documents/register-phone/token-burn/bootstrap.sh
 
-# 立刻跑上午档（跳过 9-12 点随机等待）
+# 立刻跑一轮
 ~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
 
 # 不重置 3 天窗口、不改 cron
@@ -47,14 +47,13 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 
 ## 3 天定时任务（最常用）
 
-**需求**：连续 **3 天**，每天 **2 轮**，各随机选一个仓库后台执行 100 条任务；第 4 天起自动停止。
+**需求**：连续 **3 天**，每天 **10 轮**，每半小时随机选一个仓库后台执行 30 条任务；第 4 天起自动停止。
 
-| 轮次 | Cron 触发 | 随机等待 | 实际开工时段 |
-|------|-----------|----------|--------------|
-| 上午 `morning` | 每天 **9:00** | 0–3 小时 | **9:00–12:00** |
-| 下午 `afternoon` | 每天 **14:00** | 0–4 小时 | **14:00–18:00** |
+| Cron 触发 | 间隔 | 每天轮数 | 实际开工时段 |
+|-----------|------|----------|--------------|
+| 每天 **9:00–13:30** | 每 30 分钟 | **10 轮** | **9:00、9:30、...、13:30** |
 
-3 天共最多 **6 次**仓库任务（每天 2 次 × 3 天）。
+3 天共最多 **30 次**仓库任务（每天 10 次 × 3 天）。
 
 ### 第一步：加入 crontab
 
@@ -62,11 +61,10 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 crontab -e
 ```
 
-粘贴下面**两行**：
+粘贴下面**一行**：
 
 ```bash
-0 9  * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot morning   >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
-0 14 * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot afternoon >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0,30 9-13 * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
 ```
 
 或用 `bootstrap.sh` 自动安装（会删掉旧的单行 cron）：
@@ -91,7 +89,7 @@ python3 aggregate-usage.py --json
 # 仅看 3 天 campaign 窗口（runs 只有走 run-daily-campaign.sh 才会记录）
 ./run-daily-campaign.sh --status
 
-# 看当前正在跑的项目任务进度（1/100、2/100 …）
+# 看当前正在跑的项目任务进度（1/30、2/30 …）
 ./<项目名>/run.sh --status          # 例如 ./redis/run.sh --status
 tail -f <项目名>/logs/main.log       # 例如 tail -f redis/logs/main.log
 
@@ -107,16 +105,15 @@ cat last-random.json
 | 项 | 说明 |
 |----|------|
 | 持续天数 | 从**首次触发**起连续 3 个自然日（含当天） |
-| 每天次数 | **2 次**（上午档 + 下午档，各随机 1 个仓库） |
-| 上午档 | 9:00 cron → 随机 sleep 0–3h → **9:00–12:00** 开工 |
-| 下午档 | 14:00 cron → 随机 sleep 0–4h → **14:00–18:00** 开工 |
-| 去重 | 同一档位当天已跑过则跳过，避免重复触发 |
+| 每天次数 | **10 次**（9:00–13:30 每半小时 1 次，各随机 1 个仓库） |
+| 触发频率 | cron `0,30 9-13 * * *`，每次触发立即开工 |
+| 每日上限 | 当天已跑满 10 轮后，后续触发会跳过 |
 | 抽选规则 | 调用 `run-random.sh` 随机选一个项目 |
 | 状态文件 | `campaign.json`（起止日期、历史运行记录） |
-| 任务进度 | `<项目>/progress.json`（当前第几条 / 100） |
+| 任务进度 | `<项目>/progress.json`（当前第几条 / 30） |
 | 日志 | `logs/campaign.log`、`<项目>/logs/main.log` |
 
-> **注意**：`campaign.json` 的 `runs` 每条会带 `slot`（`morning` / `afternoon`）。`--status` 可看到当天两档完成情况。
+> **注意**：`campaign.json` 的 `runs` 每条会带 `run_number`。`--status` 可看到当天已完成轮数和剩余轮数。
 
 ### Cron 与环境变量（重要）
 
@@ -142,8 +139,7 @@ cp ~/Documents/register-phone/token-burn/env.example.sh ~/Documents/register-pho
 若仍想在 crontab 里显式写（等价做法）：
 
 ```bash
-0 9  * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot morning >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
-0 14 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh --slot afternoon >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0,30 9-13 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
 ```
 
 ---
@@ -156,7 +152,7 @@ cp ~/Documents/register-phone/token-burn/env.example.sh ~/Documents/register-pho
 | `git` | 用于浅克隆仓库 |
 | `python3` | 用于运行生成器、写入进度 JSON |
 | 磁盘空间 | 10 个大型仓库浅克隆仍需数 GB～数十 GB |
-| API 额度 | 10 项目 × 100 任务 = **1000 次** `claude -p` 调用 |
+| API 额度 | 每个项目 30 任务；3 天 campaign 最多 30 个项目轮次 = **900 次** `claude -p` 调用 |
 
 ---
 
@@ -169,19 +165,19 @@ token-burn/
 ├── generate.py            # 一键生成/再生成全部文件
 ├── manifest.json          # 当前批次项目清单
 ├── run-random.sh          # 随机选一个项目运行
-├── run-daily-campaign.sh  # 3 天定时：每天 9–12、14–18 各一轮
+├── run-daily-campaign.sh  # 3 天定时：每天 9:00–13:30 每半小时一轮
 ├── bootstrap.sh           # 新环境一键初始化 + 启动
 ├── aggregate-usage.py     # 从 task_*.log 汇总 token / 费用
 ├── status.sh              # 统一状态（含 token 统计）
 ├── run-all.sh             # 批量调度所有项目
 │
 ├── kubernetes/            # 每个项目一个目录
-│   ├── tasks.txt          #   100 条 Claude Code 任务（每行一条）
+│   ├── tasks.txt          #   30 条 Claude Code 任务（每行一条）
 │   ├── run.sh             #   单项目执行脚本
 │   ├── workspace/         #   运行时：克隆的仓库（自动生成）
 │   └── logs/              #   运行时：日志与进度（自动生成）
 │       ├── main.log
-│       ├── task_001.log … task_100.log
+│       ├── task_001.log … task_030.log
 │       └── progress.json  #   实际写在项目根目录
 │
 ├── golang/
@@ -261,7 +257,7 @@ cd ~/Documents/register-phone/token-burn/kubernetes
 脚本会自动：
 
 1. 浅克隆 `kubernetes/kubernetes` 到 `workspace/kubernetes/`
-2. 按 `tasks.txt` 顺序执行 100 条 `claude -p` 任务
+2. 按 `tasks.txt` 顺序执行 30 条 `claude -p` 任务
 3. 通过 `--resume` / `--continue` 保持同一会话上下文
 
 ### 查看进度
@@ -278,10 +274,10 @@ tail -f logs/task_042.log   # 查看某一任务的详细输出
 {
   "project": "kubernetes",
   "current": 42,
-  "total": 100,
+  "total": 30,
   "percent": 42.0,
   "status": "running",
-  "last_task": "【任务 42/100 · …】",
+  "last_task": "【任务 12/30 · …】",
   "updated_at": "2026-06-27T08:00:00Z",
   "pid": 12345
 }
@@ -313,19 +309,19 @@ cd ~/Documents/register-phone/token-burn
 
 ---
 
-## 任务设计（每个项目 100 条）
+## 任务设计（每个项目 30 条）
 
 任务由浅入深，分 7 个阶段：
 
 | 阶段 | 编号 | 内容 |
 |------|------|------|
-| 架构分析 | 1–15 | 模块边界、依赖、调用链、配置、测试 |
-| 深度源码 | 16–30 | 精读、并发、错误处理、生命周期 |
-| 性能扫描 | 31–45 | 热点、I/O、缓存、批处理、基准 |
-| 瓶颈识别 | 46–60 | 瓶颈假设、锁竞争、内存、网络 |
-| 优化方案 | 61–75 | 详细方案、优先级排序 |
-| 优化执行 | 76–90 | 代码审查、重构草案、观测增强 |
-| 验证报告 | 91–100 | 测试计划、对比实验、最终报告 |
+| 架构分析 | 1–5 | 模块边界、依赖、调用链、配置、测试 |
+| 深度源码 | 6–10 | 精读、并发、错误处理、生命周期 |
+| 性能扫描 | 11–15 | 热点、I/O、缓存、批处理、基准 |
+| 瓶颈识别 | 16–20 | 瓶颈假设、锁竞争、内存、网络 |
+| 优化方案 | 21–24 | 详细方案、优先级排序 |
+| 优化执行 | 25–28 | 代码审查、重构草案、观测增强 |
+| 验证报告 | 29–30 | 测试计划、最终报告 |
 
 任务以**分析、方案、审查**为主，不要求修改上游仓库或提交 PR。
 
@@ -376,11 +372,9 @@ python3 generate.py
 
 | 命令 | 说明 |
 |------|------|
-| `./run-daily-campaign.sh --slot morning` | 上午档：9:00–12:00 随机开工 |
-| `./run-daily-campaign.sh --slot afternoon` | 下午档：14:00–18:00 随机开工 |
-| `./run-daily-campaign.sh --slot morning --immediate` | 上午档立刻开工 |
-| `./run-daily-campaign.sh --status` | 查看 3 天窗口、runs、当天两档状态 |
-| `./run-daily-campaign.sh --dry-run --slot morning` | 预览上午档会抽哪个仓库 |
+| `./run-daily-campaign.sh` | 立即执行一轮（若当天未满 10 轮） |
+| `./run-daily-campaign.sh --status` | 查看 3 天窗口、runs、当天已跑/剩余轮数 |
+| `./run-daily-campaign.sh --dry-run` | 预览本轮会抽哪个仓库 |
 | `./run-daily-campaign.sh --reset` | 重置，从今天起重新计 3 天 |
 
 ## `run-random.sh` 命令参考
@@ -399,7 +393,7 @@ python3 generate.py
 
 | 命令 | 说明 |
 |------|------|
-| `./run.sh` | 前台执行（克隆 + 100 条任务） |
+| `./run.sh` | 前台执行（克隆 + 30 条任务） |
 | `./run.sh --background` | 后台执行，写入 PID 和日志 |
 | `./run.sh --status` | 查看 `progress.json` |
 | `./run.sh --stop` | 停止后台进程 |
@@ -418,10 +412,10 @@ python3 generate.py
 
 ## 注意事项
 
-- **费用**：全量跑完 1000 条任务可能产生极高 API 费用，建议先用单个项目试跑，并启用 `--max-budget-usd`。
+- **费用**：3 天 campaign 最多跑 900 条任务，仍可能产生较高 API 费用，建议先用单个项目试跑，并启用 `--max-budget-usd`。
 - **时间**：大型仓库（PyTorch、Kubernetes）单次克隆和分析都可能耗时数小时。
 - **网络**：克隆 GitHub 仓库需要稳定网络；失败后可重新运行，已克隆的仓库会复用。
-- **上下文**：同项目内 100 条任务共享会话；跨项目之间上下文不共享。
+- **上下文**：同项目内 30 条任务共享会话；跨项目之间上下文不共享。
 - **不要提交 `workspace/` 和 `logs/`**：这些是运行时产物，体积大且无需版本管理。
 
 ---

@@ -106,7 +106,7 @@ clone_repo() {
 
 run_tasks() {
   cd "$CLONE_DIR"
-  local total=100
+  local total=30
   local current=0
   local first=true
   local session_id=""
@@ -140,7 +140,7 @@ run_tasks() {
     echo "[$(date)] Task $current/$total done" | tee -a "$MAIN_LOG"
   done < "$TASKS_FILE"
 
-  write_progress "$total" "$total" "completed" "All 100 tasks finished"
+  write_progress "$total" "$total" "completed" "All 30 tasks finished"
   rm -f "$PID_FILE"
   echo "[$(date)] All tasks completed for $PROJECT_ID" | tee -a "$MAIN_LOG"
 }
@@ -153,7 +153,7 @@ case "${1:-}" in
     fi
     nohup "$0" --foreground >> "$MAIN_LOG" 2>&1 &
     echo $! > "$PID_FILE"
-    write_progress 0 100 "starting" "Background launch"
+    write_progress 0 30 "starting" "Background launch"
     echo "Started $PROJECT_ID in background, PID=$(cat "$PID_FILE")"
     echo "Progress: $0 --status"
     echo "Logs:     tail -f $MAIN_LOG"

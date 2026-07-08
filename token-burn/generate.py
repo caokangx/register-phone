@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent  # Documents/register-phone/token-burn
 CATALOG_PATH = ROOT / "projects_catalog.json"
+TASKS_PER_PROJECT = 30
 
 BASE_PROJECTS = [
     {
@@ -192,17 +193,17 @@ PROJECTS = load_projects()
 
 
 def phase_for_index(i: int) -> str:
-    if i <= 15:
+    if i <= 5:
         return "analyze"
-    if i <= 30:
+    if i <= 10:
         return "deep_dive"
-    if i <= 45:
+    if i <= 15:
         return "perf_scan"
-    if i <= 60:
+    if i <= 20:
         return "bottleneck"
-    if i <= 75:
+    if i <= 24:
         return "optimize_plan"
-    if i <= 90:
+    if i <= 28:
         return "optimize_exec"
     return "verify"
 
@@ -217,53 +218,53 @@ def make_prompt(project: dict, index: int) -> str:
 
     templates = {
         "analyze": [
-            f"【任务 {n}/100 · 架构分析】阅读 {area} 目录的入口文件和 README，绘制 {p['name']} 在 {p['domain']} 中的模块边界图（用文字描述即可）。列出该目录下前 20 个关键源文件及其职责，并说明它们与 {topic} 的关联。",
-            f"【任务 {n}/100 · 依赖梳理】在 {area} 中搜索 import/include 关系，找出被最多文件引用的 10 个核心模块。解释每个模块在 {topic} 场景中的作用，并估算代码行数规模。",
-            f"【任务 {n}/100 · 调用链追踪】从 {area} 的 public API 出发，追踪一条典型请求/调用链直到底层实现。逐步列出经过的函数/类，并标注与 {topic} 相关的节点。",
-            f"【任务 {n}/100 · 配置审计】搜索项目中与 {topic} 相关的配置项、环境变量、feature flag。整理成表格：名称、默认值、影响范围、所在文件路径。",
-            f"【任务 {n}/100 · 测试覆盖】在 test 目录中找到覆盖 {area} 或 {topic} 的测试文件，阅读至少 3 个测试用例，总结被测试的行为边界和已知限制。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 架构分析】阅读 {area} 目录的入口文件和 README，绘制 {p['name']} 在 {p['domain']} 中的模块边界图（用文字描述即可）。列出该目录下前 20 个关键源文件及其职责，并说明它们与 {topic} 的关联。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 依赖梳理】在 {area} 中搜索 import/include 关系，找出被最多文件引用的 10 个核心模块。解释每个模块在 {topic} 场景中的作用，并估算代码行数规模。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 调用链追踪】从 {area} 的 public API 出发，追踪一条典型请求/调用链直到底层实现。逐步列出经过的函数/类，并标注与 {topic} 相关的节点。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 配置审计】搜索项目中与 {topic} 相关的配置项、环境变量、feature flag。整理成表格：名称、默认值、影响范围、所在文件路径。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 测试覆盖】在 test 目录中找到覆盖 {area} 或 {topic} 的测试文件，阅读至少 3 个测试用例，总结被测试的行为边界和已知限制。",
         ],
         "deep_dive": [
-            f"【任务 {n}/100 · 源码精读】深入阅读 {area} 中与 {topic} 最相关的 3-5 个源文件。逐段解释核心数据结构和算法，指出设计权衡（trade-off）。",
-            f"【任务 {n}/100 · 并发模型】分析 {area} 中的锁、goroutine/thread、channel、原子操作或等效并发原语。画出并发交互图，标出可能的竞态窗口。",
-            f"【任务 {n}/100 · 错误处理】统计 {area} 中的错误返回/异常处理模式。分类列举：可恢复错误、致命错误、重试逻辑，各举 2 个代码示例（引用文件和行号）。",
-            f"【任务 {n}/100 · 内存与生命周期】追踪 {topic} 相关对象从创建到销毁的完整生命周期。标注堆/栈分配、池化、缓存、泄漏风险点。",
-            f"【任务 {n}/100 · 扩展点】找出 {area} 中的 plugin/hook/interface 扩展机制。说明第三方如何接入 {topic}，并评估扩展 API 的稳定性。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 源码精读】深入阅读 {area} 中与 {topic} 最相关的 3-5 个源文件。逐段解释核心数据结构和算法，指出设计权衡（trade-off）。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 并发模型】分析 {area} 中的锁、goroutine/thread、channel、原子操作或等效并发原语。画出并发交互图，标出可能的竞态窗口。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 错误处理】统计 {area} 中的错误返回/异常处理模式。分类列举：可恢复错误、致命错误、重试逻辑，各举 2 个代码示例（引用文件和行号）。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 内存与生命周期】追踪 {topic} 相关对象从创建到销毁的完整生命周期。标注堆/栈分配、池化、缓存、泄漏风险点。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 扩展点】找出 {area} 中的 plugin/hook/interface 扩展机制。说明第三方如何接入 {topic}，并评估扩展 API 的稳定性。",
         ],
         "perf_scan": [
-            f"【任务 {n}/100 · 性能热点扫描】在 {area} 中搜索循环嵌套、递归、全表扫描、O(n²) 算法、频繁分配等性能敏感模式。列出 top 10 可疑位置及理由。",
-            f"【任务 {n}/100 · I/O 路径】分析 {topic} 的 I/O 路径（磁盘/网络/序列化）。估算每次操作的系统调用次数和数据拷贝次数，指出可优化的环节。",
-            f"【任务 {n}/100 · 缓存策略】审查 {area} 中所有 cache/memoize/buffer 实现。对比命中率优化空间、过期策略、内存上限，给出量化改进假设。",
-            f"【任务 {n}/100 · 批处理机会】检查 {topic} 相关代码是否存在可合并的逐条处理。设计一个批处理方案，估算理论吞吐提升百分比。",
-            f"【任务 {n}/100 · 基准测试】查找或设计针对 {area} 的 benchmark。若无现成基准，提出 3 个 micro-benchmark 场景及测量指标（延迟 P99、QPS、内存）。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 性能热点扫描】在 {area} 中搜索循环嵌套、递归、全表扫描、O(n²) 算法、频繁分配等性能敏感模式。列出 top 10 可疑位置及理由。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · I/O 路径】分析 {topic} 的 I/O 路径（磁盘/网络/序列化）。估算每次操作的系统调用次数和数据拷贝次数，指出可优化的环节。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 缓存策略】审查 {area} 中所有 cache/memoize/buffer 实现。对比命中率优化空间、过期策略、内存上限，给出量化改进假设。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 批处理机会】检查 {topic} 相关代码是否存在可合并的逐条处理。设计一个批处理方案，估算理论吞吐提升百分比。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 基准测试】查找或设计针对 {area} 的 benchmark。若无现成基准，提出 3 个 micro-benchmark 场景及测量指标（延迟 P99、QPS、内存）。",
         ],
         "bottleneck": [
-            f"【任务 {n}/100 · 瓶颈假设】基于前序分析，列出 {topic} 的 5 个最可能瓶颈，按影响排序。每个瓶颈需包含：证据（代码位置）、影响面、修复难度（低/中/高）。",
-            f"【任务 {n}/100 · 火焰图假想】假设对 {area} 做了 CPU profiling，根据代码结构推测火焰图 top 5 函数。说明如何通过代码验证这些假设。",
-            f"【任务 {n}/100 · 锁竞争】分析 {area} 中的 mutex/RWMutex/细粒度锁。识别锁粒度过粗的位置，提出 2 种减锁方案并比较。",
-            f"【任务 {n}/100 · 内存分配】统计 {topic} 路径上的频繁小对象分配。建议使用 sync.Pool/arena/对象池等优化手段，并评估 GC 压力降幅。",
-            f"【任务 {n}/100 · 网络往返】若 {topic} 涉及 RPC/HTTP，分析每次操作的往返次数。设计合并请求或减少 round-trip 的方案。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 瓶颈假设】基于前序分析，列出 {topic} 的 5 个最可能瓶颈，按影响排序。每个瓶颈需包含：证据（代码位置）、影响面、修复难度（低/中/高）。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 火焰图假想】假设对 {area} 做了 CPU profiling，根据代码结构推测火焰图 top 5 函数。说明如何通过代码验证这些假设。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 锁竞争】分析 {area} 中的 mutex/RWMutex/细粒度锁。识别锁粒度过粗的位置，提出 2 种减锁方案并比较。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 内存分配】统计 {topic} 路径上的频繁小对象分配。建议使用 sync.Pool/arena/对象池等优化手段，并评估 GC 压力降幅。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 网络往返】若 {topic} 涉及 RPC/HTTP，分析每次操作的往返次数。设计合并请求或减少 round-trip 的方案。",
         ],
         "optimize_plan": [
-            f"【任务 {n}/100 · 优化方案 A】针对 {topic} 瓶颈 #1，写出详细优化方案：目标指标、改动文件列表、伪代码、风险评估、回滚策略。",
-            f"【任务 {n}/100 · 优化方案 B】针对 {area} 中的序列化/反序列化路径，设计零拷贝或增量解析优化，给出 before/after 伪代码对比。",
-            f"【任务 {n}/100 · 优化方案 C】为 {topic} 设计异步化/流水线改造：哪些步骤可并行、需要哪些队列/背压机制、预期延迟变化。",
-            f"【任务 {n}/100 · 优化方案 D】提出算法层面优化：是否有更高效数据结构可替换当前实现？对比时间/空间复杂度并引用具体代码位置。",
-            f"【任务 {n}/100 · 优化优先级】将目前识别的所有优化项放入 ICE 矩阵（Impact/Confidence/Effort），排出 top 5 实施顺序并说明理由。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 优化方案 A】针对 {topic} 瓶颈 #1，写出详细优化方案：目标指标、改动文件列表、伪代码、风险评估、回滚策略。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 优化方案 B】针对 {area} 中的序列化/反序列化路径，设计零拷贝或增量解析优化，给出 before/after 伪代码对比。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 优化方案 C】为 {topic} 设计异步化/流水线改造：哪些步骤可并行、需要哪些队列/背压机制、预期延迟变化。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 优化方案 D】提出算法层面优化：是否有更高效数据结构可替换当前实现？对比时间/空间复杂度并引用具体代码位置。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 优化优先级】将目前识别的所有优化项放入 ICE 矩阵（Impact/Confidence/Effort），排出 top 5 实施顺序并说明理由。",
         ],
         "optimize_exec": [
-            f"【任务 {n}/100 · 代码审查】在 {area} 中定位 {topic} 相关函数，逐行审查并标注可优化行。对每个标注给出具体改写建议（不需要真正提交代码）。",
-            f"【任务 {n}/100 · 重构草案】为 {area} 写一个重构草案：提取哪些函数、如何拆分文件、接口如何保持向后兼容。输出建议的文件树结构。",
-            f"【任务 {n}/100 · 配置调优】列出 {topic} 相关的所有可调参数，给出生产环境推荐值及调优步骤（先测什么指标、再调什么参数）。",
-            f"【任务 {n}/100 · 降级策略】为 {topic} 设计过载保护：限流阈值、熔断条件、降级行为。引用项目中已有的类似实现作为参考。",
-            f"【任务 {n}/100 · 观测增强】设计针对 {area} 的 metrics/tracing/logging 增强方案：新增哪些指标、在哪些函数埋点、告警规则建议。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 代码审查】在 {area} 中定位 {topic} 相关函数，逐行审查并标注可优化行。对每个标注给出具体改写建议（不需要真正提交代码）。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 重构草案】为 {area} 写一个重构草案：提取哪些函数、如何拆分文件、接口如何保持向后兼容。输出建议的文件树结构。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 配置调优】列出 {topic} 相关的所有可调参数，给出生产环境推荐值及调优步骤（先测什么指标、再调什么参数）。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 降级策略】为 {topic} 设计过载保护：限流阈值、熔断条件、降级行为。引用项目中已有的类似实现作为参考。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 观测增强】设计针对 {area} 的 metrics/tracing/logging 增强方案：新增哪些指标、在哪些函数埋点、告警规则建议。",
         ],
         "verify": [
-            f"【任务 {n}/100 · 回归测试计划】为 {topic} 相关优化编写测试计划：单元测试、集成测试、压力测试各需要覆盖哪些场景。",
-            f"【任务 {n}/100 · 性能对比】设计 A/B 对比实验：baseline vs optimized 的测量方法、样本量、显著性判断标准。",
-            f"【任务 {n}/100 · 文档更新】起草 {area} 的性能优化文档章节：背景、改动摘要、基准数据占位符、运维注意事项。",
-            f"【任务 {n}/100 · 技术债清单】汇总 {p['name']} 在 {topic} 方面的技术债，分短期（1周）、中期（1月）、长期（1季）三档。",
-            f"【任务 {n}/100 · 最终报告】综合前 99 项分析，输出 {p['name']} {topic} 优化全景报告：执行摘要、关键发现、推荐行动项、未解问题。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 回归测试计划】为 {topic} 相关优化编写测试计划：单元测试、集成测试、压力测试各需要覆盖哪些场景。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 性能对比】设计 A/B 对比实验：baseline vs optimized 的测量方法、样本量、显著性判断标准。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 文档更新】起草 {area} 的性能优化文档章节：背景、改动摘要、基准数据占位符、运维注意事项。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 技术债清单】汇总 {p['name']} 在 {topic} 方面的技术债，分短期（1周）、中期（1月）、长期（1季）三档。",
+            f"【任务 {n}/{TASKS_PER_PROJECT} · 最终报告】综合前 {TASKS_PER_PROJECT - 1} 项分析，输出 {p['name']} {topic} 优化全景报告：执行摘要、关键发现、推荐行动项、未解问题。",
         ],
     }
 
@@ -272,7 +273,7 @@ def make_prompt(project: dict, index: int) -> str:
 
 
 def write_tasks(project: dict, out_dir: Path) -> None:
-    lines = [make_prompt(project, i) for i in range(1, 101)]
+    lines = [make_prompt(project, i) for i in range(1, TASKS_PER_PROJECT + 1)]
     (out_dir / "tasks.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -384,7 +385,7 @@ clone_repo() {{
 
 run_tasks() {{
   cd "$CLONE_DIR"
-  local total=100
+  local total={tasks_per_project}
   local current=0
   local first=true
   local session_id=""
@@ -418,7 +419,7 @@ run_tasks() {{
     echo "[$(date)] Task $current/$total done" | tee -a "$MAIN_LOG"
   done < "$TASKS_FILE"
 
-  write_progress "$total" "$total" "completed" "All 100 tasks finished"
+  write_progress "$total" "$total" "completed" "All {tasks_per_project} tasks finished"
   rm -f "$PID_FILE"
   echo "[$(date)] All tasks completed for $PROJECT_ID" | tee -a "$MAIN_LOG"
 }}
@@ -431,7 +432,7 @@ case "${{1:-}}" in
     fi
     nohup "$0" --foreground >> "$MAIN_LOG" 2>&1 &
     echo $! > "$PID_FILE"
-    write_progress 0 100 "starting" "Background launch"
+    write_progress 0 {tasks_per_project} "starting" "Background launch"
     echo "Started $PROJECT_ID in background, PID=$(cat "$PID_FILE")"
     echo "Progress: $0 --status"
     echo "Logs:     tail -f $MAIN_LOG"
@@ -459,6 +460,7 @@ def write_run_sh(project: dict, out_dir: Path) -> None:
         RUN_SH.replace("{id}", project["id"])
         .replace("{name}", project["name"])
         .replace("{repo}", project["repo"])
+        .replace("{tasks_per_project}", str(TASKS_PER_PROJECT))
         .replace("{{", "{")
         .replace("}}", "}")
     )
@@ -477,7 +479,7 @@ def write_manifest(projects: list[dict], root: Path) -> None:
               "repo": p["repo"],
               "domain": p["domain"],
               "dir": str(root / p["id"]),
-              "tasks": 100,
+              "tasks": TASKS_PER_PROJECT,
           }
           for p in projects
       ],
@@ -625,7 +627,7 @@ def main() -> None:
     master.chmod(0o755)
 
     print(f"\nDone. generated={generated} skipped={skipped} catalog={len(all_projects)}")
-    print(f"Total prompts in catalog: {len(all_projects) * 100}")
+    print(f"Total prompts in catalog: {len(all_projects) * TASKS_PER_PROJECT}")
     print(f"Location: {root}")
 
 

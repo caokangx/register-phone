@@ -6,8 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$SCRIPT_DIR/env.sh" ]] && source "$SCRIPT_DIR/env.sh"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
-CRON_MORNING="0 9 * * * $SCRIPT_DIR/run-daily-campaign.sh --slot morning >> $LOG_DIR/campaign.log 2>&1"
-CRON_AFTERNOON="0 14 * * * $SCRIPT_DIR/run-daily-campaign.sh --slot afternoon >> $LOG_DIR/campaign.log 2>&1"
+CRON_CAMPAIGN="0,30 9-13 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1"
 
 INSTALL_CRON=true
 RESET_CAMPAIGN=true
@@ -18,15 +17,14 @@ usage() {
   cat <<EOF
 Usage: ./bootstrap.sh [options]
 
-Prepare the 3-day schedule (2 random repo runs per day):
-  morning   09:00–12:00
-  afternoon 14:00–18:00
+Prepare the 3-day schedule (10 random repo runs per day):
+  every 30 minutes from 09:00 through 13:30
 
 Options:
   --no-cron        Do not install crontab entries
   --no-reset       Keep existing campaign.json window
-  --now            Run today's morning slot now (random delay unless --immediate)
-  --immediate      With --now: run morning slot immediately
+  --now            Run one campaign round now
+  --immediate      Compatibility alias for --now
   --no-pull        Skip git pull in register-phone repo
   -h, --help       Show this help
 EOF
@@ -80,7 +78,7 @@ fi
 cd "$SCRIPT_DIR"
 
 if $RESET_CAMPAIGN; then
-  echo "==> Reset 3-day campaign window (2 runs/day)..."
+  echo "==> Reset 3-day campaign window (10 runs/day)..."
   ./run-daily-campaign.sh --reset
 else
   echo "==> Campaign status (no reset):"
@@ -88,11 +86,10 @@ else
 fi
 
 if $INSTALL_CRON; then
-  echo "==> Installing crontab (09:00 morning + 14:00 afternoon)..."
+  echo "==> Installing crontab (every 30 minutes, 10 runs/day)..."
   tmp="$(mktemp)"
   crontab -l 2>/dev/null | grep -v 'run-daily-campaign.sh' > "$tmp" || true
-  echo "$CRON_MORNING" >> "$tmp"
-  echo "$CRON_AFTERNOON" >> "$tmp"
+  echo "$CRON_CAMPAIGN" >> "$tmp"
   crontab "$tmp"
   rm -f "$tmp"
   echo "    Crontab installed:"
@@ -100,14 +97,8 @@ if $INSTALL_CRON; then
 fi
 
 if $RUN_NOW; then
-  if [[ "$IMMEDIATE" == "true" ]]; then
-    echo "==> Starting morning slot immediately..."
-    ./run-daily-campaign.sh --slot morning --immediate
-  else
-    echo "==> Starting morning slot in background (09:00–12:00 random delay)..."
-    nohup ./run-daily-campaign.sh --slot morning >> "$LOG_DIR/campaign.log" 2>&1 &
-    echo "    PID: $!"
-  fi
+  echo "==> Starting one campaign round now..."
+  ./run-daily-campaign.sh --immediate
 fi
 
 echo ""
