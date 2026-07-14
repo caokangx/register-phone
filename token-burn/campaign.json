@@ -3,10 +3,10 @@
   "end_date": "2026-06-29",
   "max_days": 3,
   "schedule": {
-    "runs_per_day": 10,
+    "runs_per_day": 25,
     "interval_minutes": 30,
-    "cron": "0,30 9-13 * * *",
-    "window": "09:00-13:30"
+    "cron": "0,30 9-20 * * *; 0 21 * * *",
+    "window": "09:00-21:00"
   },
   "runs": []
 }

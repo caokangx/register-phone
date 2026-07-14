@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 3-day campaign: one random repo every 30 minutes, max 10 runs per day.
+# 3-day campaign: one random repo every 30 minutes, max 25 runs per day.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CAMPAIGN_FILE="${CAMPAIGN_FILE:-$SCRIPT_DIR/campaign.json}"
 LOG_DIR="$SCRIPT_DIR/logs"
 CAMPAIGN_DAYS="${CAMPAIGN_DAYS:-3}"
-RUNS_PER_DAY="${RUNS_PER_DAY:-10}"
+RUNS_PER_DAY="${RUNS_PER_DAY:-25}"
 
 mkdir -p "$LOG_DIR"
 
@@ -15,8 +15,8 @@ usage() {
   cat <<EOF
 Usage: ./run-daily-campaign.sh [options]
 
-3-day schedule, 10 runs per day:
-  cron every 30 minutes from 09:00 through 13:30
+3-day schedule, 25 runs per day:
+  cron every 30 minutes from 09:00 through 21:00
   each trigger starts one random repo immediately
 
 Options:
@@ -28,7 +28,8 @@ Options:
   -h, --help    Show this help
 
 Cron (recommended):
-  0,30 9-13 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1
+  0,30 9-20 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1
+  0 21 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1
 EOF
 }
 
@@ -58,8 +59,8 @@ def load():
             "schedule": {
                 "runs_per_day": runs_per_day,
                 "interval_minutes": 30,
-                "cron": "0,30 9-13 * * *",
-                "window": "09:00-13:30",
+                "cron": "0,30 9-20 * * *; 0 21 * * *",
+                "window": "09:00-21:00",
             },
             "runs": [],
         }
@@ -68,8 +69,8 @@ def load():
     data["schedule"] = {
         "runs_per_day": runs_per_day,
         "interval_minutes": 30,
-        "cron": "0,30 9-13 * * *",
-        "window": "09:00-13:30",
+        "cron": "0,30 9-20 * * *; 0 21 * * *",
+        "window": "09:00-21:00",
     }
     end = date.fromisoformat(data.get("end_date", (start + timedelta(days=max_days - 1)).isoformat()))
     data["_start"] = start

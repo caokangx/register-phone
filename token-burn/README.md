@@ -8,7 +8,7 @@
 
 ## 新环境一键启动
 
-在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 重置 3 天窗口 → 安装 cron（每天 10 轮）→ 立刻跑一轮：
+在新的命令行环境里，复制粘贴**一条命令**即可完成：克隆仓库 → 重置 3 天窗口 → 安装 cron（每天 25 轮）→ 立刻跑一轮：
 
 ```bash
 git clone https://github.com/caokangx/register-phone.git ~/Documents/register-phone && ~/Documents/register-phone/token-burn/bootstrap.sh --now --immediate
@@ -47,13 +47,13 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 
 ## 3 天定时任务（最常用）
 
-**需求**：连续 **3 天**，每天 **10 轮**，每半小时随机选一个仓库后台执行 30 条任务；第 4 天起自动停止。
+**需求**：连续 **3 天**，每天 **25 轮**，每半小时随机选一个仓库后台执行 30 条任务；第 4 天起自动停止。
 
 | Cron 触发 | 间隔 | 每天轮数 | 实际开工时段 |
 |-----------|------|----------|--------------|
-| 每天 **9:00–13:30** | 每 30 分钟 | **10 轮** | **9:00、9:30、...、13:30** |
+| 每天 **9:00–21:00** | 每 30 分钟 | **25 轮** | **9:00、9:30、...、21:00** |
 
-3 天共最多 **30 次**仓库任务（每天 10 次 × 3 天）。
+3 天共最多 **75 次**仓库任务（每天 25 次 × 3 天）。
 
 ### 第一步：加入 crontab
 
@@ -61,10 +61,11 @@ git clone https://github.com/caokangx/register-phone.git ~/Documents/register-ph
 crontab -e
 ```
 
-粘贴下面**一行**：
+粘贴下面**两行**：
 
 ```bash
-0,30 9-13 * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0,30 9-20 * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0 21 * * * ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
 ```
 
 或用 `bootstrap.sh` 自动安装（会删掉旧的单行 cron）：
@@ -105,9 +106,9 @@ cat last-random.json
 | 项 | 说明 |
 |----|------|
 | 持续天数 | 从**首次触发**起连续 3 个自然日（含当天） |
-| 每天次数 | **10 次**（9:00–13:30 每半小时 1 次，各随机 1 个仓库） |
-| 触发频率 | cron `0,30 9-13 * * *`，每次触发立即开工 |
-| 每日上限 | 当天已跑满 10 轮后，后续触发会跳过 |
+| 每天次数 | **25 次**（9:00–21:00 每半小时 1 次，各随机 1 个仓库） |
+| 触发频率 | cron `0,30 9-20 * * *` + `0 21 * * *`，每次触发立即开工 |
+| 每日上限 | 当天已跑满 25 轮后，后续触发会跳过 |
 | 抽选规则 | 调用 `run-random.sh` 随机选一个项目 |
 | 状态文件 | `campaign.json`（起止日期、历史运行记录） |
 | 任务进度 | `<项目>/progress.json`（当前第几条 / 30） |
@@ -139,7 +140,8 @@ cp ~/Documents/register-phone/token-burn/env.example.sh ~/Documents/register-pho
 若仍想在 crontab 里显式写（等价做法）：
 
 ```bash
-0,30 9-13 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0,30 9-20 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
+0 21 * * * export HOME=/home/coder PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin http_proxy=http://192.168.3.100:1084 https_proxy=http://192.168.3.100:1084; ~/Documents/register-phone/token-burn/run-daily-campaign.sh >> ~/Documents/register-phone/token-burn/logs/campaign.log 2>&1
 ```
 
 ---
@@ -152,7 +154,7 @@ cp ~/Documents/register-phone/token-burn/env.example.sh ~/Documents/register-pho
 | `git` | 用于浅克隆仓库 |
 | `python3` | 用于运行生成器、写入进度 JSON |
 | 磁盘空间 | 10 个大型仓库浅克隆仍需数 GB～数十 GB |
-| API 额度 | 每个项目 30 任务；3 天 campaign 最多 30 个项目轮次 = **900 次** `claude -p` 调用 |
+| API 额度 | 每个项目 30 任务；3 天 campaign 最多 75 个项目轮次 = **2250 次** `claude -p` 调用 |
 
 ---
 
@@ -165,7 +167,7 @@ token-burn/
 ├── generate.py            # 一键生成/再生成全部文件
 ├── manifest.json          # 当前批次项目清单
 ├── run-random.sh          # 随机选一个项目运行
-├── run-daily-campaign.sh  # 3 天定时：每天 9:00–13:30 每半小时一轮
+├── run-daily-campaign.sh  # 3 天定时：每天 9:00–21:00 每半小时一轮
 ├── bootstrap.sh           # 新环境一键初始化 + 启动
 ├── aggregate-usage.py     # 从 task_*.log 汇总 token / 费用
 ├── status.sh              # 统一状态（含 token 统计）
@@ -372,7 +374,7 @@ python3 generate.py
 
 | 命令 | 说明 |
 |------|------|
-| `./run-daily-campaign.sh` | 立即执行一轮（若当天未满 10 轮） |
+| `./run-daily-campaign.sh` | 立即执行一轮（若当天未满 25 轮） |
 | `./run-daily-campaign.sh --status` | 查看 3 天窗口、runs、当天已跑/剩余轮数 |
 | `./run-daily-campaign.sh --dry-run` | 预览本轮会抽哪个仓库 |
 | `./run-daily-campaign.sh --reset` | 重置，从今天起重新计 3 天 |
@@ -412,7 +414,7 @@ python3 generate.py
 
 ## 注意事项
 
-- **费用**：3 天 campaign 最多跑 900 条任务，仍可能产生较高 API 费用，建议先用单个项目试跑，并启用 `--max-budget-usd`。
+- **费用**：3 天 campaign 最多跑 2250 条任务，仍可能产生较高 API 费用，建议先用单个项目试跑，并启用 `--max-budget-usd`。
 - **时间**：大型仓库（PyTorch、Kubernetes）单次克隆和分析都可能耗时数小时。
 - **网络**：克隆 GitHub 仓库需要稳定网络；失败后可重新运行，已克隆的仓库会复用。
 - **上下文**：同项目内 30 条任务共享会话；跨项目之间上下文不共享。

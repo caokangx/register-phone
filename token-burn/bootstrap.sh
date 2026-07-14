@@ -6,7 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$SCRIPT_DIR/env.sh" ]] && source "$SCRIPT_DIR/env.sh"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
-CRON_CAMPAIGN="0,30 9-13 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1"
+CRON_CAMPAIGN_HALF_HOURLY="0,30 9-20 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1"
+CRON_CAMPAIGN_FINAL="0 21 * * * $SCRIPT_DIR/run-daily-campaign.sh >> $LOG_DIR/campaign.log 2>&1"
 
 INSTALL_CRON=true
 RESET_CAMPAIGN=true
@@ -17,8 +18,8 @@ usage() {
   cat <<EOF
 Usage: ./bootstrap.sh [options]
 
-Prepare the 3-day schedule (10 random repo runs per day):
-  every 30 minutes from 09:00 through 13:30
+Prepare the 3-day schedule (25 random repo runs per day):
+  every 30 minutes from 09:00 through 21:00
 
 Options:
   --no-cron        Do not install crontab entries
@@ -78,7 +79,7 @@ fi
 cd "$SCRIPT_DIR"
 
 if $RESET_CAMPAIGN; then
-  echo "==> Reset 3-day campaign window (10 runs/day)..."
+  echo "==> Reset 3-day campaign window (25 runs/day)..."
   ./run-daily-campaign.sh --reset
 else
   echo "==> Campaign status (no reset):"
@@ -86,10 +87,11 @@ else
 fi
 
 if $INSTALL_CRON; then
-  echo "==> Installing crontab (every 30 minutes, 10 runs/day)..."
+  echo "==> Installing crontab (every 30 minutes, 25 runs/day)..."
   tmp="$(mktemp)"
   crontab -l 2>/dev/null | grep -v 'run-daily-campaign.sh' > "$tmp" || true
-  echo "$CRON_CAMPAIGN" >> "$tmp"
+  echo "$CRON_CAMPAIGN_HALF_HOURLY" >> "$tmp"
+  echo "$CRON_CAMPAIGN_FINAL" >> "$tmp"
   crontab "$tmp"
   rm -f "$tmp"
   echo "    Crontab installed:"
